@@ -27,7 +27,7 @@ significant time has passed.
 | livekit-server-sdk | — | **2.17.0** | 2.17.0 | |
 | livekit-client | JS SDK 2.x | **2.21.0** | 2.21.0 | |
 | sharp | 0.34.x | **0.35.3** | 0.35.3 | Minor drift. |
-| typescript | — | **7.0.2** | ⚠️ decide | TS 7 (native port) is `latest`. Big jump. Consider pinning `5.9.x`/`6.x` for Phase 1 and moving deliberately — the whole repo is strict-mode TS. |
+| typescript | — | 7.0.2 | **5.9.3** | ⚠️ **deliberately behind `latest`.** TS 7 is the native port; 6.0.0-beta and 7.0.1-rc are also published. Ruled: stay on 5.9.3 through Phase 4, then revisit. Strict mode is only enforceable if the checker itself is boring. |
 | turbo | 2.x | **2.10.9** | 2.10.9 | |
 | vitest | 3.x | **4.1.10** | 4.1.10 | ⚠️ **major drift** from spec. |
 | @playwright/test | 1.5x | **1.62.1** | 1.62.1 | |
@@ -40,21 +40,70 @@ significant time has passed.
 `livekit/livekit-server`, `coturn/coturn`, `typesense/typesense:28.0`.
 Not yet pulled — the daemon was not running at check time. Verify tags on first `compose up`.
 
-## Drift needing a ruling before Phase 1
+## Drift — ruled 2026-08-11
 
 Five majors moved past the spec: **shadcn 3→4, motion 12→13, BullMQ 5→6, Vitest 3→4, TypeScript →7.**
-Per standing rule 1 these are reported, not silently taken. Default recommendation: take current
-`latest` for all of them **except TypeScript**, where 7.0.2 is new enough that a strict-mode
-monorepo is likely to hit rough edges in Drizzle/Next type inference before the ecosystem catches up.
+Per standing rule 1 these were reported rather than silently taken. Ruling:
+
+- **shadcn 4.16.2, motion 13.1.0, bullmq 6.0.11, vitest 4.1.10 — take current.** Read each one's
+  migration notes at the phase that first touches it and flag anything `01-ARCHITECTURE.md` or
+  `02-DESIGN-SYSTEM.md` assumed about the older major.
+- **TypeScript — hold at 5.9.3.** Revisit after Phase 4.
+
+Specific things to check when the relevant phase arrives:
+
+| Phase | Check |
+|---|---|
+| 2 | Does shadcn **4.x** still scaffold on **Base UI** by default? The design spec depends on it. |
+| 2 | Motion **13** breaking changes vs the 12.x API the spec's motion section assumes. |
+| 2 | Are the registry **chat primitives** (`MessageScroller`, `Message`, `Bubble`, `Attachment`) still shipping in v4? Phase 6 budgets for them. |
+| 1/3 | BullMQ **6** worker + connection option changes; confirm the ioredis 6 peer requirement. |
+| 1 | Vitest **4** config/API changes vs 3.x. |
 
 ## Doc/version mismatch to watch
 
 `docs/vendor/drizzle/` includes `pg__upgrade-v1.md` and `pg__v0-v1-changes.md` — Drizzle **1.0**
 material. The pin is **0.45.2**. When a vendor doc describes v1 API, it does not apply.
 
-## Port conflict
+## Toolchain state on this machine (verified 2026-08-11)
 
-Host **5432** is held by a native `postgresql-x64-17` Windows service. The compose file in
-`01-ARCHITECTURE.md` §3 binds `5432:5432` and will fail to start. Resolve before Phase 1 — either
-stop the native service, or bind the container to `5433:5432` and set `DATABASE_URL` accordingly
-(a deviation to record in the Phase 1 handoff).
+| Tool | State |
+|---|---|
+| Node | **24.19.0**, installed via `pnpm env use --global`. Lives at `%LOCALAPPDATA%\pnpm\node.exe`. |
+| pnpm | **10.17.0** (11.21.0 available, not required). Store: `D:\.pnpm-store\v10`. Install verified end-to-end. |
+| npm / npx | **Broken.** See below. Use `pnpm` and `pnpm dlx` instead — `pnpm dlx` verified working. |
+| Docker | Desktop **29.2.1** / Compose **v5.0.2** installed, **daemon stopped**. Start it before `compose up`. |
+| ffmpeg | **7.1.1** on PATH. Phase 3's worker has what it needs locally. |
+| git | 2.50.1. Repo initialized on `main`, specs committed. |
+| Disk | ~184 GB free on D:. |
+
+### `npm` / `npx` are broken on this machine
+
+`%LOCALAPPDATA%\npm-cache` is a **junction** to `D:\cache\npm-cache`, whose target had been deleted.
+Recreating the target was not sufficient — npm still cannot create `_cacache` through the junction
+(`ENOENT` on mkdir, `EEXIST` on the temp file once the dir exists). It fails identically inside and
+outside the sandbox, so it is a real machine-config fault, not a tooling artifact.
+
+**Impact:** none on this project — pnpm has its own store and installs fine. Substitute
+`pnpm dlx <pkg>` anywhere the brief or a doc says `npx <pkg>`.
+
+**Permanent fix (user, one line):**
+
+```
+npm config set cache "D:\npm-cache"
+```
+
+Any real directory on a path with no junction works. Or delete the junction and let npm recreate
+`%LOCALAPPDATA%\npm-cache` as a normal folder.
+
+### Port conflict — ruled 2026-08-11
+
+Host **5432** is held by a native `postgresql-x64-17` Windows service (PG 17, unrelated to this
+project). `01-ARCHITECTURE.md` §3 binds `5432:5432` and would fail to start.
+
+**Ruled: bind the container to `5433:5432`.** The native service is left running and untouched.
+`DATABASE_URL` uses port **5433**. Everything inside the compose network still talks to `postgres:5432`
+— only the host-side mapping changes. This is a deviation from the spec's compose block and must be
+recorded in the Phase 1 handoff under Deviations.
+
+Ports otherwise verified free: 6379, 9000, 9001, 7880, 8108, 3000, 3478, 443.

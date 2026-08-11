@@ -73,6 +73,13 @@ A flourish not in the spec goes in the handoff under Decisions, not in the code.
 
 ## Environment notes for this machine
 
-- Windows 11. Shell is PowerShell; a Git Bash tool is also available. Watch path separators in scripts.
-- A native **PostgreSQL 17** service (`postgresql-x64-17`) holds port **5432**. See `docs/VERSIONS.md` for how the compose file resolves this.
-- Docker Desktop is installed but must be started manually before `docker compose up`.
+Full detail in `docs/VERSIONS.md`. The four that will bite:
+
+- **Use `pnpm dlx`, never `npx`.** npm's cache is broken on this machine (junction to a missing
+  target). pnpm is unaffected. Anywhere a doc says `npx <pkg>`, run `pnpm dlx <pkg>`.
+- **Postgres is on host port 5433, not 5432.** A native `postgresql-x64-17` service holds 5432.
+  Compose binds `5433:5432`; `DATABASE_URL` uses 5433. Inside the compose network it's still
+  `postgres:5432`. Record this as a Deviation in the Phase 1 handoff.
+- **Docker Desktop must be started manually** before `docker compose up`. It does not auto-start.
+- Windows 11. PowerShell is primary; a Git Bash tool is also available. Node 24.19.0 is managed by
+  pnpm and lives at `%LOCALAPPDATA%\pnpm\node.exe`.
