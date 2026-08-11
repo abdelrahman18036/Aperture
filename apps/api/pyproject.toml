@@ -79,6 +79,9 @@ ignore = [
 # applies everywhere real code lives.
 "**/tests/*" = ["S101", "SLF001", "S105", "S106"]
 "conftest.py" = ["S101", "S105", "S106"]
+# Seed data is not a security boundary. `random` is the right tool for
+# reproducible fixtures; `secrets` would make them unreproducible.
+"**/management/commands/seed_demo.py" = ["S311", "S106"]
 "config/settings.py" = ["E501"]
 
 [tool.ruff.lint.flake8-tidy-imports]

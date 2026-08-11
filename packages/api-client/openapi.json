@@ -254,6 +254,667 @@
                 }
             }
         },
+        "/api/posts/": {
+            "post": {
+                "operationId": "posts_create",
+                "description": "Publish a post from media that has finished processing.",
+                "tags": [
+                    "posts"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreatePostRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreatePostRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreatePostRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Post"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/{post_id}": {
+            "get": {
+                "operationId": "posts_retrieve",
+                "description": "One post.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Post"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "posts_destroy",
+                "description": "Soft delete your own post.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/{post_id}/comments": {
+            "get": {
+                "operationId": "posts_comments_list",
+                "description": "Top-level comments, oldest first.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'."
+                    },
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommentPage"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "posts_comments_create",
+                "description": "Comment on a post, or reply to a comment.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateCommentRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateCommentRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateCommentRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Comment"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/{post_id}/like": {
+            "post": {
+                "operationId": "posts_like",
+                "description": "Like a post. Idempotent.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Post"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "posts_unlike",
+                "description": "Remove a like. Idempotent.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Post"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/by/{username}": {
+            "get": {
+                "operationId": "posts_by_user",
+                "description": "One account's posts, newest first.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'."
+                    },
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PostPage"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/comments/{comment_id}": {
+            "delete": {
+                "operationId": "posts_comments_destroy",
+                "description": "Soft delete your own comment.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "comment_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/feed": {
+            "get": {
+                "operationId": "posts_feed",
+                "description": "Posts from accounts you follow, newest first.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'."
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PostPage"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/users/{username}": {
+            "get": {
+                "operationId": "users_profile",
+                "description": "One account's public profile, with its counts.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Profile"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/{username}/block": {
+            "post": {
+                "operationId": "users_block",
+                "description": "Block an account, severing follows both ways.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "403": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "users_unblock",
+                "description": "Unblock. Does not restore the follows that blocking severed.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/{username}/follow": {
+            "post": {
+                "operationId": "users_follow",
+                "description": "Follow, or request to follow a private account.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FollowState"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "users_unfollow",
+                "description": "Unfollow, or withdraw a pending request.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FollowState"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/{username}/respond": {
+            "post": {
+                "operationId": "users_respond_to_request",
+                "description": "Approve or decline a pending follow request.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RespondToRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RespondToRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RespondToRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "403": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/users/me": {
             "get": {
                 "operationId": "users_me",
@@ -279,6 +940,118 @@
                     },
                     "403": {
                         "description": "No response body"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "users_update_me",
+                "description": "Update your own profile.",
+                "tags": [
+                    "users"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedUpdateProfileRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedUpdateProfileRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedUpdateProfileRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUser"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/requests": {
+            "get": {
+                "operationId": "users_follow_requests",
+                "description": "Pending follow requests for your account.",
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/FollowRequest"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/users/search": {
+            "get": {
+                "operationId": "users_search",
+                "description": "Find accounts by username or display name.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "q",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Query",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserList"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -354,6 +1127,135 @@
     },
     "components": {
         "schemas": {
+            "Comment": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "post_id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "parent_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "author": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "body": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "reply_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "author",
+                    "body",
+                    "created_at",
+                    "id",
+                    "parent_id",
+                    "post_id",
+                    "reply_count"
+                ]
+            },
+            "CommentPage": {
+                "type": "object",
+                "properties": {
+                    "comments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Comment"
+                        },
+                        "readOnly": true
+                    },
+                    "next_cursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "comments",
+                    "next_cursor"
+                ]
+            },
+            "CreateCommentRequest": {
+                "type": "object",
+                "properties": {
+                    "body": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2200
+                    },
+                    "parent_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "body"
+                ]
+            },
+            "CreatePostRequest": {
+                "type": "object",
+                "description": "Publishing a post from media that is already uploaded and processed.",
+                "properties": {
+                    "media_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "maxItems": 10,
+                        "minItems": 1
+                    },
+                    "caption": {
+                        "type": "string",
+                        "default": "",
+                        "maxLength": 2200
+                    },
+                    "location": {
+                        "type": "string",
+                        "default": "",
+                        "maxLength": 120
+                    },
+                    "visibility": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/VisibilityEnum"
+                            }
+                        ],
+                        "default": "public"
+                    }
+                },
+                "required": [
+                    "media_ids"
+                ]
+            },
             "CurrentUser": {
                 "type": "object",
                 "description": "The signed-in user seeing their own account. Adds the private bits.",
@@ -408,6 +1310,55 @@
                     "is_private",
                     "username"
                 ]
+            },
+            "FollowRequest": {
+                "type": "object",
+                "description": "A pending request, from the perspective of the account being asked.",
+                "properties": {
+                    "follower": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "follower"
+                ]
+            },
+            "FollowState": {
+                "type": "object",
+                "description": "What the follow button should read after acting.",
+                "properties": {
+                    "follow_state": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/FollowStateEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "follow_state"
+                ]
+            },
+            "FollowStateEnum": {
+                "enum": [
+                    "none",
+                    "pending",
+                    "accepted"
+                ],
+                "type": "string",
+                "description": "* `none` - none\n* `pending` - pending\n* `accepted` - accepted"
             },
             "Health": {
                 "type": "object",
@@ -647,6 +1598,178 @@
                     }
                 }
             },
+            "PatchedUpdateProfileRequest": {
+                "type": "object",
+                "properties": {
+                    "display_name": {
+                        "type": "string",
+                        "maxLength": 60
+                    },
+                    "bio": {
+                        "type": "string",
+                        "maxLength": 300
+                    },
+                    "is_private": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "Post": {
+                "type": "object",
+                "description": "A post as the feed and the contact sheet see it.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "author": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "caption": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "location": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "visibility": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/VisibilityEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "media": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Media"
+                        },
+                        "readOnly": true
+                    },
+                    "like_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "comment_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "viewer_has_liked": {
+                        "type": "boolean",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "author",
+                    "caption",
+                    "comment_count",
+                    "created_at",
+                    "id",
+                    "like_count",
+                    "location",
+                    "media",
+                    "viewer_has_liked",
+                    "visibility"
+                ]
+            },
+            "PostPage": {
+                "type": "object",
+                "description": "A cursor-paginated page of posts.\n\n`next_cursor` is the id of the last post on the page, or null at the end.\nNo total count: producing one means a `COUNT(*)` over the whole feed, and\nnothing in the UI shows it.",
+                "properties": {
+                    "posts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Post"
+                        },
+                        "readOnly": true
+                    },
+                    "next_cursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "next_cursor",
+                    "posts"
+                ]
+            },
+            "Profile": {
+                "type": "object",
+                "description": "A profile header.\n\nCounts come from the `counters` app, never from a `COUNT(*)` — a follower\ncount on a popular account is a sequential scan over millions of rows, and\nit renders on every profile view.\n\n`follow_state` is what the button reads: absent, `pending` while a private\naccount considers the request, or `accepted`.",
+                "properties": {
+                    "user": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "post_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "follower_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "following_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "follow_state": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/FollowStateEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "is_self": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "can_view_posts": {
+                        "type": "boolean",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "can_view_posts",
+                    "follow_state",
+                    "follower_count",
+                    "following_count",
+                    "is_self",
+                    "post_count",
+                    "user"
+                ]
+            },
+            "RespondToRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "accept": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "accept"
+                ]
+            },
             "StateEnum": {
                 "enum": [
                     "pending",
@@ -706,6 +1829,79 @@
                     "media",
                     "upload_url"
                 ]
+            },
+            "User": {
+                "type": "object",
+                "description": "A user as anyone may see them. No email, no permission flags.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "username": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "Case-insensitively unique. Shown in metadata position."
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "avatar_media_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "bio": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "is_private": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Private accounts turn follows into requests pending approval."
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "avatar_media_id",
+                    "bio",
+                    "created_at",
+                    "display_name",
+                    "id",
+                    "is_private",
+                    "username"
+                ]
+            },
+            "UserList": {
+                "type": "object",
+                "properties": {
+                    "users": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/User"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "users"
+                ]
+            },
+            "VisibilityEnum": {
+                "enum": [
+                    "public",
+                    "followers",
+                    "private"
+                ],
+                "type": "string",
+                "description": "* `public` - Public\n* `followers` - Followers only\n* `private` - Private"
             }
         },
         "securitySchemes": {

@@ -165,7 +165,7 @@ def _derive_image(media: Media, data: bytes) -> Derived:
         storage.upload(
             bucket=media.bucket,
             key=derivative_key(media.pk, target),
-            data=_resize_to_webp(image, target),
+            data=resize_to_webp(image, target),
             content_type=f"image/{DERIVATIVE_FORMAT}",
         )
 
@@ -173,12 +173,12 @@ def _derive_image(media: Media, data: bytes) -> Derived:
         width=width,
         height=height,
         duration_ms=None,
-        blurhash=_blurhash_of(image),
-        dominant_color=_dominant_color_of(image),
+        blurhash=blurhash_of(image),
+        dominant_color=dominant_color_of(image),
     )
 
 
-def _resize_to_webp(image: Image.Image, target_width: int) -> bytes:
+def resize_to_webp(image: Image.Image, target_width: int) -> bytes:
     """One derivative. Never upscales — a 400px original stays 400px."""
     width, height = image.size
     if target_width >= width:
@@ -192,7 +192,7 @@ def _resize_to_webp(image: Image.Image, target_width: int) -> bytes:
     return buffer.getvalue()
 
 
-def _blurhash_of(image: Image.Image) -> str:
+def blurhash_of(image: Image.Image) -> str:
     """Encoded from a small copy — blurhash is O(pixels) and we need none."""
     small = image.copy()
     small.thumbnail((64, 64), Image.Resampling.LANCZOS)
@@ -203,7 +203,7 @@ def _blurhash_of(image: Image.Image) -> str:
     return encoded
 
 
-def _dominant_color_of(image: Image.Image) -> str:
+def dominant_color_of(image: Image.Image) -> str:
     """Feeds the ambient glow. One pixel is genuinely enough at 8% opacity."""
     pixel = image.resize((1, 1), Image.Resampling.LANCZOS).getpixel((0, 0))
     if not isinstance(pixel, tuple):
@@ -295,8 +295,8 @@ def _derive_video(media: Media, data: bytes) -> Derived:
                 width=width,
                 height=height,
                 duration_ms=duration_ms,
-                blurhash=_blurhash_of(rgb),
-                dominant_color=_dominant_color_of(rgb),
+                blurhash=blurhash_of(rgb),
+                dominant_color=dominant_color_of(rgb),
             )
 
 

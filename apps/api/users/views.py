@@ -6,17 +6,34 @@ that queries the ORM directly is the smell -- move it to `selectors.py`.
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from config.auth import current_user
-from users.serializers import CurrentUserSerializer, LoginSerializer
+from counters.models import Counter
+from counters.selectors import get_metrics
+from users import selectors, services
+from users.models import User
+from users.serializers import (
+    CurrentUserSerializer,
+    FollowRequestSerializer,
+    FollowStateSerializer,
+    LoginSerializer,
+    ProfileSerializer,
+    RespondToRequestSerializer,
+    UpdateProfileSerializer,
+    UserListSerializer,
+    UserSerializer,
+)
 from users.services import AuthenticationFailedError, end_session, start_session
 
 
@@ -83,3 +100,229 @@ class CurrentUserView(APIView):
     )
     def get(self, request: Request) -> Response:
         return Response(CurrentUserSerializer(current_user(request)).data)
+
+    @extend_schema(
+        operation_id="users_update_me",
+        request=UpdateProfileSerializer,
+        responses={200: CurrentUserSerializer, 403: None},
+        description="Update your own profile.",
+    )
+    def patch(self, request: Request) -> Response:
+        form = UpdateProfileSerializer(data=request.data, partial=True)
+        form.is_valid(raise_exception=True)
+        user = services.update_profile(
+            user=current_user(request), **form.validated_data
+        )
+        return Response(CurrentUserSerializer(user).data)
+
+
+class ProfileView(APIView):
+    """`GET /api/users/{username}` — a profile header.
+
+    A blocked account is indistinguishable from a missing one: "this user has
+    blocked you" is information the blocker did not agree to share.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="users_profile",
+        responses={200: ProfileSerializer, 404: None},
+        description="One account's public profile, with its counts.",
+    )
+    def get(self, request: Request, username: str) -> Response:
+        viewer = current_user(request)
+        user = selectors.visible_profile(viewer=viewer, username=username)
+        if user is None:
+            raise NotFound("No such account.")
+
+        counts = get_metrics(
+            entity_type=Counter.EntityType.USER,
+            entity_id=user.pk,
+            metrics=[
+                Counter.Metric.POSTS,
+                Counter.Metric.FOLLOWERS,
+                Counter.Metric.FOLLOWING,
+            ],
+        )
+        states = selectors.follow_states(viewer=viewer, user_ids=[user.pk])
+
+        return Response(
+            ProfileSerializer(
+                {
+                    "user": UserSerializer(user).data,
+                    "post_count": counts[Counter.Metric.POSTS],
+                    "follower_count": counts[Counter.Metric.FOLLOWERS],
+                    "following_count": counts[Counter.Metric.FOLLOWING],
+                    "follow_state": states.get(user.pk, "none"),
+                    "is_self": viewer.pk == user.pk,
+                    "can_view_posts": selectors.can_view_posts(
+                        viewer=viewer, author=user
+                    ),
+                }
+            ).data
+        )
+
+
+class FollowView(APIView):
+    """`POST`/`DELETE /api/users/{username}/follow`.
+
+    A private account yields `pending` and moves no follower count: a request
+    is not a follow.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _target_or_404(self, request: Request, username: str) -> User:
+        user = selectors.visible_profile(
+            viewer=current_user(request), username=username
+        )
+        if user is None:
+            raise NotFound("No such account.")
+        return user
+
+    @extend_schema(
+        operation_id="users_follow",
+        request=None,
+        responses={200: FollowStateSerializer, 403: None, 404: None},
+        description="Follow, or request to follow a private account.",
+    )
+    def post(self, request: Request, username: str) -> Response:
+        viewer = current_user(request)
+        target = self._target_or_404(request, username)
+        try:
+            edge = services.follow(follower=viewer, followee=target)
+        except services.NotAllowedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"follow_state": edge.status})
+
+    @extend_schema(
+        operation_id="users_unfollow",
+        responses={200: FollowStateSerializer, 404: None},
+        description="Unfollow, or withdraw a pending request.",
+    )
+    def delete(self, request: Request, username: str) -> Response:
+        viewer = current_user(request)
+        target = self._target_or_404(request, username)
+        services.unfollow(follower=viewer, followee=target)
+        return Response({"follow_state": "none"})
+
+
+class FollowRequestsView(APIView):
+    """`GET /api/users/requests` — who is waiting on your approval."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="users_follow_requests",
+        responses={200: FollowRequestSerializer(many=True)},
+        description="Pending follow requests for your account.",
+    )
+    def get(self, request: Request) -> Response:
+        pending = selectors.pending_requests_for(current_user(request))
+        payload: list[dict[str, Any]] = [
+            {
+                "follower": UserSerializer(edge.follower).data,
+                "created_at": edge.created_at,
+            }
+            for edge in pending
+        ]
+        # `many=True` swaps in a ListSerializer at runtime, which the stubs
+        # cannot express for a plain Serializer — they still expect the single
+        # instance type here.
+        return Response(
+            FollowRequestSerializer(payload, many=True).data  # type: ignore[arg-type]
+        )
+
+
+class RespondToRequestView(APIView):
+    """`POST /api/users/{username}/respond` — approve or decline."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="users_respond_to_request",
+        request=RespondToRequestSerializer,
+        responses={204: None, 403: None, 404: None},
+        description="Approve or decline a pending follow request.",
+    )
+    def post(self, request: Request, username: str) -> Response:
+        form = RespondToRequestSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+
+        follower = selectors.by_username(username)
+        if follower is None:
+            raise NotFound("No such account.")
+
+        try:
+            services.respond_to_request(
+                followee=current_user(request),
+                follower=follower,
+                accept=form.validated_data["accept"],
+            )
+        except services.NotAllowedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BlockView(APIView):
+    """`POST`/`DELETE /api/users/{username}/block`.
+
+    Blocking severs any follow in either direction. A block that leaves them
+    following you means their feed still shows your posts, which is precisely
+    what the user asked to stop.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="users_block",
+        request=None,
+        responses={204: None, 403: None, 404: None},
+        description="Block an account, severing follows both ways.",
+    )
+    def post(self, request: Request, username: str) -> Response:
+        target = selectors.by_username(username)
+        if target is None:
+            raise NotFound("No such account.")
+        try:
+            services.block(blocker=current_user(request), blocked=target)
+        except services.NotAllowedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        operation_id="users_unblock",
+        responses={204: None, 404: None},
+        description="Unblock. Does not restore the follows that blocking severed.",
+    )
+    def delete(self, request: Request, username: str) -> Response:
+        target = selectors.by_username(username)
+        if target is None:
+            raise NotFound("No such account.")
+        services.unblock(blocker=current_user(request), blocked=target)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SearchView(APIView):
+    """`GET /api/users/search?q=` — block-filtered account search.
+
+    Rule 8 applies here as much as to the feed: being blocked and still
+    turning up in search is the same failure wearing a hat.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="users_search",
+        parameters=[
+            OpenApiParameter(name="q", required=True, type=str, description="Query"),
+        ],
+        responses={200: UserListSerializer},
+        description="Find accounts by username or display name.",
+    )
+    def get(self, request: Request) -> Response:
+        matches = selectors.search(
+            viewer=current_user(request), query=request.query_params.get("q", "")
+        )
+        return Response({"users": UserSerializer(matches, many=True).data})

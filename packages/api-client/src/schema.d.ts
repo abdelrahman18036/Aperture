@@ -74,6 +74,198 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/posts/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Publish a post from media that has finished processing. */
+        post: operations["posts_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One post. */
+        get: operations["posts_retrieve"];
+        put?: never;
+        post?: never;
+        /** @description Soft delete your own post. */
+        delete: operations["posts_destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Top-level comments, oldest first. */
+        get: operations["posts_comments_list"];
+        put?: never;
+        /** @description Comment on a post, or reply to a comment. */
+        post: operations["posts_comments_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}/like": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Like a post. Idempotent. */
+        post: operations["posts_like"];
+        /** @description Remove a like. Idempotent. */
+        delete: operations["posts_unlike"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/by/{username}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One account's posts, newest first. */
+        get: operations["posts_by_user"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Soft delete your own comment. */
+        delete: operations["posts_comments_destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Posts from accounts you follow, newest first. */
+        get: operations["posts_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{username}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One account's public profile, with its counts. */
+        get: operations["users_profile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{username}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Block an account, severing follows both ways. */
+        post: operations["users_block"];
+        /** @description Unblock. Does not restore the follows that blocking severed. */
+        delete: operations["users_unblock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{username}/follow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Follow, or request to follow a private account. */
+        post: operations["users_follow"];
+        /** @description Unfollow, or withdraw a pending request. */
+        delete: operations["users_unfollow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{username}/respond": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Approve or decline a pending follow request. */
+        post: operations["users_respond_to_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/me": {
         parameters: {
             query?: never;
@@ -83,6 +275,41 @@ export interface paths {
         };
         /** @description The signed-in user. */
         get: operations["users_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Update your own profile. */
+        patch: operations["users_update_me"];
+        trace?: never;
+    };
+    "/api/users/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Pending follow requests for your account. */
+        get: operations["users_follow_requests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Find accounts by username or display name. */
+        get: operations["users_search"];
         put?: never;
         post?: never;
         delete?: never;
@@ -113,6 +340,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Comment: {
+            readonly id: string;
+            readonly post_id: string;
+            readonly parent_id: string | null;
+            readonly author: components["schemas"]["User"];
+            readonly body: string;
+            /** Format: date-time */
+            readonly created_at: string;
+            readonly reply_count: number;
+        };
+        CommentPage: {
+            readonly comments: components["schemas"]["Comment"][];
+            readonly next_cursor: string | null;
+        };
+        CreateCommentRequest: {
+            body: string;
+            parent_id?: string | null;
+        };
+        /** @description Publishing a post from media that is already uploaded and processed. */
+        CreatePostRequest: {
+            media_ids: string[];
+            /** @default  */
+            caption: string;
+            /** @default  */
+            location: string;
+            /** @default public */
+            visibility: components["schemas"]["VisibilityEnum"];
+        };
         /** @description The signed-in user seeing their own account. Adds the private bits. */
         CurrentUser: {
             readonly id: string;
@@ -128,6 +383,23 @@ export interface components {
             /** Format: email */
             readonly email: string;
         };
+        /** @description A pending request, from the perspective of the account being asked. */
+        FollowRequest: {
+            readonly follower: components["schemas"]["User"];
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /** @description What the follow button should read after acting. */
+        FollowState: {
+            readonly follow_state: components["schemas"]["FollowStateEnum"];
+        };
+        /**
+         * @description * `none` - none
+         *     * `pending` - pending
+         *     * `accepted` - accepted
+         * @enum {string}
+         */
+        FollowStateEnum: "none" | "pending" | "accepted";
         /** @description The whole report. */
         Health: {
             status: components["schemas"]["HealthStatusEnum"];
@@ -205,6 +477,58 @@ export interface components {
         PatchedAltTextRequest: {
             alt_text?: string;
         };
+        PatchedUpdateProfileRequest: {
+            display_name?: string;
+            bio?: string;
+            is_private?: boolean;
+        };
+        /** @description A post as the feed and the contact sheet see it. */
+        Post: {
+            readonly id: string;
+            readonly author: components["schemas"]["User"];
+            readonly caption: string;
+            readonly location: string;
+            readonly visibility: components["schemas"]["VisibilityEnum"];
+            /** Format: date-time */
+            readonly created_at: string;
+            readonly media: components["schemas"]["Media"][];
+            readonly like_count: number;
+            readonly comment_count: number;
+            readonly viewer_has_liked: boolean;
+        };
+        /**
+         * @description A cursor-paginated page of posts.
+         *
+         *     `next_cursor` is the id of the last post on the page, or null at the end.
+         *     No total count: producing one means a `COUNT(*)` over the whole feed, and
+         *     nothing in the UI shows it.
+         */
+        PostPage: {
+            readonly posts: components["schemas"]["Post"][];
+            readonly next_cursor: string | null;
+        };
+        /**
+         * @description A profile header.
+         *
+         *     Counts come from the `counters` app, never from a `COUNT(*)` — a follower
+         *     count on a popular account is a sequential scan over millions of rows, and
+         *     it renders on every profile view.
+         *
+         *     `follow_state` is what the button reads: absent, `pending` while a private
+         *     account considers the request, or `accepted`.
+         */
+        Profile: {
+            readonly user: components["schemas"]["User"];
+            readonly post_count: number;
+            readonly follower_count: number;
+            readonly following_count: number;
+            readonly follow_state: components["schemas"]["FollowStateEnum"];
+            readonly is_self: boolean;
+            readonly can_view_posts: boolean;
+        };
+        RespondToRequestRequest: {
+            accept: boolean;
+        };
         /**
          * @description * `pending` - Pending
          *     * `ready` - Ready
@@ -225,6 +549,29 @@ export interface components {
             readonly upload_url: string;
             readonly expires_in_seconds: number;
         };
+        /** @description A user as anyone may see them. No email, no permission flags. */
+        User: {
+            readonly id: string;
+            /** @description Case-insensitively unique. Shown in metadata position. */
+            readonly username: string;
+            readonly display_name: string;
+            readonly avatar_media_id: string | null;
+            readonly bio: string;
+            /** @description Private accounts turn follows into requests pending approval. */
+            readonly is_private: boolean;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        UserList: {
+            readonly users: components["schemas"]["User"][];
+        };
+        /**
+         * @description * `public` - Public
+         *     * `followers` - Followers only
+         *     * `private` - Private
+         * @enum {string}
+         */
+        VisibilityEnum: "public" | "followers" | "private";
     };
     responses: never;
     parameters: never;
@@ -410,6 +757,493 @@ export interface operations {
             };
         };
     };
+    posts_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePostRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["CreatePostRequest"];
+                "multipart/form-data": components["schemas"]["CreatePostRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_comments_list: {
+        parameters: {
+            query?: {
+                /** @description Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPage"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_comments_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCommentRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["CreateCommentRequest"];
+                "multipart/form-data": components["schemas"]["CreateCommentRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_like: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_unlike: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_by_user: {
+        parameters: {
+            query?: {
+                /** @description Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostPage"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_comments_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_feed: {
+        parameters: {
+            query?: {
+                /** @description Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostPage"];
+                };
+            };
+        };
+    };
+    users_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_block: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_unblock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_follow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            /** @description No response body */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_unfollow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_respond_to_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RespondToRequestRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["RespondToRequestRequest"];
+                "multipart/form-data": components["schemas"]["RespondToRequestRequest"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     users_me: {
         parameters: {
             query?: never;
@@ -433,6 +1267,79 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    users_update_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedUpdateProfileRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedUpdateProfileRequest"];
+                "multipart/form-data": components["schemas"]["PatchedUpdateProfileRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            /** @description No response body */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_follow_requests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowRequest"][];
+                };
+            };
+        };
+    };
+    users_search: {
+        parameters: {
+            query: {
+                /** @description Query */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserList"];
+                };
             };
         };
     };

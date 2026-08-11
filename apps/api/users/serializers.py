@@ -52,3 +52,56 @@ class LoginSerializer(serializers.Serializer[dict[str, Any]]):
 
     email = serializers.EmailField(write_only=True)
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+
+class ProfileSerializer(serializers.Serializer[dict[str, Any]]):
+    """A profile header.
+
+    Counts come from the `counters` app, never from a `COUNT(*)` — a follower
+    count on a popular account is a sequential scan over millions of rows, and
+    it renders on every profile view.
+
+    `follow_state` is what the button reads: absent, `pending` while a private
+    account considers the request, or `accepted`.
+    """
+
+    user = UserSerializer(read_only=True)
+    post_count = serializers.IntegerField(read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)
+    following_count = serializers.IntegerField(read_only=True)
+    follow_state = serializers.ChoiceField(
+        choices=["none", "pending", "accepted"], read_only=True
+    )
+    is_self = serializers.BooleanField(read_only=True)
+    can_view_posts = serializers.BooleanField(read_only=True)
+
+
+class UpdateProfileSerializer(serializers.Serializer[dict[str, Any]]):
+    display_name = serializers.CharField(
+        max_length=60, allow_blank=True, required=False
+    )
+    bio = serializers.CharField(max_length=300, allow_blank=True, required=False)
+    is_private = serializers.BooleanField(required=False)
+
+
+class FollowRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    """A pending request, from the perspective of the account being asked."""
+
+    follower = UserSerializer(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class RespondToRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    accept = serializers.BooleanField()
+
+
+class UserListSerializer(serializers.Serializer[dict[str, Any]]):
+    users = UserSerializer(many=True, read_only=True)
+
+
+class FollowStateSerializer(serializers.Serializer[dict[str, Any]]):
+    """What the follow button should read after acting."""
+
+    follow_state = serializers.ChoiceField(
+        choices=["none", "pending", "accepted"], read_only=True
+    )
