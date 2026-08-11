@@ -26,6 +26,6 @@ export const config = {
    */
   ticketSecret: required(
     "REALTIME_TICKET_SECRET",
-    "dev-only-insecure-ticket-secret",
+    "dev-only-insecure-ticket-secret-0123456789abcdef",
   ),
 } as const;

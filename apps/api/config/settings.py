@@ -312,7 +312,7 @@ STORAGES = {
 # the environment, never in code — see 01-ARCHITECTURE.md §8.
 
 REALTIME_TICKET_SECRET = os.environ.get(
-    "REALTIME_TICKET_SECRET", "dev-only-insecure-ticket-secret"
+    "REALTIME_TICKET_SECRET", "dev-only-insecure-ticket-secret-0123456789abcdef"
 )
 REALTIME_TICKET_TTL_SECONDS = 60
 REALTIME_URL = os.environ.get("REALTIME_URL", "ws://localhost:4000/ws")

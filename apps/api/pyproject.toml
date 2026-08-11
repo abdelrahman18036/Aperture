@@ -18,6 +18,7 @@ dependencies = [
     "pillow==12.3.0",
     "psycopg[binary]==3.3.4",
     "puremagic==2.2.0",
+    "pyjwt==2.13.0",
     "redis==8.1.0",
     "uvicorn==0.52.1",
     "whitenoise==6.12.0",
