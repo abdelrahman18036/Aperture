@@ -1,0 +1,41 @@
+<!-- Source: https://orm.drizzle.team/docs/pg/kit-custom-migrations -->
+
+
+# Migrations with Drizzle Kit
+<Prerequisites>
+- Get started with Drizzle and `drizzle-kit` - [read here](/docs/get-started)
+- Drizzle schema fundamentals - [read here](/docs/sql-schema-declaration)
+- Database connection basics - [read here](/docs/connect-overview)
+- Drizzle migrations fundamentals - [read here](/docs/migrations)
+- Drizzle Kit [overview](/docs/kit-overview) and [config file](/docs/drizzle-config-file)
+- `drizzle-kit generate` command - [read here](/docs/drizzle-kit-generate)
+- `drizzle-kit migrate` command - [read here](/docs/drizzle-kit-migrate)
+</Prerequisites>
+
+Drizzle lets you generate empty migration files to write your own custom SQL migrations 
+for DDL alternations currently not supported by Drizzle Kit or data seeding, which you can then run with [`drizzle-kit migrate`](/docs/drizzle-kit-migrate) command.
+
+```shell
+drizzle-kit generate --custom --name=seed-users
+```
+<Section>
+```plaintext {4}
+📦 <project root>
+ ├ 📂 drizzle
+ │ ├ 📂 20242409125510_init_sql
+ │ └ 📂 20242409135510_seed-users
+ ├ 📂 src
+ └ …
+```
+```sql
+-- ./drizzle/20242409135510_seed-users.sql
+
+INSERT INTO "users" ("name") VALUES('Dan');
+INSERT INTO "users" ("name") VALUES('Andrew');
+INSERT INTO "users" ("name") VALUES('Dandrew');
+```
+</Section>
+
+### Running JavaScript and TypeScript migrations
+We will add ability to run custom JavaScript and TypeScript migration/seeding scripts in the upcoming release, you can follow [github discussion](https://github.com/drizzle-team/drizzle-orm/discussions/2832).
+
