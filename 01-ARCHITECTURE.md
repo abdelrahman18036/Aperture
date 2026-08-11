@@ -2,7 +2,7 @@
 
 A photo and video social platform. Web only. Local-first, scales without a rewrite.
 
-**Backend is Django. Frontend is Next.js.** Two deployables, one repo.
+**Django owns the data and the API. Node owns the sockets. Next.js owns the UI.** Three deployables, one repo.
 
 **Design rule:** every local component speaks the same protocol as its production replacement. MinIO is S3's API, so Cloudflare R2 is an env var. Self-hosted LiveKit is LiveKit Cloud's API. Postgres is Postgres. You never rewrite to scale — you swap the endpoint.
 
@@ -24,16 +24,26 @@ A photo and video social platform. Web only. Local-first, scales without a rewri
 | ORM | Django ORM |
 | Auth | Django auth (session cookies, same-site) |
 | Queues | Celery + Redis broker |
-| Realtime | Django Channels + channels-redis |
+| Realtime | **publishes to Redis; does not hold sockets** |
 | ASGI server | uvicorn |
 | Images | Pillow → Cloudflare Images |
 | Video | ffmpeg subprocess → Mux |
 | Object storage | boto3 → MinIO → Cloudflare R2 |
 | SFU tokens | livekit-api |
-| Admin | Django admin — this is the Phase 5 moderation console |
+| Admin | Django admin + **django-unfold** — the Phase 5 moderation console |
 | Tests | pytest-django |
 | Lint / types | ruff + mypy + django-stubs |
 | Packages | uv |
+
+**Realtime — TypeScript / Node**
+
+| Concern | Package |
+|---|---|
+| Runtime | Node.js (LTS) |
+| Sockets | `ws` |
+| Fanout | ioredis (pub/sub) |
+| Ticket verification | `jose` (HS256) |
+| Event schemas | Zod, shared with the browser |
 
 **Frontend — TypeScript / Next.js**
 
@@ -46,7 +56,7 @@ A photo and video social platform. Web only. Local-first, scales without a rewri
 | Motion | Motion (ex Framer Motion) |
 | API client | openapi-typescript + openapi-fetch, generated |
 | Validation | Zod (forms and client-side only) |
-| Realtime | native WebSocket to Channels |
+| Realtime | native WebSocket to `apps/realtime` |
 | Calls | livekit-client |
 | Tests | Vitest, plus flows walked in Chrome |
 | Packages | pnpm |
@@ -54,6 +64,8 @@ A photo and video social platform. Web only. Local-first, scales without a rewri
 Two notes on shadcn. New projects scaffold on **Base UI** rather than Radix — take that default, it's where the registry is heading. And the registry ships **chat primitives** (`MessageScroller`, `Message`, `Bubble`, `Attachment`), which covers a real chunk of Phase 6.
 
 **Why Django here:** the admin gives us the Phase 5 moderation console essentially for free, and Django's ORM, auth, and migrations are the most mature in any ecosystem. **What it costs:** the type boundary in §3, which you must automate on day one or it will rot.
+
+**Why sockets are in Node:** concurrent connection density. A Python process holds roughly 1–5k WebSocket connections; a Node process holds 10–50k. Sockets are also the most cleanly separable part of the system — the service holds no business logic and never touches the database — so putting them in the runtime that's good at them costs one small service and buys the whole realtime ceiling. This is the same split Instagram made: their Django monolith serves the API, and Direct messaging runs on separate infrastructure.
 
 ---
 
@@ -68,13 +80,15 @@ aperture/
 │   │   ├── users/              accounts, follows, blocks
 │   │   ├── media/              upload intent, derivatives, Celery tasks
 │   │   ├── posts/              posts, likes, comments, feed
-│   │   ├── messaging/          conversations, messages, Channels consumers
-│   │   ├── calls/              LiveKit token minting, signaling relay
-│   │   ├── moderation/         reports, admin actions, rate limits
+│   │   ├── messaging/          conversations, messages, ticket minting
+│   │   ├── calls/              LiveKit token minting
+│   │   ├── moderation/         reports, unfold admin, rate limits
 │   │   └── pyproject.toml
+│   ├── realtime/               Node WebSocket gateway — NO database access
 │   └── web/                    Next.js frontend
 ├── packages/
 │   ├── api-client/             GENERATED from OpenAPI — never hand-edited
+│   ├── realtime-events/        Zod schemas for ephemeral events, shared Node ↔ browser
 │   └── ui/                     design system: tokens, primitives, motion
 ├── infra/
 │   ├── docker-compose.yml
@@ -84,15 +98,15 @@ aperture/
 └── turbo.json
 ```
 
-**Three processes, one Django codebase.** This is the idiomatic Django shape and it is simpler than it looks:
+**Three processes.** Two share the Django codebase; the third is a separate Node service.
 
-| Process | Command | Scales on |
-|---|---|---|
-| API | `uvicorn config.asgi:application` | request rate |
-| Realtime | `uvicorn config.asgi:application` (Channels routes) | concurrent sockets |
-| Worker | `celery -A config worker` | queue depth |
+| Process | Command | Language | Scales on |
+|---|---|---|---|
+| API | `uvicorn config.asgi:application` | Python | request rate |
+| Worker | `celery -A config worker` | Python | queue depth |
+| Realtime | `node apps/realtime` | TypeScript | concurrent sockets |
 
-They share models and settings but deploy and scale independently. Run the realtime process separately from the API even on day one — it holds socket state and the API is stateless, so merging them forces you to over-provision one to satisfy the other. Splitting costs nothing now.
+API and worker share models and settings but deploy independently. Realtime shares nothing but Redis — see §8.
 
 **Why `core/` imports no Django:** it's the only way the business logic stays testable in milliseconds without a database, and portable if Django changes its mind about something. Feed ranking, snowflake generation, the celebrity threshold, permission arithmetic — all pure functions there. If a module in `core/` needs `django.`, it belongs in an app instead.
 
@@ -116,6 +130,14 @@ Django models + DRF serializers
 3. Zod lives on the **frontend only** — form validation and user input. It does not restate the API contract; the generated types do that. Two hand-maintained descriptions of the same shape is the failure mode this section exists to prevent.
 
 This is the one thing the TypeScript-everywhere alternative gave for free. Automate it in Phase 1 and it stays cheap forever. Defer it and every phase after pays interest.
+
+**Socket payloads ride the same contract.** When Django publishes a message event, the payload is the output of *the same DRF serializer* the REST endpoint returns — so its type is already in the OpenAPI schema and already in the generated client. Only the envelope is hand-typed, and it is five fields:
+
+```ts
+{ v: 1, type: "message.created", conversation_id: string, seq: number, payload: unknown }
+```
+
+Ephemeral events (typing, presence) never involve Python at all — they're Node-to-browser, both TypeScript, so `packages/realtime-events` holds one Zod schema that both ends import. **There is no third hand-maintained description of anything anywhere.** If you find yourself writing a TypeScript interface that restates a Django serializer, stop: that's the failure mode this section exists to prevent.
 
 **Auth flows through the same origin.** Next.js rewrites `/api/*` to Django, so the browser sees one origin and Django's session cookie is same-site. No JWT in `localStorage`, no CORS credential dance. Configure the rewrite in Phase 1 and CSRF works the way Django expects.
 
@@ -271,6 +293,8 @@ messages
 
 That `seq` column and that `UNIQUE` constraint are the two most important lines in the entire schema. `seq` gives correct ordering without trusting browser clocks, plus cursor sync (*"send me everything after 4821"*) for free. The unique constraint makes a flaky-network retry a no-op instead of a duplicate message. Both are miserable to retrofit onto live conversations.
 
+Only Django writes these tables. `apps/realtime` reads none of them — it learns about a new message from Redis, not from Postgres.
+
 Allocate `seq` inside the same transaction as the insert, with a row lock:
 
 ```python
@@ -342,23 +366,54 @@ The split is arithmetic, not taste: pure push means a 10M-follower account trigg
 
 ## 8. Realtime
 
-Django Channels over ASGI, `channels-redis` for cross-replica fanout.
+`apps/realtime` is a Node service running `ws`, with Redis pub/sub for cross-replica fanout.
+
+**The one rule that keeps this simple: the realtime service never touches Postgres.** It holds no models, no migrations, no ORM, no business logic. It is a socket gateway — it authenticates a connection, subscribes it to Redis channels, and pushes bytes. Everything durable belongs to Django. Break that rule and you have two applications fighting over one schema, which is far worse than the problem you were solving.
+
+### Two classes of event, two paths
+
+**Persisted events** — messages, reactions, read receipts. These go **up over HTTP** to Django and come **down over the socket**:
 
 ```
-Browser ──WSS──> uvicorn replica N (Channels)
-                    ├─ group_add    user.{id}
-                    └─ group_send   conv.{id}
-
-Send: DRF view or consumer validates → writes to PG (allocating seq)
-      → group_send conv.{id} → every replica holding a member socket delivers
-      → offline members get a Celery notification task
+Browser ──POST /api/conversations/{id}/messages──> Django
+                                                     │ allocates seq, writes PG,
+                                                     │ idempotent on client_id
+                                                     ▼
+                                            PUBLISH conv.{id}  (Redis)
+                                                     │
+Browser <────── WSS ────── apps/realtime replica ◄───┘
 ```
 
-Scale by adding replicas. Comfortable into the low thousands of concurrent sockets per replica — **Python holds fewer sockets per process than Node, so plan on more replicas at the same user count.** That is a known and accepted cost of this stack. Past `channels-redis`, move to a dedicated broker; you'll know well before you get there.
+Writes go over HTTP because the write must be transactional — `seq` allocation and `client_id` idempotency happen in one Postgres transaction that only Django can run. Sending over the socket would mean Node forwarding to Django anyway: an extra hop for nothing. It also means *send message* is a typed call in the generated API client, and optimistic UI hides the round trip completely.
 
-Reconnect: client sends `{conversation_id, last_seq}`, the consumer returns the delta. That's the entire offline-sync story, and it's correct because `seq` is monotonic.
+**Ephemeral events** — typing, presence, call signaling. These go **up over the socket** and never reach Django or Postgres at all:
 
-Consumers are async; the ORM is not. Every database call inside a consumer goes through `database_sync_to_async` or an `async`-native ORM method. Forgetting this is the defining Channels bug and it appears as intermittent hangs under load, not as an error.
+```
+Browser ──WSS──> realtime ──PUBLISH conv.{id}.ephemeral──> other replicas ──WSS──> peers
+```
+
+Nothing here is worth a database write or an HTTP request per keystroke. Presence is Redis keys with a TTL, refreshed by heartbeat.
+
+That split is the whole design. **If an event must survive a restart it goes through Django; if it doesn't, it stays in Node.**
+
+### Authentication
+
+Django mints a short-lived signed ticket; Node verifies it with a shared secret and never calls back:
+
+1. Browser `POST /api/realtime/ticket` (authenticated by the normal session cookie)
+2. Django returns an HS256 JWT — `{sub: user_id, exp: now + 60s}` — signed with `REALTIME_TICKET_SECRET`
+3. Browser connects `wss://.../ws?ticket=…`
+4. Node verifies the signature with `jose` and the same secret, then drops the ticket
+
+Stateless, no database lookup on connect, and a leaked ticket expires in a minute. The secret is the one thing both services share; it lives in the environment, never in code.
+
+### Scale and reconnect
+
+Add replicas; Redis handles fanout. Comfortably 10k+ sockets per Node process, so a single replica covers a very large early user base. Past Redis pub/sub, move to Redis Streams or NATS — you'll know long before you get there.
+
+Reconnect: client sends `{conversation_id, last_seq}` over the socket, Node calls Django's internal delta endpoint on its behalf — or simpler, the client fetches the delta over HTTP itself and *then* opens the socket. Prefer the second: it keeps the gateway dumb. Either way it's correct because `seq` is monotonic, and that is the entire offline-sync story.
+
+**Deliver-then-persist is not allowed.** Django publishes to Redis only *after* the transaction commits. Publishing inside the transaction means a rollback still delivers a message that doesn't exist.
 
 ---
 
@@ -366,8 +421,8 @@ Consumers are async; the ORM is not. Every database call inside a consumer goes 
 
 - **1:1** — WebRTC peer-to-peer, TURN fallback.
 - **Group (3+)** — LiveKit SFU. Docker locally, LiveKit Cloud in prod, identical client SDK. Never an MCU; server-side mixing burns a core per call and buys nothing.
-- **Signaling** — rides the existing Channels connection. Don't open a second connection.
-- **Tokens** — minted server-side with `livekit-api`. Never in the browser.
+- **Signaling** — an ephemeral event class on the existing `apps/realtime` socket (§8). Don't open a second connection, and don't persist offers and answers.
+- **Tokens** — minted by Django with `livekit-api`. Never in the browser, never in the Node service.
 - **TURN** — coturn with **TLS on 443**, non-negotiable. Egyptian ISPs and effectively every corporate firewall drop UDP. Without TCP/443 fallback your connection rate quietly sits near 70% and you'll blame the code.
 
 Budget TURN bandwidth as a real line item. Every relayed call is full media through your server — the one WebRTC cost that scales linearly with usage.
@@ -380,7 +435,7 @@ Budget TURN bandwidth as a real line item. Every relayed call is full media thro
 |---|---|
 | 0 → 10k | Nothing. One API process, one worker, one Postgres, pull feed. |
 | 10k → 100k | Read replica. Redis feed cache. More Celery workers. Video to Mux. |
-| 100k → 1M | Hybrid push. Partition `messages` by month. PgBouncer. Typesense. More ASGI replicas for sockets. |
+| 100k → 1M | Hybrid push. Partition `messages` by month. PgBouncer. Typesense. Second realtime replica. |
 | 1M → 10M | Conversations onto their own DB. Citus or app-level shard by user_id. |
 | 10M+ | You have a platform team; this document is obsolete. |
 
@@ -390,7 +445,7 @@ The most common failure in projects like this is building stage-3 infrastructure
 
 ## 11. Non-negotiable from day one
 
-**Moderation.** Public image upload attracts CSAM, spam, and copyright claims within days of traction. This is a legal and ethical obligation from your first public user, not a Phase 9 feature. Minimum: CSAM scanning on the bucket, an NCMEC reporting path, a report queue with an admin view, hard upload rate limits. Build the report button before you build stories. Django admin gives you the queue view cheaply — there is no excuse to defer this one.
+**Moderation.** Public image upload attracts CSAM, spam, and copyright claims within days of traction. This is a legal and ethical obligation from your first public user, not a Phase 9 feature. Minimum: CSAM scanning on the bucket, an NCMEC reporting path, a report queue with an admin view, hard upload rate limits. Build the report button before you build stories. Django admin with **django-unfold** gives you the queue, the row actions, and the permission gating cheaply — see `docs/vendor/django-unfold.md`. There is no excuse to defer this one.
 
 **Blocking.** Enforced at the query layer in *every* read path — feed, search, comments, DMs, notifications. Retrofitting means auditing every query you've ever written. It's in the Phase 1 feed query above for exactly this reason. Put it in a single reusable queryset method (`visible_to(user)`) so there is one place to audit rather than forty.
 

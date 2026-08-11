@@ -3,7 +3,7 @@
 Checked against PyPI, npm, Docker Hub and nodejs.org on **2026-08-11**. Everything here is the
 registry's `latest` **stable** release — no prereleases — except where a note says otherwise.
 
-Stack ruled 2026-08-11: **Django API + Next.js frontend.** See `01-ARCHITECTURE.md`.
+Stack ruled 2026-08-11: **Django API + Node socket gateway + Next.js frontend.** See `01-ARCHITECTURE.md`.
 
 ---
 
@@ -13,8 +13,8 @@ Stack ruled 2026-08-11: **Django API + Next.js frontend.** See `01-ARCHITECTURE.
 
 ⚠️ **This is deliberate and load-bearing.** Celery 5.6.3 declares support only through Python 3.13
 — it installs on 3.14 (`requires_python >= 3.9`) but is untested there. Celery runs the media
-pipeline and the counter updates; it is not the component to gamble on. Django 6.1, Channels,
-psycopg and Pillow all support 3.14 fine, so revisit once Celery ships 3.14 classifiers.
+pipeline and the counter updates; it is not the component to gamble on. Django 6.1, psycopg and
+Pillow all support 3.14 fine, so revisit once Celery ships 3.14 classifiers.
 
 `uv python install 3.13.12` — this does not touch the system Python.
 
@@ -26,9 +26,8 @@ psycopg and Pillow all support 3.14 fine, so revisit once Celery ships 3.14 clas
 | psycopg | **3.3.4** | psycopg **3**, not psycopg2. |
 | celery | **5.6.3** | Redis broker, not RabbitMQ. Pins the runtime to 3.13. |
 | django-celery-beat | **2.9.0** | Scheduled hard-delete job, Phase 5. |
-| channels | **4.3.2** | |
-| channels-redis | **4.3.0** | |
-| uvicorn | **0.52.1** | ASGI server for both API and realtime processes. |
+| django-unfold | **0.104.0** | Admin theme for the moderation console. Supports Django 5.2/6.0/6.1 ✓, Python ≥3.12 ✓. Only dep is `django>=5.2`. **See `docs/vendor/django-unfold.md`.** |
+| uvicorn | **0.52.1** | ASGI server for the API process. |
 | redis | **8.1.0** | Python client. |
 | boto3 | **1.43.68** | Presigned URLs against MinIO/R2. |
 | django-storages | **1.14.6** | |
@@ -50,9 +49,23 @@ Ruled: **6.1**. Current LTS is 5.2.17 (supported to ~April 2028); the next LTS i
 
 ---
 
-## TypeScript — the frontend
+## TypeScript — the realtime gateway and the frontend
 
 **Runtime: Node.js 24.19.0**, installed via `pnpm env use --global`. pnpm 10.17.0.
+
+### `apps/realtime` — the socket gateway
+
+| Package | Pin | Note |
+|---|---|---|
+| ws | **8.21.3** | The socket server. |
+| ioredis | **6.0.0** | Redis pub/sub for cross-replica fanout. |
+| jose | **6.2.8** | Verifies the HS256 ticket Django mints. Verify-only — this service never signs. |
+| tsx | **4.23.12** | Dev runner. |
+
+No ORM, no database driver, no Postgres client. If one appears in this package's `package.json`,
+something has gone wrong — see `01-ARCHITECTURE.md` §8.
+
+### `apps/web` — the frontend
 
 | Package | Pin | Note |
 |---|---|---|
@@ -75,8 +88,9 @@ Ruled: **6.1**. Current LTS is 5.2.17 (supported to ~April 2028); the next LTS i
 **Playwright is not in the stack.** Flows are verified through Claude's Chrome access. Do not add
 `@playwright/test`, `playwright-cli`, or `webapp-testing`.
 
-**Dropped when the stack changed:** `drizzle-orm`, `drizzle-kit`, `better-auth`, `bullmq`,
-`ioredis`, `ws`, `sharp`, `pg`, `livekit-server-sdk`. Django owns all of those concerns now.
+**Dropped when the stack changed:** `drizzle-orm`, `drizzle-kit`, `better-auth`, `bullmq`, `sharp`,
+`pg`, `livekit-server-sdk` — Django owns all of those concerns now. Also `channels`,
+`channels-redis` and `daphne`, dropped when sockets moved to Node.
 
 ---
 
@@ -88,7 +102,7 @@ concrete ones — a compose file that pulls `latest` is not reproducible.
 | Service | Pin | Note |
 |---|---|---|
 | postgres | `postgres:18-alpine` | Host port **5433**, not 5432. |
-| redis | `redis:8-alpine` | Broker for Celery *and* channel layer for Channels. |
+| redis | `redis:8-alpine` | Celery broker, feed cache, **and** the pub/sub bus between Django and the realtime gateway. |
 | minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | was `latest` |
 | minio-init | `minio/mc` | bootstrap only, floating is fine |
 | livekit | `livekit/livekit-server:v1.13.5` | was `latest` |
@@ -145,8 +159,9 @@ Ports verified free: 6379, 9000, 9001, 7880, 8108, 3000, 8000, 3478, 443.
 stack changed (they remain in git history at commit `e1beb29`).
 
 Django and DRF are extremely well represented in training data and do **not** need vendoring.
-Fetch these three, where the risk of stale or invented API is real:
 
-- **drf-spectacular** — the OpenAPI generation pipeline, and the newest of the three.
-- **Django Channels 4.3** — consumer API and `database_sync_to_async` patterns.
-- **Django 6.x release notes** — specifically composite primary keys and anything touching `Index(condition=...)`.
+- ✅ **django-unfold** — fetched, at `docs/vendor/django-unfold.md`.
+- ⬜ **drf-spectacular** — the OpenAPI generation pipeline. Fetch before Phase 1.
+- ⬜ **Django 6.x release notes** — composite primary keys and `Index(condition=...)`. Fetch before Phase 1.
+
+Channels docs are no longer needed — sockets moved to Node.

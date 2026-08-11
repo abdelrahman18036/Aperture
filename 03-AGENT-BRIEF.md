@@ -2,13 +2,14 @@
 
 **Aperture** is a photo and video social platform. Web only — there is no mobile app in scope.
 
-**Django backend, Next.js frontend.** Two deployables, one repo.
+**Django owns the data and the API. Node owns the sockets. Next.js owns the UI.** Three deployables, one repo.
 
 Three documents govern the work:
 
 - `01-ARCHITECTURE.md` — stack, type boundary, schema, data flow, scaling path
 - `02-DESIGN-SYSTEM.md` — color, type, layout, motion
 - `docs/VERSIONS.md` — pinned versions for both ecosystems, and this machine's quirks
+- `docs/vendor/` — fetched library docs. Work from these, not from memory.
 
 They are the source of truth. Where this brief and a spec disagree, **tell me** — don't silently pick one.
 
@@ -36,14 +37,16 @@ Then stop.
 1. **Pinned versions live in `docs/VERSIONS.md`.** Anything not listed gets verified against PyPI or npm before install. Never invent a version number.
 2. **Both languages are strict.** TypeScript: strict, no `any`, no non-null assertions. Python: full type hints, `mypy` strict with `django-stubs`, `ruff` clean. If types get hard, that's information about the design — surface it, don't suppress it.
 3. **`apps/api/core/` imports no Django.** Pure Python, unit-testable in milliseconds without a database.
-4. **`packages/api-client` is generated, never hand-edited.** A serializer change means regenerating it in the same commit. CI fails on drift. This is the seam the Django choice costs us — it is not optional bookkeeping.
-5. **Every read path that returns user content filters blocks.** Feed, search, comments, DMs, notifications, profile. One reusable queryset method, not forty ad-hoc filters. From Phase 3 onward this is non-negotiable and I will check it.
-6. **No `.count()` or `COUNT(*)` on a request path.** Counters table plus Redis.
-7. **Read the SQL the ORM generates.** `.explain()` the feed query and anything on a hot path. The N+1 the ORM hides is the most common way a Django app gets slow.
-8. **No secrets in code.** `.env.local`, with `.env.example` committed and complete.
-9. **Tests alongside the code, not after.** pytest-django for the backend, Vitest for frontend logic. User flows are walked in the browser (see below).
-10. **When you're unsure, ask.** One good question beats a thousand lines built on a wrong assumption. Ask before the phase, not after.
-11. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, the specs win. Note the conflict in the handoff under Decisions and continue — do not stop to ask, and do not quietly follow the skill.
+4. **`apps/realtime` never touches Postgres.** No ORM, no database driver, no business logic. It authenticates a socket, subscribes it to Redis, and pushes bytes. If it needs to know something durable, Django tells it through Redis.
+5. **`packages/api-client` is generated, never hand-edited.** A serializer change means regenerating it in the same commit. CI fails on drift. This is the seam the Django choice costs us — it is not optional bookkeeping.
+6. **Every read path that returns user content filters blocks.** Feed, search, comments, DMs, notifications, profile. One reusable queryset method, not forty ad-hoc filters. From Phase 3 onward this is non-negotiable and I will check it.
+7. **No `.count()` or `COUNT(*)` on a request path.** Counters table plus Redis.
+8. **Read the SQL the ORM generates.** `.explain()` the feed query and anything on a hot path. The N+1 the ORM hides is the most common way a Django app gets slow.
+9. **Publish after commit, never inside the transaction.** A rollback that already delivered a socket event has told users about a message that doesn't exist.
+10. **No secrets in code.** `.env.local`, with `.env.example` committed and complete. `REALTIME_TICKET_SECRET` is shared by Django and the Node gateway and lives only in the environment.
+11. **Tests alongside the code, not after.** pytest-django for the backend, Vitest for the gateway and frontend logic. User flows are walked in the browser (see below).
+12. **When you're unsure, ask.** One good question beats a thousand lines built on a wrong assumption. Ask before the phase, not after.
+13. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, the specs win. Note the conflict in the handoff under Decisions and continue — do not stop to ask, and do not quietly follow the skill.
 
 ## Testing
 
@@ -68,7 +71,7 @@ If a phase tempts you to add a visual flourish not in the spec, don't. Put it in
 
 **Do not consult design-taste skills** — `taste-skill`, `impeccable`, `redesign-skill`, or similar. They supply aesthetic direction where none is missing; ours is locked in `02-DESIGN-SYSTEM.md` and a second opinion produces exactly the drift I'm preventing. If you think one would help, say so in the handoff.
 
-**Django admin is a tool, not a design surface.** It runs the moderation console and nothing user-facing. Don't spend design effort on it, and don't let its conventions leak into the product UI.
+**The admin is a tool, not a design surface.** django-unfold's defaults are already good. Set `SITE_TITLE`, `THEME: "dark"`, `BORDER_RADIUS`, and a primary color ramp from the design system — its `COLORS` takes OKLCH, so that's a few lines — then **stop**. No custom dashboard, no `STYLES` overrides, no bespoke templates. And don't let admin conventions leak into the product UI.
 
 Ignore anything for Prisma, Supabase, Firebase, or Azure — wrong stack.
 
@@ -77,9 +80,11 @@ Ignore anything for Prisma, Supabase, Firebase, or Azure — wrong stack.
 ## Phases
 
 ### Phase 1 — Foundation
-uv workspace with the Django project and its apps; pnpm workspace with `apps/web`, `packages/ui`, `packages/api-client`; Turborepo over both. `docker-compose.yml` with all six services. Django models for every table in the spec including indexes and constraints, migrations generated and applied. Django auth with email/password and session cookies. Next.js rewrite of `/api/*` to Django so the session cookie is same-origin. **The full OpenAPI → TypeScript client pipeline, wired and running in CI.** Health check endpoint verifying Postgres, Redis, and MinIO. `.env.example`. A README with exact setup steps for both ecosystems.
+uv workspace with the Django project and its apps; pnpm workspace with `apps/web`, `apps/realtime`, `packages/ui`, `packages/api-client`, `packages/realtime-events`; Turborepo over both. `docker-compose.yml` with all six services. Django models for every table in the spec including indexes and constraints, migrations generated and applied. Django auth with email/password and session cookies. **django-unfold installed and the admin confirmed styled** — it's five minutes now and a migration later. Next.js rewrite of `/api/*` to Django so the session cookie is same-origin. **The full OpenAPI → TypeScript client pipeline, wired and running in CI.** Health check endpoint verifying Postgres, Redis, and MinIO. `.env.example`. A README with exact setup steps for all three processes.
 
-**Verify:** `docker compose up`, then the API, worker, and web processes start on a clean clone. `/api/health` returns all-green. `manage.py showmigrations` is fully applied. Changing a serializer field and regenerating produces a diff in `packages/api-client` — demonstrate this, it is the phase's most important outcome.
+`apps/realtime` is scaffolded but not built out — a process that starts, connects to Redis, and accepts an authenticated socket is enough. Phase 6 fills it in.
+
+**Verify:** `docker compose up`, then API, worker, realtime, and web all start on a clean clone. `/api/health` returns all-green. `manage.py showmigrations` fully applied. `/admin` renders with Unfold styling. Changing a serializer field and regenerating produces a diff in `packages/api-client` — demonstrate this, it is the phase's most important outcome.
 
 ### Phase 2 — Design system
 Frontend only. `packages/ui`: the `@theme` block, the three fonts via `next/font`, the grain overlay, the `meta` type role. Install shadcn on Base UI and override Button, Input, Avatar, Dialog, Skeleton per the spec. Build the develop-in image component (blurhash canvas → real image) and the ambient glow. Ship a `/kitchen-sink` route showing every primitive in every state.
@@ -97,17 +102,17 @@ Post creation, profile contact sheet, pull feed with cursor pagination and block
 **Verify:** seed 50 users and 500 posts; feed p95 under 100ms at that size; `.explain()` output for the feed query included in the handoff; blocking a user removes them from feed, search, and comments in the same request.
 
 ### Phase 5 — Safety
-Report queue and admin view **built on Django admin** — this is where the stack choice pays. Rate limits (Redis token bucket in `core/`) on upload, follow, comment. Soft delete everywhere plus the scheduled hard-delete job via django-celery-beat. Block enforcement audit — walk every queryset and confirm.
+Report queue and moderation console **built on Django admin with django-unfold** — this is where the stack choice pays. Use `actions_row` for per-report decisions and `actions_list` for bulk, with `has_*_permission` gating on every one; see `docs/vendor/django-unfold.md`. Rate limits (Redis token bucket in `core/`) on upload, follow, comment. Soft delete everywhere plus the scheduled hard-delete job via django-celery-beat. Block enforcement audit — walk every queryset and confirm.
 
-**Verify:** rate limits return 429 at the threshold, reported content appears in the admin queue, deleted account's content disappears from all read paths.
+**Verify:** rate limits return 429 at the threshold, reported content appears in the queue and can be actioned in one click, deleted account's content disappears from all read paths. Grep for `admin.ModelAdmin` and confirm zero hits — every admin class inherits from Unfold's.
 
 ### Phase 6 — Realtime chat
-Channels consumers over ASGI, `channels-redis` group fanout. Server-allocated `seq` in the same transaction as insert. `client_id` idempotency via the unique constraint. Cursor-based reconnect sync. Read receipts, typing indicators, presence. Use shadcn's chat primitives where they fit.
+Build out `apps/realtime`: `ws` server, ioredis pub/sub fanout, ticket verification with `jose`. Django side: the ticket endpoint, server-allocated `seq` in the same transaction as insert, `client_id` idempotency via the unique constraint, and publish-after-commit. Persisted events over HTTP, ephemeral events (typing, presence) over the socket and never into Postgres. Cursor-based reconnect sync. Read receipts. Use shadcn's chat primitives where they fit.
 
-**Verify:** send from two browsers, kill one's network mid-conversation, reconnect — no duplicates, no gaps, correct order. Send the same `client_id` twice, get one message. Confirm every ORM call inside a consumer is wrapped for async.
+**Verify:** send from two browsers, kill one's network mid-conversation, reconnect — no duplicates, no gaps, correct order. Send the same `client_id` twice, get one message. Confirm `apps/realtime` has no database dependency in its `package.json`. **Load test: open concurrent sockets against one realtime process until latency degrades, and report the number** — that turns the socket ceiling from a worry into a measurement, and you'll know how far away it is.
 
 ### Phase 7 — Calls
-LiveKit rooms, tokens minted server-side with `livekit-api`. 1:1 P2P with TURN fallback, then group via SFU. Signaling over the existing Channels connection. coturn configured with TLS on 443.
+LiveKit rooms, tokens minted by Django with `livekit-api`. 1:1 P2P with TURN fallback, then group via SFU. Signaling as an ephemeral event class on the existing realtime socket. coturn configured with TLS on 443.
 
 **Verify:** force `iceTransportPolicy: 'relay'` and confirm the call still connects — that's the TCP/443 path, and it's the one that matters.
 
