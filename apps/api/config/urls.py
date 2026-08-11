@@ -19,6 +19,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from config.converters import SnowflakeConverter
 from config.health import HealthView
+from messaging.views import RealtimeTicketView
 
 # Registered here so every app's urls.py can use `<snowflake:...>`.
 register_converter(SnowflakeConverter, "snowflake")
@@ -39,6 +40,9 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/posts/", include("posts.urls")),
     path("api/counters/", include("counters.urls")),
     path("api/messaging/", include("messaging.urls")),
+    # The socket ticket. Lives outside /api/messaging/ because the gateway
+    # it authenticates carries calls signalling too, from Phase 7.
+    path("api/realtime/ticket", RealtimeTicketView.as_view(), name="ticket"),
     path("api/calls/", include("calls.urls")),
     path("api/moderation/", include("moderation.urls")),
     # The moderation *console* is the Django admin, not an endpoint here.
