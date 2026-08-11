@@ -1,0 +1,120 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "Aperture's Django backend — data, API, queue, auth, admin."
+readme = "README.md"
+requires-python = ">=3.13.12"
+dependencies = [
+    "blurhash-python==1.2.2",
+    "boto3==1.43.68",
+    "celery==5.6.3",
+    "dj-database-url==3.1.2",
+    "django==6.1",
+    "django-cors-headers==4.9.0",
+    "django-storages==1.14.6",
+    "django-unfold==0.104.0",
+    "djangorestframework==3.18.0",
+    "drf-spectacular==0.30.0",
+    "pillow==12.3.0",
+    "psycopg[binary]==3.3.4",
+    "redis==8.1.0",
+    "uvicorn==0.52.1",
+]
+
+[dependency-groups]
+dev = [
+    "boto3-stubs[s3]==1.43.68",
+    "django-stubs[compatible-mypy]==6.0.9",
+    "djangorestframework-stubs==3.17.1",
+    "mypy==2.3.0",
+    "pytest-django==4.14.0",
+    "ruff==0.16.2",
+]
+
+# ---------------------------------------------------------------------------
+# Tooling. Set up in Phase 1, before there is code to fix — retrofitting
+# strict mode onto four phases of work is a bad afternoon.
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # bugbear
+    "A",      # builtin shadowing
+    "C4",     # comprehensions
+    "DTZ",    # naive datetimes
+    "T20",    # print statements
+    "SIM",    # simplify
+    "TID",    # tidy imports
+    "PTH",    # pathlib over os.path
+    "RUF",
+    "DJ",     # flake8-django
+    "S",      # bandit
+    "SLF",    # private member access
+    "ANN",    # missing annotations — rule 4, both languages are strict
+]
+ignore = [
+    "ANN401",  # explicit Any is sometimes the honest type for settings dicts
+    # Django and DRF declare configuration as mutable class attributes —
+    # Meta.constraints, Meta.indexes, permission_classes, readonly_fields.
+    # That is the frameworks' declarative API, not a shared-mutable-state bug,
+    # and annotating every one of them ClassVar is noise that hides real hits.
+    "RUF012",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may assert, touch privates deliberately, and skip return annotations
+# on fixtures.
+"**/tests/*" = ["S101", "SLF001"]
+"config/settings.py" = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+exclude = ['migrations/']
+# Rule 4: if types get hard that is information about the design. Surface it.
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# django-unfold ships no stubs and no py.typed marker. There is no upstream
+# package to install and writing our own for an admin theme would be effort
+# spent in the wrong place — the admin is a tool, not a design surface. Every
+# other third-party import in this project is typed.
+module = [
+    "unfold.*",
+    "celery.*",
+    "blurhash.*",
+    "storages.*",
+    "dj_database_url.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Consequence of the above: Unfold's ModelAdmin is `Any` here, and `strict`
+# forbids subclassing Any. Scoped to admin modules only so the rest of the
+# codebase keeps the check.
+module = ["*.admin"]
+disallow_subclassing_any = false
+
+[tool.django-stubs]
+django_settings_module = "config.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
+testpaths = ["core", "users", "media", "posts", "messaging", "calls", "moderation"]
+addopts = "--strict-markers"
