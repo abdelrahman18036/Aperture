@@ -254,6 +254,293 @@
                 }
             }
         },
+        "/api/messaging/conversations": {
+            "get": {
+                "operationId": "messaging_conversations",
+                "description": "Conversations you are in, most recently active first.",
+                "tags": [
+                    "messaging"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Conversation"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "messaging_start",
+                "description": "Start a DM or a group. A DM between two people is unique.",
+                "tags": [
+                    "messaging"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartConversationRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartConversationRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartConversationRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Conversation"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/messaging/conversations/{conversation_id}/messages": {
+            "get": {
+                "operationId": "messaging_messages",
+                "description": "A window of a conversation, addressed by seq.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "after",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Return everything with a higher seq. This is the whole offline-sync story: 'send me everything after 4821'."
+                    },
+                    {
+                        "in": "query",
+                        "name": "before",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Scrollback: return messages older than this seq."
+                    },
+                    {
+                        "in": "path",
+                        "name": "conversation_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessagePage"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "messaging_send",
+                "description": "Send a message. Idempotent on client_id: retrying after a timeout returns the message that already exists rather than creating a second one.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "conversation_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SendMessageRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SendMessageRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SendMessageRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SendMessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/messaging/conversations/{conversation_id}/messages/{seq}": {
+            "delete": {
+                "operationId": "messaging_delete_message",
+                "description": "Soft delete your own message.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "conversation_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "seq",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/messaging/conversations/{conversation_id}/read": {
+            "post": {
+                "operationId": "messaging_mark_read",
+                "description": "Move your read position forward. Never backward.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "conversation_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MarkReadRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MarkReadRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MarkReadRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/moderation/reports": {
             "post": {
                 "operationId": "moderation_report",
@@ -721,6 +1008,32 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/PostPage"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/realtime/ticket": {
+            "post": {
+                "operationId": "realtime_ticket",
+                "description": "Mint a short-lived signed ticket for the socket gateway. The gateway verifies it locally and never calls back.",
+                "tags": [
+                    "realtime"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RealtimeTicket"
                                 }
                             }
                         },
@@ -1272,6 +1585,64 @@
                     "next_cursor"
                 ]
             },
+            "Conversation": {
+                "type": "object",
+                "description": "A conversation as it appears in the inbox.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "kind": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "title": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "members": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/User"
+                        },
+                        "readOnly": true
+                    },
+                    "last_message_seq": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "last_read_seq": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "unread_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "last_message": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/Message"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "last_message",
+                    "last_message_seq",
+                    "last_read_seq",
+                    "members",
+                    "title",
+                    "unread_count"
+                ]
+            },
             "CreateCommentRequest": {
                 "type": "object",
                 "properties": {
@@ -1546,6 +1917,18 @@
                     "password"
                 ]
             },
+            "MarkReadRequest": {
+                "type": "object",
+                "properties": {
+                    "up_to_seq": {
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "up_to_seq"
+                ]
+            },
             "Media": {
                 "type": "object",
                 "description": "A media row as the client sees it.\n\nEverything the develop-in needs is here: `blurhash` for the canvas,\n`width`/`height` to reserve the space so nothing shifts, and\n`dominant_color` for the ambient glow.",
@@ -1683,6 +2066,103 @@
                 "required": [
                     "url",
                     "width"
+                ]
+            },
+            "Message": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "conversation_id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "seq": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "sender": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "body": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "media": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/Media"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "client_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "reply_to_seq": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "body",
+                    "client_id",
+                    "conversation_id",
+                    "created_at",
+                    "id",
+                    "media",
+                    "reply_to_seq",
+                    "sender",
+                    "seq"
+                ]
+            },
+            "MessagePage": {
+                "type": "object",
+                "description": "A window of a conversation, addressed by `seq` rather than by offset.",
+                "properties": {
+                    "messages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Message"
+                        },
+                        "readOnly": true
+                    },
+                    "last_message_seq": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "oldest_seq": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "last_message_seq",
+                    "messages",
+                    "oldest_seq"
                 ]
             },
             "PatchedAltTextRequest": {
@@ -1856,6 +2336,29 @@
                     "user"
                 ]
             },
+            "RealtimeTicket": {
+                "type": "object",
+                "description": "A short-lived credential for the socket gateway.",
+                "properties": {
+                    "ticket": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "url": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "expires_in_seconds": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "expires_in_seconds",
+                    "ticket",
+                    "url"
+                ]
+            },
             "ReasonEnum": {
                 "enum": [
                     "csam",
@@ -1922,6 +2425,80 @@
                 },
                 "required": [
                     "accept"
+                ]
+            },
+            "SendMessageRequest": {
+                "type": "object",
+                "description": "What the client sends.\n\n`client_id` is required and minted by the browser. It is the only thing\nstanding between a flaky network and a duplicated message, so there is no\nserver-side default — a client that does not send one does not get\nidempotency, and should be made to notice.",
+                "properties": {
+                    "client_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "body": {
+                        "type": "string",
+                        "default": "",
+                        "maxLength": 4000
+                    },
+                    "media_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "minLength": 1
+                    },
+                    "reply_to_seq": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "client_id"
+                ]
+            },
+            "SendMessageResponse": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/Message"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "created": {
+                        "type": "boolean",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created",
+                    "message"
+                ]
+            },
+            "StartConversationRequest": {
+                "type": "object",
+                "properties": {
+                    "usernames": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "maxItems": 31,
+                        "minItems": 1
+                    },
+                    "title": {
+                        "type": "string",
+                        "default": "",
+                        "maxLength": 120
+                    }
+                },
+                "required": [
+                    "usernames"
                 ]
             },
             "StateEnum": {

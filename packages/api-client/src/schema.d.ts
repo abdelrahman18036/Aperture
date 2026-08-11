@@ -74,6 +74,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/messaging/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Conversations you are in, most recently active first. */
+        get: operations["messaging_conversations"];
+        put?: never;
+        /** @description Start a DM or a group. A DM between two people is unique. */
+        post: operations["messaging_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messaging/conversations/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A window of a conversation, addressed by seq. */
+        get: operations["messaging_messages"];
+        put?: never;
+        /** @description Send a message. Idempotent on client_id: retrying after a timeout returns the message that already exists rather than creating a second one. */
+        post: operations["messaging_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messaging/conversations/{conversation_id}/messages/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Soft delete your own message. */
+        delete: operations["messaging_delete_message"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messaging/conversations/{conversation_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Move your read position forward. Never backward. */
+        post: operations["messaging_mark_read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/moderation/reports": {
         parameters: {
             query?: never;
@@ -207,6 +277,23 @@ export interface paths {
         get: operations["posts_feed"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/realtime/ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mint a short-lived signed ticket for the socket gateway. The gateway verifies it locally and never calls back. */
+        post: operations["realtime_ticket"];
         delete?: never;
         options?: never;
         head?: never;
@@ -372,6 +459,17 @@ export interface components {
             readonly comments: components["schemas"]["Comment"][];
             readonly next_cursor: string | null;
         };
+        /** @description A conversation as it appears in the inbox. */
+        Conversation: {
+            readonly id: string;
+            readonly kind: string;
+            readonly title: string;
+            readonly members: components["schemas"]["User"][];
+            readonly last_message_seq: number;
+            readonly last_read_seq: number;
+            readonly unread_count: number;
+            readonly last_message: components["schemas"]["Message"] | null;
+        };
         CreateCommentRequest: {
             body: string;
             parent_id?: string | null;
@@ -462,6 +560,9 @@ export interface components {
             email: string;
             password: string;
         };
+        MarkReadRequest: {
+            up_to_seq: number;
+        };
         /**
          * @description A media row as the client sees it.
          *
@@ -497,6 +598,25 @@ export interface components {
             width: number;
             /** Format: uri */
             url: string;
+        };
+        Message: {
+            readonly id: string;
+            readonly conversation_id: string;
+            readonly seq: number;
+            readonly sender: components["schemas"]["User"];
+            readonly body: string;
+            readonly media: components["schemas"]["Media"] | null;
+            /** Format: uuid */
+            readonly client_id: string;
+            readonly reply_to_seq: number | null;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /** @description A window of a conversation, addressed by `seq` rather than by offset. */
+        MessagePage: {
+            readonly messages: components["schemas"]["Message"][];
+            readonly last_message_seq: number;
+            readonly oldest_seq: number | null;
         };
         /** @description Alt text may be empty, but the field is always present. */
         PatchedAltTextRequest: {
@@ -551,6 +671,12 @@ export interface components {
             readonly is_self: boolean;
             readonly can_view_posts: boolean;
         };
+        /** @description A short-lived credential for the socket gateway. */
+        RealtimeTicket: {
+            readonly ticket: string;
+            readonly url: string;
+            readonly expires_in_seconds: number;
+        };
         /**
          * @description * `csam` - Child sexual abuse material
          *     * `violence` - Violence or threats
@@ -583,6 +709,31 @@ export interface components {
         };
         RespondToRequestRequest: {
             accept: boolean;
+        };
+        /**
+         * @description What the client sends.
+         *
+         *     `client_id` is required and minted by the browser. It is the only thing
+         *     standing between a flaky network and a duplicated message, so there is no
+         *     server-side default — a client that does not send one does not get
+         *     idempotency, and should be made to notice.
+         */
+        SendMessageRequest: {
+            /** Format: uuid */
+            client_id: string;
+            /** @default  */
+            body: string;
+            media_id?: string | null;
+            reply_to_seq?: number | null;
+        };
+        SendMessageResponse: {
+            readonly message: components["schemas"]["Message"];
+            readonly created: boolean;
+        };
+        StartConversationRequest: {
+            usernames: string[];
+            /** @default  */
+            title: string;
         };
         /**
          * @description * `pending` - Pending
@@ -813,6 +964,192 @@ export interface operations {
             };
             /** @description No response body */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    messaging_conversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversation"][];
+                };
+            };
+        };
+    };
+    messaging_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartConversationRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["StartConversationRequest"];
+                "multipart/form-data": components["schemas"]["StartConversationRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversation"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    messaging_messages: {
+        parameters: {
+            query?: {
+                /** @description Return everything with a higher seq. This is the whole offline-sync story: 'send me everything after 4821'. */
+                after?: number;
+                /** @description Scrollback: return messages older than this seq. */
+                before?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagePage"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    messaging_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["SendMessageRequest"];
+                "multipart/form-data": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendMessageResponse"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    messaging_delete_message: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    messaging_mark_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["MarkReadRequest"];
+                "multipart/form-data": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1150,6 +1487,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PostPage"];
+                };
+            };
+        };
+    };
+    realtime_ticket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealtimeTicket"];
                 };
             };
         };
