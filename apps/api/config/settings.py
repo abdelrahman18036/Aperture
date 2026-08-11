@@ -211,6 +211,11 @@ AWS_STORAGE_BUCKET_NAME = os.environ.get("S3_MEDIA_BUCKET", "media")
 
 S3_DM_MEDIA_BUCKET = os.environ.get("S3_DM_MEDIA_BUCKET", "dm-media")
 
+#: Where a browser reads public objects from. MinIO's own endpoint locally; a
+#: CDN domain in front of R2 in production. Separate from the endpoint the
+#: server signs against, because in production those genuinely differ.
+AWS_S3_PUBLIC_BASE_URL = os.environ.get("S3_PUBLIC_BASE_URL", AWS_S3_ENDPOINT_URL)
+
 #: Presigned PUT lifetime. Short on purpose — an unconstrained, long-lived
 #: presigned URL is a free file host for anyone who finds it.
 S3_PRESIGNED_PUT_EXPIRY_SECONDS = 300

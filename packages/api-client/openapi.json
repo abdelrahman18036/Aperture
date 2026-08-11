@@ -36,10 +36,375 @@
                     }
                 }
             }
+        },
+        "/api/media/{media_id}": {
+            "get": {
+                "operationId": "media_retrieve",
+                "description": "One media row, including its processing state.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "media_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "media"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Media"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "media_set_alt_text",
+                "description": "Set alt text. May be empty — the field is always present, but never required.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "media_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "media"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedAltTextRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedAltTextRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedAltTextRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Media"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "media_destroy",
+                "description": "Soft delete. A scheduled job removes the objects later.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "media_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "media"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/media/{media_id}/complete": {
+            "post": {
+                "operationId": "media_complete",
+                "description": "Signal that the browser finished its PUT. Enqueues validation and derivative generation. Poll the detail endpoint until state leaves 'pending'.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "media_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "media"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Media"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/media/intent": {
+            "post": {
+                "operationId": "media_intent",
+                "description": "Reserve a media row and return a presigned URL to PUT the file to. The row is created in state=pending; the bytes go straight to object storage and never through this server.",
+                "tags": [
+                    "media"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadIntentRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadIntentRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadIntentRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UploadIntentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/me": {
+            "get": {
+                "operationId": "users_me",
+                "description": "The signed-in user.",
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUser"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/session": {
+            "post": {
+                "operationId": "session_create",
+                "description": "Sign in with email and password.",
+                "tags": [
+                    "users"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUser"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "session_destroy",
+                "description": "Sign out. Idempotent.",
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    }
+                }
+            }
         }
     },
     "components": {
         "schemas": {
+            "CurrentUser": {
+                "type": "object",
+                "description": "The signed-in user seeing their own account. Adds the private bits.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "username": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "Case-insensitively unique. Shown in metadata position."
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "avatar_media_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "bio": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "is_private": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "Private accounts turn follows into requests pending approval."
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "avatar_media_id",
+                    "bio",
+                    "created_at",
+                    "display_name",
+                    "email",
+                    "id",
+                    "is_private",
+                    "username"
+                ]
+            },
             "Health": {
                 "type": "object",
                 "description": "The whole report.",
@@ -99,6 +464,251 @@
                 ],
                 "type": "string",
                 "description": "* `ok` - ok\n* `degraded` - degraded"
+            },
+            "KindEnum": {
+                "enum": [
+                    "image",
+                    "video"
+                ],
+                "type": "string",
+                "description": "* `image` - Image\n* `video` - Video"
+            },
+            "LoginRequest": {
+                "type": "object",
+                "description": "Credentials. Email is the login identifier here, not username.",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "writeOnly": true,
+                        "minLength": 1
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "email",
+                    "password"
+                ]
+            },
+            "Media": {
+                "type": "object",
+                "description": "A media row as the client sees it.\n\nEverything the develop-in needs is here: `blurhash` for the canvas,\n`width`/`height` to reserve the space so nothing shifts, and\n`dominant_color` for the ambient glow.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "owner_id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "kind": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/KindEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "state": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/StateEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "width": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "height": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "duration_ms": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "blurhash": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "dominant_color": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "alt_text": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "May be empty, but the composer always presents the field."
+                    },
+                    "failure_reason": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "sources": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MediaSource"
+                        },
+                        "readOnly": true
+                    },
+                    "original_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "readOnly": true
+                    },
+                    "poster_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "readOnly": true
+                    },
+                    "video_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "alt_text",
+                    "blurhash",
+                    "created_at",
+                    "dominant_color",
+                    "duration_ms",
+                    "failure_reason",
+                    "height",
+                    "id",
+                    "kind",
+                    "original_url",
+                    "owner_id",
+                    "poster_url",
+                    "sources",
+                    "state",
+                    "video_url",
+                    "width"
+                ]
+            },
+            "MediaSource": {
+                "type": "object",
+                "description": "One rendition of an image, for a `srcset`.",
+                "properties": {
+                    "width": {
+                        "type": "integer"
+                    },
+                    "url": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                },
+                "required": [
+                    "url",
+                    "width"
+                ]
+            },
+            "PatchedAltTextRequest": {
+                "type": "object",
+                "description": "Alt text may be empty, but the field is always present.",
+                "properties": {
+                    "alt_text": {
+                        "type": "string",
+                        "maxLength": 1000
+                    }
+                }
+            },
+            "StateEnum": {
+                "enum": [
+                    "pending",
+                    "ready",
+                    "failed"
+                ],
+                "type": "string",
+                "description": "* `pending` - Pending\n* `ready` - Ready\n* `failed` - Failed"
+            },
+            "UploadIntentRequestRequest": {
+                "type": "object",
+                "description": "What the client asks for before it uploads anything.",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/KindEnum"
+                    },
+                    "mime": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 127
+                    },
+                    "size_bytes": {
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "kind",
+                    "mime",
+                    "size_bytes"
+                ]
+            },
+            "UploadIntentResponse": {
+                "type": "object",
+                "description": "The reservation, and the URL to PUT to.",
+                "properties": {
+                    "media": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/Media"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "upload_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "readOnly": true
+                    },
+                    "expires_in_seconds": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "expires_in_seconds",
+                    "media",
+                    "upload_url"
+                ]
+            }
+        },
+        "securitySchemes": {
+            "cookieAuth": {
+                "type": "apiKey",
+                "in": "cookie",
+                "name": "aperture_session"
             }
         }
     }

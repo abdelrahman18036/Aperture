@@ -21,10 +21,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/media/{media_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One media row, including its processing state. */
+        get: operations["media_retrieve"];
+        put?: never;
+        post?: never;
+        /** @description Soft delete. A scheduled job removes the objects later. */
+        delete: operations["media_destroy"];
+        options?: never;
+        head?: never;
+        /** @description Set alt text. May be empty — the field is always present, but never required. */
+        patch: operations["media_set_alt_text"];
+        trace?: never;
+    };
+    "/api/media/{media_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Signal that the browser finished its PUT. Enqueues validation and derivative generation. Poll the detail endpoint until state leaves 'pending'. */
+        post: operations["media_complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Reserve a media row and return a presigned URL to PUT the file to. The row is created in state=pending; the bytes go straight to object storage and never through this server. */
+        post: operations["media_intent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The signed-in user. */
+        get: operations["users_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sign in with email and password. */
+        post: operations["session_create"];
+        /** @description Sign out. Idempotent. */
+        delete: operations["session_destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description The signed-in user seeing their own account. Adds the private bits. */
+        CurrentUser: {
+            readonly id: string;
+            /** @description Case-insensitively unique. Shown in metadata position. */
+            readonly username: string;
+            readonly display_name: string;
+            readonly avatar_media_id: string | null;
+            readonly bio: string;
+            /** @description Private accounts turn follows into requests pending approval. */
+            readonly is_private: boolean;
+            /** Format: date-time */
+            readonly created_at: string;
+            /** Format: email */
+            readonly email: string;
+        };
         /** @description The whole report. */
         Health: {
             status: components["schemas"]["HealthStatusEnum"];
@@ -50,6 +153,78 @@ export interface components {
          * @enum {string}
          */
         HealthStatusEnum: "ok" | "degraded";
+        /**
+         * @description * `image` - Image
+         *     * `video` - Video
+         * @enum {string}
+         */
+        KindEnum: "image" | "video";
+        /** @description Credentials. Email is the login identifier here, not username. */
+        LoginRequest: {
+            /** Format: email */
+            email: string;
+            password: string;
+        };
+        /**
+         * @description A media row as the client sees it.
+         *
+         *     Everything the develop-in needs is here: `blurhash` for the canvas,
+         *     `width`/`height` to reserve the space so nothing shifts, and
+         *     `dominant_color` for the ambient glow.
+         */
+        Media: {
+            readonly id: string;
+            readonly owner_id: string;
+            readonly kind: components["schemas"]["KindEnum"];
+            readonly state: components["schemas"]["StateEnum"];
+            readonly width: number | null;
+            readonly height: number | null;
+            readonly duration_ms: number | null;
+            readonly blurhash: string;
+            readonly dominant_color: string;
+            /** @description May be empty, but the composer always presents the field. */
+            readonly alt_text: string;
+            readonly failure_reason: string;
+            /** Format: date-time */
+            readonly created_at: string;
+            readonly sources: components["schemas"]["MediaSource"][];
+            /** Format: uri */
+            readonly original_url: string | null;
+            /** Format: uri */
+            readonly poster_url: string | null;
+            /** Format: uri */
+            readonly video_url: string | null;
+        };
+        /** @description One rendition of an image, for a `srcset`. */
+        MediaSource: {
+            width: number;
+            /** Format: uri */
+            url: string;
+        };
+        /** @description Alt text may be empty, but the field is always present. */
+        PatchedAltTextRequest: {
+            alt_text?: string;
+        };
+        /**
+         * @description * `pending` - Pending
+         *     * `ready` - Ready
+         *     * `failed` - Failed
+         * @enum {string}
+         */
+        StateEnum: "pending" | "ready" | "failed";
+        /** @description What the client asks for before it uploads anything. */
+        UploadIntentRequestRequest: {
+            kind: components["schemas"]["KindEnum"];
+            mime: string;
+            size_bytes: number;
+        };
+        /** @description The reservation, and the URL to PUT to. */
+        UploadIntentResponse: {
+            readonly media: components["schemas"]["Media"];
+            /** Format: uri */
+            readonly upload_url: string;
+            readonly expires_in_seconds: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -83,6 +258,231 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Health"];
                 };
+            };
+        };
+    };
+    media_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    media_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    media_set_alt_text: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedAltTextRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedAltTextRequest"];
+                "multipart/form-data": components["schemas"]["PatchedAltTextRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    media_complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    media_intent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadIntentRequestRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["UploadIntentRequestRequest"];
+                "multipart/form-data": components["schemas"]["UploadIntentRequestRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntentResponse"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            /** @description No response body */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["LoginRequest"];
+                "multipart/form-data": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
