@@ -1,0 +1,105 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Aperture API",
+        "version": "0.1.0",
+        "description": "Aperture's HTTP API. This schema is the single source of truth for the frontend's types: it generates packages/api-client, which is never hand-edited."
+    },
+    "paths": {
+        "/api/health": {
+            "get": {
+                "operationId": "health",
+                "description": "Liveness and dependency check. Verifies Postgres, Redis and object storage by performing real operations against each.",
+                "tags": [
+                    "health"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Health"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Health"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Health": {
+                "type": "object",
+                "description": "The whole report.",
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/HealthStatusEnum"
+                    },
+                    "checks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/HealthCheck"
+                        }
+                    }
+                },
+                "required": [
+                    "checks",
+                    "status"
+                ]
+            },
+            "HealthCheck": {
+                "type": "object",
+                "description": "One dependency's result.",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/HealthCheckStatusEnum"
+                    },
+                    "latency_ms": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "detail": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "detail",
+                    "latency_ms",
+                    "name",
+                    "status"
+                ]
+            },
+            "HealthCheckStatusEnum": {
+                "enum": [
+                    "ok",
+                    "failing"
+                ],
+                "type": "string",
+                "description": "* `ok` - ok\n* `failing` - failing"
+            },
+            "HealthStatusEnum": {
+                "enum": [
+                    "ok",
+                    "degraded"
+                ],
+                "type": "string",
+                "description": "* `ok` - ok\n* `degraded` - degraded"
+            }
+        }
+    }
+}

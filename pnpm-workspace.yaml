@@ -1,3 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# create-next-app writes these into a nested pnpm-workspace.yaml inside
+# apps/web, which would make that directory its own workspace root and break
+# the monorepo. Hoisted here instead.
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver

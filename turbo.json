@@ -13,9 +13,24 @@
     "check-types": {
       "dependsOn": ["^check-types"]
     },
+    "test": {
+      "dependsOn": ["^test"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "worker": {
+      "cache": false,
+      "persistent": true
+    },
+    "schema": {
+      "cache": false
+    },
+    "generate": {
+      "cache": false,
+      "inputs": ["openapi.json"],
+      "outputs": ["src/schema.d.ts"]
     }
   }
 }

@@ -268,6 +268,9 @@ SPECTACULAR_SETTINGS: dict[str, Any] = {
         "never hand-edited."
     ),
     "VERSION": "0.1.0",
+    # 01-ARCHITECTURE.md §1 specifies OpenAPI 3.1. drf-spectacular still
+    # defaults to 3.0.3, so ask for it explicitly.
+    "OAS_VERSION": "3.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api",
