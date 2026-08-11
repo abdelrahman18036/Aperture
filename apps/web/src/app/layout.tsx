@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 
-import "./globals.css";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
+import { Grain } from "@repo/ui";
+import { fontVariables } from "@repo/ui/fonts";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Aperture",
@@ -12,20 +11,21 @@ export const metadata: Metadata = {
 };
 
 /**
- * The root layout holds nothing but the document shell. Chrome belongs to the
- * route groups: `(auth)` has no nav rail, `(app)` has the three-column shell
- * from `02-DESIGN-SYSTEM.md`. That is the work a `Layout` boolean prop would
- * otherwise be doing.
+ * The root layout holds the document shell, the three type faces, and the
+ * grain. Chrome belongs to the route groups: `(auth)` has no nav rail,
+ * `(app)` has the three-column shell from `02-DESIGN-SYSTEM.md`. That is the
+ * work a `Layout` boolean prop would otherwise be doing.
  *
- * `shadcn init` wired Geist Sans, which is the body face the design system
- * asks for. Phase 2 adds the other two roles — Bricolage Grotesque for
- * display and Geist Mono for the `meta` EXIF strip — along with the `@theme`
- * block and the grain overlay.
+ * The grain sits above the base and below content, so the page's own children
+ * are lifted onto their own stacking context above it.
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body>{children}</body>
+    <html lang="en" className={fontVariables}>
+      <body className="font-sans text-body text-ink antialiased">
+        <Grain />
+        <div className="relative z-10">{children}</div>
+      </body>
     </html>
   );
 }

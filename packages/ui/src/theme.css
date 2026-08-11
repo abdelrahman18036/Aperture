@@ -1,0 +1,262 @@
+/*
+ * Aperture's design tokens.
+ *
+ * Lit like a darkroom. Two light sources, and the split carries meaning:
+ * **warm is you, cool is live.** Safelight and daylight never appear in the
+ * same component. See `02-DESIGN-SYSTEM.md`.
+ *
+ * There is no light mode. A darkroom does not have one, and adding a second
+ * palette would halve the care spent on this one.
+ *
+ * Imported by `apps/web/src/app/globals.css`, which owns the Tailwind entry
+ * point and the `@source` directive that scans this package.
+ */
+
+@theme {
+  /* ---------------------------------------------------------------------
+   * Color — OKLCH, verbatim from 02-DESIGN-SYSTEM.md.
+   * ------------------------------------------------------------------- */
+
+  /* Base — deep neutral with a faint cool cast, like paper in low light.
+     Not pure black: pure black kills the sense of depth and makes photos
+     look like they are floating in a void. */
+  --color-base: oklch(0.145 0.005 265); /* page    */
+  --color-surface: oklch(0.185 0.006 265); /* cards   */
+  --color-raised: oklch(0.225 0.008 265); /* menus, modals */
+  --color-line: oklch(0.285 0.01 265); /* borders */
+
+  /* Ink. Measured against every surface: ink 15.2-17.6:1, ink-dim
+     6.4-7.4:1, ink-faint 3.5-4.0:1. The meta role needs 3:1 and clears it. */
+  --color-ink: oklch(0.96 0.003 265);
+  --color-ink-dim: oklch(0.7 0.012 265);
+  --color-ink-faint: oklch(0.545 0.014 265);
+
+  /* Safelight — warm. YOUR actions: like, post, send, primary CTA. */
+  --color-safelight: oklch(0.76 0.155 55);
+  --color-safelight-dim: oklch(0.47 0.09 55);
+
+  /* Daylight — cool, 5600K. LIVE state: online, typing, in-call, new. */
+  --color-daylight: oklch(0.845 0.095 215);
+  --color-daylight-dim: oklch(0.52 0.06 215);
+
+  /* Status */
+  --color-danger: oklch(0.64 0.19 25);
+  --color-success: oklch(0.76 0.13 155);
+
+  /* Ink for use *on* a saturated fill — the destructive button and nothing
+     else, since that is the only filled control in the system. Numerically
+     the same as the base, but a distinct role, and distinct so that
+     `text-ink-inverse` does not collide with the `text-*` font-size scale
+     the way an arbitrary `text-[var(--color-base)]` does. */
+  --color-ink-inverse: oklch(0.145 0.005 265);
+
+  /* ---------------------------------------------------------------------
+   * Type — three roles, three faces. The variables are set by next/font in
+   * `fonts.ts`; these bind them to Tailwind's font utilities.
+   * ------------------------------------------------------------------- */
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* 1.25 ratio, but the display face breaks out at the top so headers read
+     as a different register rather than a bigger paragraph. */
+
+  --text-display-xl: 3rem; /* 48 */
+  --text-display-xl--line-height: 1;
+  --text-display-xl--letter-spacing: -0.03em;
+  --text-display-xl--font-weight: 500;
+
+  --text-display-l: 2rem; /* 32 */
+  --text-display-l--line-height: 1.1;
+  --text-display-l--letter-spacing: -0.02em;
+  --text-display-l--font-weight: 500;
+
+  --text-title: 1.25rem; /* 20 */
+  --text-title--line-height: 1.3;
+  --text-title--letter-spacing: -0.01em;
+  --text-title--font-weight: 600;
+
+  --text-body: 0.9375rem; /* 15 */
+  --text-body--line-height: 1.55;
+  --text-body--letter-spacing: 0;
+  --text-body--font-weight: 400;
+
+  --text-label: 0.8125rem; /* 13 */
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: 0.01em;
+  --text-label--font-weight: 500;
+
+  /* The workhorse, and the thing people will recognise. Every timestamp,
+     view count and image dimension renders in it:
+     2.4K LIKES · 1080×1350 · 14 AUG  */
+  --text-meta: 0.6875rem; /* 11 */
+  --text-meta--line-height: 1.3;
+  --text-meta--letter-spacing: 0.06em;
+  --text-meta--font-weight: 400;
+
+  /* ---------------------------------------------------------------------
+   * Layout — the widths matter. A photo feed that reflows on window resize
+   * feels unstable, so the feed column is fixed rather than fluid.
+   * ------------------------------------------------------------------- */
+
+  --container-nav-rail: 4.5rem; /* 72  collapsed */
+  --container-nav-rail-open: 15rem; /* 240 expanded  */
+  --container-feed: 40rem; /* 640 fixed, centred */
+  --container-right-rail: 20rem; /* 320, dropped below 1280 */
+
+  /* ---------------------------------------------------------------------
+   * Radius — deliberately tiny. A photograph is not in a container.
+   * ------------------------------------------------------------------- */
+
+  --radius-image: 2px;
+  --radius-control: 6px;
+  --radius-dialog: 12px;
+
+  /* ---------------------------------------------------------------------
+   * Motion — one signature effect, and a hard budget for everything else.
+   * ------------------------------------------------------------------- */
+
+  /* The develop-in. A print does not appear, it comes up in the tray. */
+  --ease-develop: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-develop: 380ms;
+
+  /* Everything else is functional and under 200ms. */
+  --duration-hover: 120ms;
+  --duration-route: 150ms;
+  --duration-arrive: 200ms;
+  --duration-reduced: 120ms;
+}
+
+/* -----------------------------------------------------------------------
+ * shadcn's semantic variables, bound to the palette above.
+ *
+ * shadcn primitives are written against --background, --primary, --ring and
+ * friends. Rather than rewrite every primitive, point those at our tokens
+ * once. Anything that still looks generic after this is a component that
+ * needs a real override, not another variable.
+ * --------------------------------------------------------------------- */
+
+:root {
+  --background: var(--color-base);
+  --foreground: var(--color-ink);
+
+  --card: var(--color-surface);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-raised);
+  --popover-foreground: var(--color-ink);
+
+  /* Warm, because a primary action is something *you* do. */
+  --primary: var(--color-safelight);
+  --primary-foreground: var(--color-base);
+
+  --secondary: var(--color-surface);
+  --secondary-foreground: var(--color-ink);
+  --muted: var(--color-surface);
+  --muted-foreground: var(--color-ink-dim);
+  --accent: var(--color-surface);
+  --accent-foreground: var(--color-ink);
+
+  --destructive: var(--color-danger);
+
+  --border: var(--color-line);
+  --input: var(--color-line);
+  --ring: var(--color-safelight-dim);
+
+  /* Controls are 6px. The image radius is 2px and is applied explicitly
+     where images live — it is not a global default. */
+  --radius: var(--radius-control);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    /* Dark only. Declared so form controls, scrollbars and the like render
+       to match rather than fighting the palette. */
+    color-scheme: dark;
+    background-color: var(--color-base);
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-ink);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    /* The ambient glow bleeds 60px past its photo by design, which at 375px
+       would otherwise put the page into horizontal scroll. `clip` rather than
+       `hidden`: it does not create a scroll container, so `position: sticky`
+       still works in the shell that Phase 4 builds. */
+    overflow-x: clip;
+  }
+
+  ::selection {
+    background-color: var(--color-safelight-dim);
+    color: var(--color-ink);
+  }
+}
+
+/*
+ * Visible keyboard focus on everything: 2px safelight-dim ring at 2px offset.
+ * Quality floor, not decoration.
+ *
+ * Outside `@layer base` so it cannot lose the cascade to a layered rule from
+ * shadcn's stylesheet, and excluding disabled controls, which should not ring.
+ *
+ * Verified against all twenty focusable elements on `/kitchen-sink`: every one
+ * resolves to `2px solid oklch(0.470 0.090 55)` at `2px` offset, and disabled
+ * buttons resolve to `outline-style: none`.
+ *
+ * Measured: safelight-dim against base is 2.81:1. WCAG 1.4.11 asks 3:1 of a
+ * focus indicator, so this is marginally under. The token is specified in
+ * 02-DESIGN-SYSTEM.md and specs win, so it ships as written and the
+ * measurement is in the phase handoff for a ruling.
+ */
+:focus-visible:not(:disabled):not([aria-disabled="true"]) {
+  outline: 2px solid var(--color-safelight-dim);
+  outline-offset: 2px;
+}
+
+/* The mouse should not see the ring; the keyboard always should. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* -----------------------------------------------------------------------
+ * The `meta` role.
+ *
+ * Wide tracking, faint ink, uppercase, mono. It reads as film-edge printing,
+ * and it is *true* — those are the actual properties of the image. Offered as
+ * a utility because it is used constantly and always identically.
+ * --------------------------------------------------------------------- */
+
+@utility meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  letter-spacing: var(--text-meta--letter-spacing);
+  font-weight: var(--text-meta--font-weight);
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+/* -----------------------------------------------------------------------
+ * Reduced motion.
+ *
+ * Note what is *not* here: the usual blanket
+ * `* { transition-duration: 0.01ms !important }`. It was here, and it was
+ * wrong — it overrode the very behaviour the design system prescribes. The
+ * spec says that under reduced motion the develop-in "cross-fades in 120ms
+ * with no blur or saturation change", and a blanket `!important` makes that
+ * instant instead.
+ *
+ * So components own their reduced-motion path: `DevelopImage` reads
+ * `useReducedMotion()` and swaps to a plain 120ms opacity fade, and the
+ * springs arriving in later phases will do the same. What is left below is
+ * the part no component can express for itself.
+ * --------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
