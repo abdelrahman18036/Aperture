@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageCircle, MoreHorizontal, Send } from "lucide-react";
+import { Flag, MessageCircle, Send } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
@@ -10,8 +10,10 @@ import {
   AvatarImage,
   Button,
   DevelopImage,
+  DialogTrigger,
 } from "@repo/ui";
 
+import { ReportDialog } from "@/features/moderation/report-dialog";
 import { api } from "@/lib/api";
 
 import { LikeButton } from "./like-button";
@@ -127,14 +129,25 @@ export function FeedPost({ post }: { post: Post }) {
           </span>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="ml-auto"
-          aria-label="More"
-        >
-          <MoreHorizontal aria-hidden="true" />
-        </Button>
+        {/* §11: the report button ships before stories. */}
+        <ReportDialog
+          subjectType="post"
+          subjectId={post.id}
+          trigger={
+            <DialogTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="ml-auto"
+                  aria-label="Report this post"
+                />
+              }
+            >
+              <Flag aria-hidden="true" />
+            </DialogTrigger>
+          }
+        />
       </header>
 
       {image?.width && image.height ? (

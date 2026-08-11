@@ -254,6 +254,58 @@
                 }
             }
         },
+        "/api/moderation/reports": {
+            "post": {
+                "operationId": "moderation_report",
+                "description": "Report a post, comment, user or piece of media. Idempotent per reporter per subject: reporting twice returns the first report.",
+                "tags": [
+                    "moderation"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateReportRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateReportRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateReportRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Report"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "429": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/posts/": {
             "post": {
                 "operationId": "posts_create",
@@ -988,6 +1040,26 @@
                         "description": "No response body"
                     }
                 }
+            },
+            "delete": {
+                "operationId": "users_delete_me",
+                "description": "Delete your account. Content disappears from every read path immediately; the rows are erased permanently after a grace period.",
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "403": {
+                        "description": "No response body"
+                    }
+                }
             }
         },
         "/api/users/requests": {
@@ -1254,6 +1326,31 @@
                 },
                 "required": [
                     "media_ids"
+                ]
+            },
+            "CreateReportRequest": {
+                "type": "object",
+                "properties": {
+                    "subject_type": {
+                        "$ref": "#/components/schemas/SubjectTypeEnum"
+                    },
+                    "subject_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "$ref": "#/components/schemas/ReasonEnum"
+                    },
+                    "note": {
+                        "type": "string",
+                        "default": "",
+                        "maxLength": 1000
+                    }
+                },
+                "required": [
+                    "reason",
+                    "subject_id",
+                    "subject_type"
                 ]
             },
             "CurrentUser": {
@@ -1759,6 +1856,63 @@
                     "user"
                 ]
             },
+            "ReasonEnum": {
+                "enum": [
+                    "csam",
+                    "violence",
+                    "harassment",
+                    "hate",
+                    "nudity",
+                    "spam",
+                    "self_harm",
+                    "copyright",
+                    "other"
+                ],
+                "type": "string",
+                "description": "* `csam` - Child sexual abuse material\n* `violence` - Violence or threats\n* `harassment` - Harassment or bullying\n* `hate` - Hate speech\n* `nudity` - Adult nudity or sexual activity\n* `spam` - Spam or scam\n* `self_harm` - Self-harm or suicide\n* `copyright` - Copyright or trademark\n* `other` - Something else"
+            },
+            "Report": {
+                "type": "object",
+                "description": "A report, as the person who filed it may see it.\n\nDeliberately thin: the reporter learns that their report exists and\nnothing about what happened next. Telling them the outcome would tell them\nwhether the person they reported was actioned, which is a privacy leak\nabout a third party and, when the reporter is the harasser, a feedback\nsignal for tuning the next attempt.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "subject_type": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/SubjectTypeEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "subject_id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "reason": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ReasonEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "id",
+                    "reason",
+                    "subject_id",
+                    "subject_type"
+                ]
+            },
             "RespondToRequestRequest": {
                 "type": "object",
                 "properties": {
@@ -1778,6 +1932,16 @@
                 ],
                 "type": "string",
                 "description": "* `pending` - Pending\n* `ready` - Ready\n* `failed` - Failed"
+            },
+            "SubjectTypeEnum": {
+                "enum": [
+                    "post",
+                    "comment",
+                    "user",
+                    "media"
+                ],
+                "type": "string",
+                "description": "* `post` - Post\n* `comment` - Comment\n* `user` - User\n* `media` - Media"
             },
             "UploadIntentRequestRequest": {
                 "type": "object",

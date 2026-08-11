@@ -66,6 +66,14 @@ cd apps/api && uv run manage.py migrate
 ```
 
 ```bash
+cd apps/api && uv run manage.py collectstatic --noinput
+```
+
+`collectstatic` is not optional. Django serves static files itself only under
+`runserver`; this project runs `uvicorn`, which serves none, and WhiteNoise
+reads from `STATIC_ROOT`. Skip it and the admin renders as unstyled HTML.
+
+```bash
 cd apps/api && uv run manage.py createsuperuser
 ```
 
@@ -100,6 +108,12 @@ there.
 cd apps/realtime && pnpm dev
 ```
 
+**Beat** — the scheduler, for the hard delete and the upload reaper:
+
+```bash
+cd apps/api && uv run celery -A config beat
+```
+
 **Frontend**:
 
 ```bash
@@ -108,6 +122,20 @@ cd apps/web && pnpm dev
 
 Then open <http://localhost:3000>. The admin is at
 <http://localhost:8000/admin>.
+
+Seed a corpus to look at:
+
+```bash
+cd apps/api && uv run manage.py seed_demo
+```
+
+50 users, 500 posts and a follow graph, signing in as
+`seed000@aperture.local` / `seeded-password-1234`. Then time the feed and read
+the plan Postgres chose:
+
+```bash
+cd apps/api && uv run manage.py bench_feed
+```
 
 Turbo can drive the JavaScript side of that from the root — `pnpm dev` runs
 every package's `dev` task — but the Django processes are usually clearer run
@@ -189,6 +217,28 @@ walking it, so the critical flows get re-walked at every phase gate rather
 than assumed still working.
 
 ---
+
+## Safety
+
+The moderation console is the Django admin at
+<http://localhost:8000/admin/moderation/report/> — that is what choosing
+Django bought, and there is deliberately no bespoke moderation UI.
+
+Rate limits are token buckets in `core/ratelimit.py` with Redis state in
+`moderation/ratelimit.py`. They fail **open**: a limiter that takes the site
+down when Redis hiccups has done more damage than the abuse it prevented.
+
+Two integrations are seams rather than implementations, both off by default
+and both raising rather than silently passing if switched on unwired:
+
+| Setting | What it needs |
+|---|---|
+| `CSAM_SCANNING_ENABLED` | a hash-matching provider (PhotoDNA, Cloudflare CSAM Scanning) |
+| `NCMEC_REPORTING_ENABLED` | a registered ESP account and CyberTipline access |
+
+A CSAM report that has not been forwarded stays visibly un-escalated and is
+counted hourly by `moderation.report_escalation_backlog`. It is never marked
+done by something that did not do it.
 
 ## Layout
 

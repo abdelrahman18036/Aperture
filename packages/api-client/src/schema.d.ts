@@ -74,6 +74,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/moderation/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Report a post, comment, user or piece of media. Idempotent per reporter per subject: reporting twice returns the first report. */
+        post: operations["moderation_report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/posts/": {
         parameters: {
             query?: never;
@@ -277,7 +294,8 @@ export interface paths {
         get: operations["users_me"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** @description Delete your account. Content disappears from every read path immediately; the rows are erased permanently after a grace period. */
+        delete: operations["users_delete_me"];
         options?: never;
         head?: never;
         /** @description Update your own profile. */
@@ -367,6 +385,13 @@ export interface components {
             location: string;
             /** @default public */
             visibility: components["schemas"]["VisibilityEnum"];
+        };
+        CreateReportRequest: {
+            subject_type: components["schemas"]["SubjectTypeEnum"];
+            subject_id: string;
+            reason: components["schemas"]["ReasonEnum"];
+            /** @default  */
+            note: string;
         };
         /** @description The signed-in user seeing their own account. Adds the private bits. */
         CurrentUser: {
@@ -526,6 +551,36 @@ export interface components {
             readonly is_self: boolean;
             readonly can_view_posts: boolean;
         };
+        /**
+         * @description * `csam` - Child sexual abuse material
+         *     * `violence` - Violence or threats
+         *     * `harassment` - Harassment or bullying
+         *     * `hate` - Hate speech
+         *     * `nudity` - Adult nudity or sexual activity
+         *     * `spam` - Spam or scam
+         *     * `self_harm` - Self-harm or suicide
+         *     * `copyright` - Copyright or trademark
+         *     * `other` - Something else
+         * @enum {string}
+         */
+        ReasonEnum: "csam" | "violence" | "harassment" | "hate" | "nudity" | "spam" | "self_harm" | "copyright" | "other";
+        /**
+         * @description A report, as the person who filed it may see it.
+         *
+         *     Deliberately thin: the reporter learns that their report exists and
+         *     nothing about what happened next. Telling them the outcome would tell them
+         *     whether the person they reported was actioned, which is a privacy leak
+         *     about a third party and, when the reporter is the harasser, a feedback
+         *     signal for tuning the next attempt.
+         */
+        Report: {
+            readonly id: string;
+            readonly subject_type: components["schemas"]["SubjectTypeEnum"];
+            readonly subject_id: string;
+            readonly reason: components["schemas"]["ReasonEnum"];
+            /** Format: date-time */
+            readonly created_at: string;
+        };
         RespondToRequestRequest: {
             accept: boolean;
         };
@@ -536,6 +591,14 @@ export interface components {
          * @enum {string}
          */
         StateEnum: "pending" | "ready" | "failed";
+        /**
+         * @description * `post` - Post
+         *     * `comment` - Comment
+         *     * `user` - User
+         *     * `media` - Media
+         * @enum {string}
+         */
+        SubjectTypeEnum: "post" | "comment" | "user" | "media";
         /** @description What the client asks for before it uploads anything. */
         UploadIntentRequestRequest: {
             kind: components["schemas"]["KindEnum"];
@@ -750,6 +813,45 @@ export interface operations {
             };
             /** @description No response body */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    moderation_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReportRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["CreateReportRequest"];
+                "multipart/form-data": components["schemas"]["CreateReportRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1260,6 +1362,31 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CurrentUser"];
                 };
+            };
+            /** @description No response body */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_delete_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No response body */
             403: {
