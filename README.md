@@ -167,6 +167,25 @@ curl http://localhost:4000/health
 
 The gateway's own liveness check, including its current socket count.
 
+```bash
+pnpm --filter realtime loadtest
+```
+
+How many sockets one gateway process holds before latency degrades. It ramps
+in waves, measuring the full client → gateway → Redis → gateway → client round
+trip, and stops at the first wave to exceed the budget.
+
+Measured on the development machine (Windows 11, gateway and harness sharing
+one box): **14,000 concurrent sockets, p95 23.4 ms, 266 MB RSS, zero
+failures**, with latency flat from 250 sockets upward. That is a floor rather
+than a ceiling — the run ends because the harness exhausts this machine's
+16,384-port ephemeral range, not because the gateway slows down. To push
+further, widen the range and re-run:
+
+```bash
+netsh int ipv4 set dynamicport tcp start=10000 num=55000
+```
+
 ---
 
 ## The type boundary
