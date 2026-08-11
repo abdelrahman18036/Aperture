@@ -1,126 +1,152 @@
 # Verified versions
 
-Checked against the npm registry and nodejs.org on **2026-08-11**. These supersede the
-August-2026 numbers in `01-ARCHITECTURE.md` §1. Re-verify before Phase 1 install if
-significant time has passed.
+Checked against PyPI, npm, Docker Hub and nodejs.org on **2026-08-11**. Everything here is the
+registry's `latest` **stable** release — no prereleases — except where a note says otherwise.
 
-## Pins
+Stack ruled 2026-08-11: **Django API + Next.js frontend.** See `01-ARCHITECTURE.md`.
 
-| Package | Spec says | Registry `latest` | Pin | Note |
-|---|---|---|---|---|
-| Node.js | 24 LTS | 26.7.0 (current) | **24.19.0** | Stay on LTS. Node 26 is current-line. |
-| pnpm | 10.x | 11.21.0 | **10.17.0** (installed) | pnpm 11 is out; 10.17.0 works. Upgrade is optional, not required. |
-| next | 16.3 | **16.3.0** | 16.3.0 | Matches spec exactly. |
-| react / react-dom | 19.x | **19.2.8** | 19.2.8 | |
-| babel-plugin-react-compiler | 1.x | **1.0.0** | 1.0.0 | Compiler is 1.0 stable. |
-| eslint-plugin-react-hooks | — | 7.1.1 | 7.1.1 | Carries the compiler lint rules. |
-| tailwindcss + @tailwindcss/postcss | 4.x | **4.3.3** | 4.3.3 | CSS-first `@theme`. |
-| shadcn (CLI) | 3.x | **4.16.2** | 4.16.2 | ⚠️ **major drift.** Verify the Base UI scaffold default still holds on v4. |
-| motion | 12.x | **13.1.0** | 13.1.0 | ⚠️ **major drift.** Check v12→v13 breaking changes before Phase 2. |
-| drizzle-orm | 0.4x | **0.45.2** | 0.45.2 | 1.0.0-rc.5 exists but `latest` is still 0.45.2 — stay stable. |
-| drizzle-kit | 0.4x | **0.31.10** | 0.31.10 | Kit versions independently of orm; this is correct. |
-| better-auth | 1.x | **1.6.26** | 1.6.26 | |
-| zod | 4.x | **4.4.3** | 4.4.3 | |
-| bullmq | 5.x | **6.0.11** | 6.0.11 | ⚠️ **major drift.** v5→v6 changed worker/connection options. |
-| ioredis | — | **6.0.0** | 6.0.0 | Major bump; check BullMQ 6 peer requirement first. |
-| ws | — | **8.21.3** | 8.21.3 | |
-| livekit-server-sdk | — | **2.17.0** | 2.17.0 | |
-| livekit-client | JS SDK 2.x | **2.21.0** | 2.21.0 | |
-| sharp | 0.34.x | **0.35.3** | 0.35.3 | Minor drift. |
-| typescript | — | 7.0.2 | **5.9.3** | ⚠️ **deliberately behind `latest`.** TS 7 is the native port; 6.0.0-beta and 7.0.1-rc are also published. Ruled: stay on 5.9.3 through Phase 4, then revisit. Strict mode is only enforceable if the checker itself is boring. |
-| turbo | 2.x | **2.10.9** | 2.10.9 | |
-| vitest | 3.x | **4.1.10** | 4.1.10 | ⚠️ **major drift** from spec. |
-| blurhash | — | **2.0.5** | 2.0.5 | |
-| pg | — | **8.23.0** | 8.23.0 | |
+---
 
-Every pin above is the registry's `latest` **stable** tag — no prereleases — except TypeScript,
-which is held back deliberately.
+## Python — the backend
+
+**Runtime: CPython 3.13.12**, project-local via `uv`. Not the system 3.14.7.
+
+⚠️ **This is deliberate and load-bearing.** Celery 5.6.3 declares support only through Python 3.13
+— it installs on 3.14 (`requires_python >= 3.9`) but is untested there. Celery runs the media
+pipeline and the counter updates; it is not the component to gamble on. Django 6.1, Channels,
+psycopg and Pillow all support 3.14 fine, so revisit once Celery ships 3.14 classifiers.
+
+`uv python install 3.13.12` — this does not touch the system Python.
+
+| Package | Pin | Note |
+|---|---|---|
+| django | **6.1** | Requires Python ≥3.12. See LTS note below. |
+| djangorestframework | **3.18.0** | |
+| drf-spectacular | **0.30.0** | Generates the OpenAPI 3.1 schema — the type boundary. |
+| psycopg | **3.3.4** | psycopg **3**, not psycopg2. |
+| celery | **5.6.3** | Redis broker, not RabbitMQ. Pins the runtime to 3.13. |
+| django-celery-beat | **2.9.0** | Scheduled hard-delete job, Phase 5. |
+| channels | **4.3.2** | |
+| channels-redis | **4.3.0** | |
+| uvicorn | **0.52.1** | ASGI server for both API and realtime processes. |
+| redis | **8.1.0** | Python client. |
+| boto3 | **1.43.68** | Presigned URLs against MinIO/R2. |
+| django-storages | **1.14.6** | |
+| pillow | **12.3.0** | `pyvips` 3.1.1 is the upgrade if the worker bottlenecks. |
+| blurhash-python | **1.2.2** | |
+| python-magic | **0.4.27** | Real MIME detection. Needs libmagic on Windows — verify in Phase 3. |
+| livekit-api | **1.2.0** | Server-side token minting, Phase 7. |
+| django-cors-headers | **4.9.0** | Should be barely needed — Next.js rewrites make it same-origin. |
+| dj-database-url | **3.1.2** | |
+| pytest-django | **4.14.0** | |
+| ruff | **0.16.2** | Lint + format. |
+| mypy + django-stubs | **2.3.0** / **6.0.9** | Strict. The Python-side equivalent of rule 2. |
+
+### Django 6.1 vs 5.2 LTS
+
+Ruled: **6.1**. Current LTS is 5.2.17 (supported to ~April 2028); the next LTS is 6.2, expected
+~April 2027. Starting on 6.1 makes the eventual move to 6.2 LTS a minor upgrade. Starting on
+5.2 LTS would mean a two-major jump later. Plan to adopt **6.2 LTS when it ships**.
+
+---
+
+## TypeScript — the frontend
+
+**Runtime: Node.js 24.19.0**, installed via `pnpm env use --global`. pnpm 10.17.0.
+
+| Package | Pin | Note |
+|---|---|---|
+| next | **16.3.0** | |
+| react / react-dom | **19.2.8** | |
+| babel-plugin-react-compiler | **1.0.0** | Compiler is 1.0 stable. |
+| eslint-plugin-react-hooks | **7.1.1** | Carries the compiler lint rules. |
+| tailwindcss + @tailwindcss/postcss | **4.3.3** | CSS-first `@theme`. |
+| shadcn (CLI) | **4.16.2** | ⚠️ Verify it still scaffolds on **Base UI** — the design spec depends on it. |
+| motion | **13.1.0** | ⚠️ Check v12→v13 breaking changes before Phase 2. |
+| openapi-typescript | **7.13.0** | Generates `packages/api-client` from Django's schema. |
+| openapi-fetch | **0.17.0** | Typed fetch client. Chosen over `orval` — smaller, no codegen runtime. |
+| zod | **4.4.3** | **Frontend forms only.** Does not restate the API contract — see `01-ARCHITECTURE.md` §3. |
+| livekit-client | **2.21.0** | |
+| blurhash | **2.0.5** | Client-side decode. |
+| typescript | **5.9.3** | ⚠️ Deliberately behind. `latest` is 7.0.2 (the native port); 6.0.0-beta and 7.0.1-rc also exist. Revisit after Phase 4. |
+| turbo | **2.10.9** | Orchestrates both ecosystems. |
+| vitest | **4.1.10** | |
 
 **Playwright is not in the stack.** Flows are verified through Claude's Chrome access. Do not add
 `@playwright/test`, `playwright-cli`, or `webapp-testing`.
 
+**Dropped when the stack changed:** `drizzle-orm`, `drizzle-kit`, `better-auth`, `bullmq`,
+`ioredis`, `ws`, `sharp`, `pg`, `livekit-server-sdk`. Django owns all of those concerns now.
+
+---
+
 ## Docker images
 
-All tags confirmed to exist on Docker Hub 2026-08-11. Floating `latest` tags have been replaced with
-concrete ones in `01-ARCHITECTURE.md` §3 — a compose file that pulls `latest` is not reproducible.
+All tags confirmed to exist on Docker Hub 2026-08-11. Floating `latest` tags were replaced with
+concrete ones — a compose file that pulls `latest` is not reproducible.
 
 | Service | Pin | Note |
 |---|---|---|
 | postgres | `postgres:18-alpine` | Host port **5433**, not 5432. |
-| redis | `redis:8-alpine` | |
+| redis | `redis:8-alpine` | Broker for Celery *and* channel layer for Channels. |
 | minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | was `latest` |
 | minio-init | `minio/mc` | bootstrap only, floating is fine |
-| livekit | `livekit/livekit-server:v1.13.5` | was `latest`; spec said server 1.x ✓ |
-| coturn | `coturn/coturn:4.17.2` | was `latest`; spec said 4.6.x — drift, current line is 4.17 |
-| typesense | `typesense/typesense:28.0` | matches spec |
+| livekit | `livekit/livekit-server:v1.13.5` | was `latest` |
+| coturn | `coturn/coturn:4.17.2` | was `latest`; spec assumed 4.6.x — current line is 4.17 |
+| typesense | `typesense/typesense:28.0` | |
 
 Not yet pulled — the daemon was stopped at check time.
 
-## Drift — ruled 2026-08-11
-
-Five majors moved past the spec: **shadcn 3→4, motion 12→13, BullMQ 5→6, Vitest 3→4, TypeScript →7.**
-Per standing rule 1 these were reported rather than silently taken. Ruling:
-
-- **shadcn 4.16.2, motion 13.1.0, bullmq 6.0.11, vitest 4.1.10 — take current.** Read each one's
-  migration notes at the phase that first touches it and flag anything `01-ARCHITECTURE.md` or
-  `02-DESIGN-SYSTEM.md` assumed about the older major.
-- **TypeScript — hold at 5.9.3.** Revisit after Phase 4.
-
-Specific things to check when the relevant phase arrives:
-
-| Phase | Check |
-|---|---|
-| 2 | Does shadcn **4.x** still scaffold on **Base UI** by default? The design spec depends on it. |
-| 2 | Motion **13** breaking changes vs the 12.x API the spec's motion section assumes. |
-| 2 | Are the registry **chat primitives** (`MessageScroller`, `Message`, `Bubble`, `Attachment`) still shipping in v4? Phase 6 budgets for them. |
-| 1/3 | BullMQ **6** worker + connection option changes; confirm the ioredis 6 peer requirement. |
-| 1 | Vitest **4** config/API changes vs 3.x. |
-| 7 | coturn **4.17** config syntax vs the 4.6.x the spec assumed. |
-
-## Doc/version mismatch to watch
-
-`docs/vendor/drizzle/` includes `pg__upgrade-v1.md` and `pg__v0-v1-changes.md` — Drizzle **1.0**
-material. The pin is **0.45.2**. When a vendor doc describes v1 API, it does not apply.
+---
 
 ## Toolchain state on this machine (verified 2026-08-11)
 
 | Tool | State |
 |---|---|
-| Node | **24.19.0**, installed via `pnpm env use --global`. Lives at `%LOCALAPPDATA%\pnpm\node.exe`. |
-| pnpm | **10.17.0** (11.21.0 available, not required). Store: `D:\.pnpm-store\v10`. Install verified end-to-end. |
-| npm / npx | **Broken.** See below. Use `pnpm` and `pnpm dlx` instead — `pnpm dlx` verified working. |
-| Docker | Desktop **29.2.1** / Compose **v5.0.2** installed, **daemon stopped**. Start it before `compose up`. |
-| ffmpeg | **7.1.1** on PATH. Phase 3's worker has what it needs locally. |
-| git | 2.50.1. Repo initialized on `main`, specs committed. |
+| Python | **3.14.7** at `C:\Python314` (system). Project pins **3.13.12** via uv — see above. |
+| uv | **0.10.11**, at `~/.local/bin/uv.exe`. This is the Python package manager for the project. |
+| pip / poetry / pipx | Not on PATH. Not needed — uv covers it. |
+| Node | **24.19.0**, via `pnpm env use --global`. At `%LOCALAPPDATA%\pnpm\node.exe`. |
+| pnpm | **10.17.0** (11.21.0 available, not required). Store: `D:\.pnpm-store\v10`. Verified working. |
+| npm / npx | **Broken.** See below. Use `pnpm` and `pnpm dlx`. |
+| Docker | Desktop **29.2.1** / Compose **v5.0.2** installed, **daemon stopped**. Start manually. |
+| ffmpeg | **7.1.1** on PATH. Phase 3's worker has what it needs. |
+| git | 2.50.1. Repo on `main`. |
 | Disk | ~184 GB free on D:. |
 
 ### `npm` / `npx` are broken on this machine
 
 `%LOCALAPPDATA%\npm-cache` is a **junction** to `D:\cache\npm-cache`, whose target had been deleted.
-Recreating the target was not sufficient — npm still cannot create `_cacache` through the junction
-(`ENOENT` on mkdir, `EEXIST` on the temp file once the dir exists). It fails identically inside and
-outside the sandbox, so it is a real machine-config fault, not a tooling artifact.
+Recreating the target was not sufficient — npm still cannot create `_cacache` through the junction.
+It fails identically inside and outside the sandbox, so it is a real machine-config fault.
 
-**Impact:** none on this project — pnpm has its own store and installs fine. Substitute
-`pnpm dlx <pkg>` anywhere the brief or a doc says `npx <pkg>`.
+**Impact:** none on this project. Substitute `pnpm dlx <pkg>` for `npx <pkg>` (verified working).
 
-**Permanent fix (user, one line):**
+**Permanent fix (one line, when convenient):**
 
 ```
 npm config set cache "D:\npm-cache"
 ```
 
-Any real directory on a path with no junction works. Or delete the junction and let npm recreate
-`%LOCALAPPDATA%\npm-cache` as a normal folder.
+### Port conflict — ruled
 
-### Port conflict — ruled 2026-08-11
+Host **5432** is held by a native `postgresql-x64-17` Windows service, unrelated to this project.
+**Ruled: bind the container to `5433:5432`** and leave the native service running. `DATABASE_URL`
+uses port **5433**. Inside the compose network everything still talks to `postgres:5432`.
+Record as a Deviation in the Phase 1 handoff.
 
-Host **5432** is held by a native `postgresql-x64-17` Windows service (PG 17, unrelated to this
-project). `01-ARCHITECTURE.md` §3 binds `5432:5432` and would fail to start.
+Ports verified free: 6379, 9000, 9001, 7880, 8108, 3000, 8000, 3478, 443.
 
-**Ruled: bind the container to `5433:5432`.** The native service is left running and untouched.
-`DATABASE_URL` uses port **5433**. Everything inside the compose network still talks to `postgres:5432`
-— only the host-side mapping changes. This is a deviation from the spec's compose block and must be
-recorded in the Phase 1 handoff under Deviations.
+---
 
-Ports otherwise verified free: 6379, 9000, 9001, 7880, 8108, 3000, 3478, 443.
+## Docs to fetch before Phase 1
+
+`docs/vendor/` held Drizzle and BetterAuth pages for the previous stack. Those were removed when the
+stack changed (they remain in git history at commit `e1beb29`).
+
+Django and DRF are extremely well represented in training data and do **not** need vendoring.
+Fetch these three, where the risk of stale or invented API is real:
+
+- **drf-spectacular** — the OpenAPI generation pipeline, and the newest of the three.
+- **Django Channels 4.3** — consumer API and `database_sync_to_async` patterns.
+- **Django 6.x release notes** — specifically composite primary keys and anything touching `Index(condition=...)`.

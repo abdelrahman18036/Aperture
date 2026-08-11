@@ -2,6 +2,8 @@
 
 A photo and video social platform. **Web only.** No mobile app is in scope.
 
+**Django backend, Next.js frontend.** Two deployables, one repo. Ruled 2026-08-11.
+
 ## Sources of truth
 
 | File | Owns |
@@ -9,8 +11,7 @@ A photo and video social platform. **Web only.** No mobile app is in scope.
 | `01-ARCHITECTURE.md` | stack, schema, data flow, scaling path |
 | `02-DESIGN-SYSTEM.md` | color, type, layout, motion |
 | `03-AGENT-BRIEF.md` | process, phases, standing rules |
-| `docs/VERSIONS.md` | the pinned, registry-verified versions — use these, not the Aug-2026 numbers in the architecture doc |
-| `docs/vendor/` | Drizzle + BetterAuth docs, fetched. Work from these, not from memory. |
+| `docs/VERSIONS.md` | the pinned, registry-verified versions for both ecosystems, plus this machine's quirks |
 
 Where the brief and a spec disagree, **say so** — do not silently pick one.
 
@@ -34,15 +35,17 @@ Next:         what Phase N+1 will touch
 
 ## Standing rules
 
-1. **Verify versions before installing.** `docs/VERSIONS.md` holds verified pins. Re-check anything not listed there. Never invent a version number.
-2. **TypeScript strict. No `any`. No non-null assertions.** If types get hard that is information about the design — surface it, don't suppress it.
-3. **`packages/core` imports no framework.** Pure functions, unit-testable in milliseconds.
-4. **Every read path returning user content filters blocks.** Feed, search, comments, DMs, notifications, profile. Non-negotiable from Phase 3 on, and it will be checked.
-5. **No `COUNT(*)` on a request path.** `counters` table plus Redis.
-6. **No secrets in code.** `.env.local` local-only; `.env.example` committed and complete.
-7. **Tests alongside the code, not after.** Vitest for `core` and `db`. User flows are walked in a real browser via Chrome access — **no Playwright**. There is therefore no automated regression net on flows: re-walk the critical ones at every phase gate instead of assuming earlier phases still work.
-8. **When unsure, ask** — before the phase, not after.
-9. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, **the specs win.** Note the conflict under Decisions and continue — do not stop to ask, do not quietly follow the skill.
+1. **Verify versions before installing.** `docs/VERSIONS.md` holds verified pins for both ecosystems. Re-check anything not listed there. Never invent a version number.
+2. **Both languages are strict.** TypeScript: strict, no `any`, no non-null assertions. Python: full type hints, `mypy` strict with `django-stubs`, `ruff` clean. If types get hard that is information about the design — surface it, don't suppress it.
+3. **`apps/api/core/` imports no Django.** Pure Python, unit-testable in milliseconds without a database. If a module there needs `django.`, it belongs in an app instead.
+4. **`packages/api-client` is generated, never hand-edited.** A serializer change means regenerating in the same commit; CI fails on drift. This seam is what the Django choice costs — treat it as load-bearing, not bookkeeping.
+5. **Every read path returning user content filters blocks.** Feed, search, comments, DMs, notifications, profile. One reusable queryset method, not forty ad-hoc filters. Non-negotiable from Phase 3 on, and it will be checked.
+6. **No `.count()` / `COUNT(*)` on a request path.** `counters` table plus Redis.
+7. **Read the SQL the ORM generates.** `.explain()` the feed query and anything hot. The N+1 the ORM hides is the most common way a Django app gets slow.
+8. **No secrets in code.** `.env.local` local-only; `.env.example` committed and complete.
+9. **Tests alongside the code, not after.** pytest-django for the backend, Vitest for frontend logic. User flows are walked in a real browser via Chrome access — **no Playwright**. There is therefore no automated regression net on flows: re-walk the critical ones at every phase gate instead of assuming earlier phases still work.
+10. **When unsure, ask** — before the phase, not after.
+11. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, **the specs win.** Note the conflict under Decisions and continue — do not stop to ask, do not quietly follow the skill.
 
 ### Skills: do not consult
 
@@ -54,20 +57,22 @@ instead of using it.
 |---|---|
 | `taste-skill`, `impeccable`, `redesign-skill`, `frontend-design`'s aesthetic direction | Supply aesthetic direction where none is missing. Ours is locked in `02-DESIGN-SYSTEM.md`; a second opinion is exactly the drift the brief prevents. |
 | `playwright-cli`, `webapp-testing` | We verify flows through Chrome access, not Playwright. |
-| `django-expert` | Wrong language. This is a TypeScript stack — see below. |
 | `gsap-*` | Motion is the animation library. GSAP is not in the stack. |
 | Anything for Prisma, Supabase, Firebase, Azure | Wrong stack. |
 
-### Stack is TypeScript, end to end — not Django
+**`django-expert` is allowed** — it matches the stack. Rule 11 still applies: where it disagrees
+with the specs, the specs win.
 
-Ruled 2026-08-11. Next.js route handlers and server actions are the backend; there is no separate
-API server. The whole architecture leans on one language across the boundary: `packages/contracts`
-shares Zod schemas and inferred types between browser, route handlers, the WebSocket service and
-the worker, and `packages/core` is plain TypeScript both sides import.
+### The Django/TypeScript seam
 
-Django would mean DRF + Channels + Celery, a hand-maintained type boundary between Python and the
-React client, and a rewrite of `01-ARCHITECTURE.md` from the schema down. It is a fine framework and
-it is not this project's. Don't reach for it, and don't reach for the `django-expert` skill.
+Django owns the data, the API, the queue, the sockets, and the admin. Next.js owns the UI and
+nothing else — it is not a second backend. Don't add Next.js route handlers that talk to Postgres,
+and don't add server actions that duplicate a DRF endpoint. `/api/*` is rewritten to Django so the
+session cookie stays same-origin; that rewrite is the only integration point.
+
+Types cross the seam **generated only**: DRF serializers → drf-spectacular → openapi-typescript →
+`packages/api-client`. Zod is frontend forms only and never restates an API shape. See
+`01-ARCHITECTURE.md` §3.
 
 ## Design discipline — load-bearing, not preference
 
@@ -78,6 +83,9 @@ it is not this project's. Don't reach for it, and don't reach for the `django-ex
 - **Grain at 2.5%.** Not 4%. Ship it and leave it alone.
 
 A flourish not in the spec goes in the handoff under Decisions, not in the code.
+
+**Django admin is a tool, not a design surface.** It runs the moderation console and nothing
+user-facing. Don't spend design effort on it, and don't let its conventions leak into the product UI.
 
 ## Non-negotiable from day one
 
@@ -90,6 +98,8 @@ A flourish not in the spec goes in the handoff under Decisions, not in the code.
 
 Full detail in `docs/VERSIONS.md`. The four that will bite:
 
+- **Python is 3.13.12 via `uv`, not the system 3.14.7.** Celery has no 3.14 support. `uv` is the
+  Python package manager — pip, poetry and pipx are not on PATH and are not needed.
 - **Use `pnpm dlx`, never `npx`.** npm's cache is broken on this machine (junction to a missing
   target). pnpm is unaffected. Anywhere a doc says `npx <pkg>`, run `pnpm dlx <pkg>`.
 - **Postgres is on host port 5433, not 5432.** A native `postgresql-x64-17` service holds 5432.
