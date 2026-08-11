@@ -1,0 +1,26 @@
+# LiveKit SFU — local development only.
+#
+# Group calls (3+) run through this; 1:1 stays peer-to-peer with a TURN
+# fallback. Self-hosted here, LiveKit Cloud in production, identical client
+# SDK — see 01-ARCHITECTURE.md §9.
+#
+# Tokens are minted by Django with `livekit-api`, never in the browser and
+# never in the Node gateway. The key/secret below is what Django signs with.
+
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Container-local development. In production this must be true so clients
+  # learn a reachable address.
+  use_external_ip: false
+
+# Development credentials only. Production reads these from the environment.
+# The secret must be at least 32 characters or the server refuses to start.
+keys:
+  devkey: devsecret_devsecret_devsecret_dev
+
+logging:
+  level: info

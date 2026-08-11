@@ -1,0 +1,108 @@
+# Aperture's local environment.
+#
+# Every service here speaks the same protocol as its production replacement:
+# MinIO is S3's API so Cloudflare R2 is an env var, self-hosted LiveKit is
+# LiveKit Cloud's API, Postgres is Postgres. You never rewrite to scale — you
+# swap the endpoint. See 01-ARCHITECTURE.md §4.
+#
+# Image tags are concrete, never `latest`: a compose file that pulls a
+# floating tag is not reproducible. Pins are verified in docs/VERSIONS.md.
+#
+# Docker Desktop does not auto-start on this machine. Start it first.
+
+name: aperture
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: aperture
+    # Host 5432 is held by a native postgresql-x64-17 Windows service that has
+    # nothing to do with this project, so the container binds 5433. Inside
+    # this network everything still talks to postgres:5432.
+    ports: ["5433:5432"]
+    # 01-ARCHITECTURE.md §4 mounts this at /var/lib/postgresql/data, which is
+    # the pre-18 convention. The postgres:18+ images refuse to start against
+    # that path: they store data in a major-version subdirectory so that
+    # `pg_upgrade --link` does not cross a mount boundary. Mount the parent.
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+
+  redis:
+    image: redis:8-alpine
+    # Celery broker, feed cache, and the pub/sub bus between Django and the
+    # realtime gateway — all three.
+    command: redis-server --appendonly yes
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+
+  minio-init:
+    image: minio/mc
+    # §4 says `depends_on: [minio]`, which only waits for the container to
+    # start, not to be listening — so every bucket creation raced ahead and
+    # failed with connection refused. Gate on the healthcheck instead.
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/media;
+      mc mb --ignore-existing local/dm-media;
+      mc anonymous set download local/media;
+      "
+
+  typesense:
+    image: typesense/typesense:28.0
+    environment:
+      TYPESENSE_API_KEY: devkey
+      TYPESENSE_DATA_DIR: /data
+    ports: ["8108:8108"]
+    volumes: [typesensedata:/data]
+
+  # ---------------------------------------------------------------------
+  # Calls — Phase 7. Behind a profile so the everyday `docker compose up`
+  # brings up only what Phases 1-6 need:  docker compose --profile calls up
+  # ---------------------------------------------------------------------
+
+  livekit:
+    image: livekit/livekit-server:v1.13.5
+    profiles: ["calls"]
+    command: --config /etc/livekit.yaml --node-ip=127.0.0.1
+    ports: ["7880:7880", "7881:7881", "50000-50100:50000-50100/udp"]
+    volumes: [./livekit/livekit.yaml:/etc/livekit.yaml]
+
+  coturn:
+    image: coturn/coturn:4.17.2
+    profiles: ["calls"]
+    network_mode: host
+    volumes: [./coturn/turnserver.conf:/etc/coturn/turnserver.conf]
+
+# 01-ARCHITECTURE.md §4 writes this as `{ pgdata:, redisdata:, ... }`, which
+# YAML flow syntax rejects — a flow mapping needs a space after each colon, so
+# `pgdata:` parses as a scalar rather than a key. Block style instead.
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  typesensedata:
+
