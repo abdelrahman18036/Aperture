@@ -15,6 +15,19 @@ const API_ORIGIN = process.env.API_ORIGIN ?? "http://127.0.0.1:8000";
 const nextConfig: NextConfig = {
   reactCompiler: true,
 
+  /**
+   * Dev only. Next refuses to serve its dev chunks to an origin it was not
+   * started on, so loading the app from `127.0.0.1` while the server thinks
+   * it is `localhost` yields 403s on half the JavaScript and a page that
+   * renders its shell and then stops.
+   *
+   * Listed because those two hostnames are *different cookie origins*, which
+   * is how two independent signed-in sessions get opened side by side in one
+   * browser — which is exactly what verifying a conversation needs. It has no
+   * effect on a production build.
+   */
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+
   async rewrites() {
     return [
       {
