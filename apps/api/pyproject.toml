@@ -17,6 +17,7 @@ dependencies = [
     "drf-spectacular==0.30.0",
     "pillow==12.3.0",
     "psycopg[binary]==3.3.4",
+    "puremagic==2.2.0",
     "redis==8.1.0",
     "uvicorn==0.52.1",
 ]
@@ -73,9 +74,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests may assert, touch privates deliberately, and skip return annotations
-# on fixtures.
-"**/tests/*" = ["S101", "SLF001"]
+# Tests may assert, touch privates deliberately, and hold obviously-fake
+# credentials. S105/S106 on a fixture password is noise; the check still
+# applies everywhere real code lives.
+"**/tests/*" = ["S101", "SLF001", "S105", "S106"]
+"conftest.py" = ["S101", "S105", "S106"]
 "config/settings.py" = ["E501"]
 
 [tool.ruff.lint.flake8-tidy-imports]
@@ -109,6 +112,13 @@ ignore_missing_imports = true
 # codebase keeps the check.
 module = ["*.admin"]
 disallow_subclassing_any = false
+
+[[tool.mypy.overrides]]
+# Celery ships no stubs, so `@shared_task` is an untyped decorator and strict
+# mode treats anything it wraps as untyped. Scoped to task modules; the task
+# bodies themselves are still fully checked.
+module = ["*.tasks"]
+disallow_untyped_decorators = false
 
 [tool.django-stubs]
 django_settings_module = "config.settings"

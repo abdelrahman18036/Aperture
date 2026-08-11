@@ -33,13 +33,44 @@ Pillow all support 3.14 fine, so revisit once Celery ships 3.14 classifiers.
 | django-storages | **1.14.6** | |
 | pillow | **12.3.0** | `pyvips` 3.1.1 is the upgrade if the worker bottlenecks. |
 | blurhash-python | **1.2.2** | |
-| python-magic | **0.4.27** | Real MIME detection. Needs libmagic on Windows — verify in Phase 3. |
+| ~~python-magic~~ → **puremagic** | **2.2.0** | Real MIME detection. **Ruled 2026-08-11, see below.** |
 | livekit-api | **1.2.0** | Server-side token minting, Phase 7. |
 | django-cors-headers | **4.9.0** | Should be barely needed — Next.js rewrites make it same-origin. |
 | dj-database-url | **3.1.2** | |
 | pytest-django | **4.14.0** | |
 | ruff | **0.16.2** | Lint + format. |
 | mypy + django-stubs | **2.3.0** / **6.0.9** | Strict. The Python-side equivalent of rule 2. |
+
+### `python-magic` → `puremagic` — ruled 2026-08-11 (Phase 3)
+
+`python-magic` installs fine and then fails at import: `ImportError: failed to find
+libmagic`. It is a ctypes binding, not an implementation, and Windows ships no libmagic.
+
+The only supplier on PyPI is **`python-magic-bin` 0.4.14, last released October 2017**. Its
+wheels do work on 3.13 — but importing it emits `SyntaxWarning: "is" with 'int' literal` from
+its own source, i.e. it contains `if result is -1`, an identity comparison on an integer that
+CPython only makes work by accident of small-int caching. That is the code that would be
+inspecting hostile uploads.
+
+**Ruled: `puremagic` 2.2.0 everywhere.** Pure Python, maintained, `requires_python >= 3.12`,
+no native dependency, and therefore *identical* on Windows and in the Linux image — which is
+more consistent than the alternative, not less.
+
+Compared head-to-head on this machine before ruling:
+
+| payload | libmagic | puremagic |
+|---|---|---|
+| jpeg, gif, webp, mp4, svg, html | correct | **identical** |
+| png (header only) | `application/octet-stream` | `image/png` |
+| ELF binary | `application/octet-stream` | `(ELF executable)` |
+| PE executable | `application/x-dosexec` | *(mis-names it)* |
+
+They agree on every real media type. They differ only on non-media payloads, and there what
+matters is that **neither returns `image/*`** — which is the check we actually make. The
+sniffer is a cheap first pass regardless: Pillow's `Image.verify()` and `ffprobe` are the
+authoritative validators, and they parse the file rather than sniffing it.
+
+`01-ARCHITECTURE.md` §6 names python-magic. Recorded as a Deviation in the Phase 3 handoff.
 
 ### Django 6.1 vs 5.2 LTS
 
