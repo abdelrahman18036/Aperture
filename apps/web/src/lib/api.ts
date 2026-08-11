@@ -10,12 +10,15 @@ import type { paths } from "@repo/api-client";
  * Zod exists here for form validation only; it does not restate the API
  * contract. See `01-ARCHITECTURE.md` §3.
  *
- * The base URL is a bare `/api` because Next.js rewrites `/api/*` to Django.
- * That keeps the browser on one origin, which is what makes Django's session
- * cookie same-site and CSRF work the way Django expects.
+ * No `baseUrl`: the generated paths already carry the real `/api` prefix, so
+ * a call site reads `api.GET("/api/media/{media_id}")` — the exact URL the
+ * browser requests. Setting a base here would mean the schema and the client
+ * each held half the path, and the two drifting is a silent 404.
+ *
+ * Next.js rewrites `/api/*` to Django, which keeps the browser on one origin
+ * and makes the session cookie same-site.
  */
 export const api = createClient<paths>({
-  baseUrl: "/api",
   credentials: "same-origin",
 });
 
