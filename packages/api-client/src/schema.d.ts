@@ -266,7 +266,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                media_id: number;
+                media_id: string;
             };
             cookie?: never;
         };
@@ -294,7 +294,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                media_id: number;
+                media_id: string;
             };
             cookie?: never;
         };
@@ -321,7 +321,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                media_id: number;
+                media_id: string;
             };
             cookie?: never;
         };
@@ -355,7 +355,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                media_id: number;
+                media_id: string;
             };
             cookie?: never;
         };

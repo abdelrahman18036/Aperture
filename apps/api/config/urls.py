@@ -8,10 +8,20 @@ Everything the browser reaches lives under `/api/`, because Next.js rewrites
 from __future__ import annotations
 
 from django.contrib import admin
-from django.urls import URLPattern, URLResolver, include, path
+from django.urls import (
+    URLPattern,
+    URLResolver,
+    include,
+    path,
+    register_converter,
+)
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from config.converters import SnowflakeConverter
 from config.health import HealthView
+
+# Registered here so every app's urls.py can use `<snowflake:...>`.
+register_converter(SnowflakeConverter, "snowflake")
 
 urlpatterns: list[URLPattern | URLResolver] = [
     path("admin/", admin.site.urls),

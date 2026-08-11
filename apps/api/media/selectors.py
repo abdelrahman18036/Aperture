@@ -42,8 +42,11 @@ def visible_to(viewer: User | None) -> QuerySet[Media]:
     return exclude_blocked(queryset, viewer, author_field="owner_id")
 
 
-def for_owner_or_none(*, owner: User, media_id: int) -> Media | None:
-    """One row, but only if it belongs to this user."""
+def for_owner_or_none(*, owner: User, media_id: int | str) -> Media | None:
+    """One row, but only if it belongs to this user.
+
+    `media_id` arrives as a string from the URL — see config/converters.py.
+    Django coerces it for the BigIntegerField lookup."""
     return owned_by(owner).filter(pk=media_id).first()
 
 

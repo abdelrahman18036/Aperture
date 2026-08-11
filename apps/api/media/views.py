@@ -26,7 +26,7 @@ from media.serializers import (
 )
 
 
-def _owned_or_404(request: Request, media_id: int) -> Media:
+def _owned_or_404(request: Request, media_id: str) -> Media:
     """404 rather than 403 for someone else's media.
 
     Telling an attacker that an id exists but is not theirs is an enumeration
@@ -99,7 +99,7 @@ class UploadCompleteView(APIView):
             "leaves 'pending'."
         ),
     )
-    def post(self, request: Request, media_id: int) -> Response:
+    def post(self, request: Request, media_id: str) -> Response:
         media = _owned_or_404(request, media_id)
         media = services.mark_uploaded(media=media)
         return Response(MediaSerializer(media).data, status=status.HTTP_202_ACCEPTED)
@@ -118,7 +118,7 @@ class MediaDetailView(APIView):
         responses={200: MediaSerializer, 404: None},
         description="One media row, including its processing state.",
     )
-    def get(self, request: Request, media_id: int) -> Response:
+    def get(self, request: Request, media_id: str) -> Response:
         return Response(MediaSerializer(_owned_or_404(request, media_id)).data)
 
     @extend_schema(
@@ -130,7 +130,7 @@ class MediaDetailView(APIView):
             "never required."
         ),
     )
-    def patch(self, request: Request, media_id: int) -> Response:
+    def patch(self, request: Request, media_id: str) -> Response:
         media = _owned_or_404(request, media_id)
         form = AltTextSerializer(data=request.data)
         form.is_valid(raise_exception=True)
@@ -144,6 +144,6 @@ class MediaDetailView(APIView):
         responses={204: None, 404: None},
         description="Soft delete. A scheduled job removes the objects later.",
     )
-    def delete(self, request: Request, media_id: int) -> Response:
+    def delete(self, request: Request, media_id: str) -> Response:
         services.soft_delete(media=_owned_or_404(request, media_id))
         return Response(status=status.HTTP_204_NO_CONTENT)

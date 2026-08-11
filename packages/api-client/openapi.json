@@ -46,7 +46,8 @@
                         "in": "path",
                         "name": "media_id",
                         "schema": {
-                            "type": "integer"
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
                         },
                         "required": true
                     }
@@ -83,7 +84,8 @@
                         "in": "path",
                         "name": "media_id",
                         "schema": {
-                            "type": "integer"
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
                         },
                         "required": true
                     }
@@ -139,7 +141,8 @@
                         "in": "path",
                         "name": "media_id",
                         "schema": {
-                            "type": "integer"
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
                         },
                         "required": true
                     }
@@ -171,7 +174,8 @@
                         "in": "path",
                         "name": "media_id",
                         "schema": {
-                            "type": "integer"
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
                         },
                         "required": true
                     }
