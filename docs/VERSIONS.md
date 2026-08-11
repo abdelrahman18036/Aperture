@@ -122,13 +122,18 @@ Not yet pulled — the daemon was stopped at check time.
 | pip / poetry / pipx | Not on PATH. Not needed — uv covers it. |
 | Node | **24.19.0**, via `pnpm env use --global`. At `%LOCALAPPDATA%\pnpm\node.exe`. |
 | pnpm | **10.17.0** (11.21.0 available, not required). Store: `D:\.pnpm-store\v10`. Verified working. |
-| npm / npx | **Working** (repaired 2026-08-11, see below). `pnpm` is still the project's package manager. |
+| npm / npx | **Unreliable — do not use.** Repaired 2026-08-11, regressed within the hour. Use `pnpm` / `pnpm dlx`. |
 | Docker | Desktop **29.2.1** / Compose **v5.0.2** installed, **daemon stopped**. Start manually. |
 | ffmpeg | **7.1.1** on PATH. Phase 3's worker has what it needs. |
 | git | 2.50.1. Repo on `main`. |
 | Disk | ~184 GB free on D:. |
 
-### `npm` / `npx` — was broken, now fixed
+### `npm` / `npx` — broken, repaired, regressed. Don't use them.
+
+**Status: use `pnpm` and `pnpm dlx` for everything.** The repair below worked and then undid itself
+within the hour, so npm cannot be trusted on this machine. `pnpm` has never been affected — its
+store is `D:\.pnpm-store\v10`, reached directly with no junction in the path. This costs the project
+nothing; `pnpm dlx <pkg>` replaces `npx <pkg>` everywhere.
 
 **Root cause: two corrupt NTFS junctions**, not a disk or permission fault.
 
@@ -161,17 +166,22 @@ rmdir "%LOCALAPPDATA%\npm-cache"
 mklink /J "%LOCALAPPDATA%\npm-cache" "D:\cache\npm-cache"
 ```
 
+⚠️ **These are cmd.exe commands.** In PowerShell they fail two ways: `%VAR%` isn't expanded (use
+`$env:VAR`), and `mklink` is a cmd builtin that PowerShell cannot call. Worse, PowerShell's `rmdir`
+is an alias for `Remove-Item`, which has historically followed junctions into the target and deleted
+real files. **Run them in `cmd`, or wrap each line as `cmd /c "…"`.**
+
 Applied to both `npm-cache` and `pip` on 2026-08-11 (pip's target had to be recreated first, as
-`D:\cache\pip` was missing entirely). Verified afterwards: `npm view`, `npm cache verify`, and
-`npx` all work.
+`D:\cache\pip` was missing entirely). `npm view`, `npm cache verify` and `npx` all worked
+immediately after — **and the fault returned within the hour.** So the recreate is a temporary
+palliative, not a cure: something is re-corrupting these reparse points. A durable fix means taking
+the junction out of the path entirely, e.g. `npm config set cache "D:\npm-cache"` pointing at a real
+directory. Not worth doing while pnpm works.
 
-**If a junction ever misbehaves this way again, recreate it before believing anything else.**
+**If a junction misbehaves this way again, recreate it before believing anything else.**
 `%LOCALAPPDATA%\Docker` and `docker-secrets-engine` are also junctions (into `D:\Docker`) and were
-healthy at check time — but they're the same vintage, so they're the first suspects if Docker
-starts failing strangely.
-
-`pnpm` remains the project's package manager. It was never affected: its store is `D:\.pnpm-store\v10`,
-reached directly with no junction in the path.
+healthy at check time — but they're the same vintage, so they're the first suspects if Docker starts
+failing strangely.
 
 ### Port conflict — ruled
 

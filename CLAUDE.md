@@ -37,19 +37,22 @@ Next:         what Phase N+1 will touch
 
 ## Standing rules
 
-1. **Verify versions before installing.** `docs/VERSIONS.md` holds verified pins for both ecosystems. Re-check anything not listed there. Never invent a version number.
-2. **Both languages are strict.** TypeScript: strict, no `any`, no non-null assertions. Python: full type hints, `mypy` strict with `django-stubs`, `ruff` clean. If types get hard that is information about the design — surface it, don't suppress it.
-3. **`apps/api/core/` imports no Django.** Pure Python, unit-testable in milliseconds without a database. If a module there needs `django.`, it belongs in an app instead.
-4. **`apps/realtime` never touches Postgres.** No ORM, no database driver, no business logic — it authenticates a socket, subscribes it to Redis, pushes bytes. A database dependency appearing in its `package.json` means something went wrong.
-5. **`packages/api-client` is generated, never hand-edited.** A serializer change means regenerating in the same commit; CI fails on drift. This seam is what the Django choice costs — treat it as load-bearing, not bookkeeping.
-6. **Every read path returning user content filters blocks.** Feed, search, comments, DMs, notifications, profile. One reusable queryset method, not forty ad-hoc filters. Non-negotiable from Phase 3 on, and it will be checked.
-7. **No `.count()` / `COUNT(*)` on a request path.** `counters` table plus Redis.
-8. **Read the SQL the ORM generates.** `.explain()` the feed query and anything hot. The N+1 the ORM hides is the most common way a Django app gets slow.
-9. **Publish after commit, never inside the transaction.** A rollback that already delivered a socket event has announced a message that doesn't exist.
-10. **No secrets in code.** `.env.local` local-only; `.env.example` committed and complete. `REALTIME_TICKET_SECRET` is shared by Django and the gateway and lives only in the environment.
-11. **Tests alongside the code, not after.** pytest-django for the backend, Vitest for the gateway and frontend logic. User flows are walked in a real browser via Chrome access — **no Playwright**. There is therefore no automated regression net on flows: re-walk the critical ones at every phase gate instead of assuming earlier phases still work.
-12. **When unsure, ask** — before the phase, not after.
-13. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, **the specs win.** Note the conflict under Decisions and continue — do not stop to ask, do not quietly follow the skill.
+1. **Scaffold with official CLIs, never by hand.** `create-turbo`, `django-admin startproject`, `manage.py startapp`, `create-next-app`, `shadcn init`. Dependencies go in via `uv add` / `pnpm add` — never by hand-editing `pyproject.toml` or `package.json`. Delete generated demo routes and placeholder assets in the same commit that creates them.
+2. **Structure is uniform, not improvised.** Every Django app has the same eight files; reads in `selectors.py`, writes in `services.py`, thin views, dumb models. Frontend features in `apps/web/features/`; `packages/ui` holds nothing that knows what a post is. `01-ARCHITECTURE.md` §2 is the spec.
+3. **Verify versions before installing.** `docs/VERSIONS.md` holds verified pins for both ecosystems. Re-check anything not listed there. Never invent a version number.
+4. **Both languages are strict.** TypeScript: strict, no `any`, no non-null assertions. Python: full type hints, `mypy` strict with `django-stubs`, `ruff` clean. If types get hard that is information about the design — surface it, don't suppress it.
+5. **`apps/api/core/` imports no Django.** Pure Python, unit-testable in milliseconds without a database. If a module there needs `django.`, it belongs in an app instead.
+6. **`apps/realtime` never touches Postgres.** No ORM, no database driver, no business logic — it authenticates a socket, subscribes it to Redis, pushes bytes. A database dependency appearing in its `package.json` means something went wrong.
+7. **`packages/api-client` is generated, never hand-edited.** A serializer change means regenerating in the same commit; CI fails on drift. This seam is what the Django choice costs — treat it as load-bearing, not bookkeeping.
+8. **Every read path returning user content filters blocks.** It lives in the base selector, not in forty views. Non-negotiable from Phase 3 on, and it will be checked.
+9. **No `.count()` / `COUNT(*)` on a request path.** `counters` table plus Redis.
+10. **Read the SQL the ORM generates.** `.explain()` the feed query and anything hot. The N+1 the ORM hides is the most common way a Django app gets slow.
+11. **Publish after commit, never inside the transaction.** A rollback that already delivered a socket event has announced a message that doesn't exist.
+12. **No secrets in code.** `.env.local` local-only; `.env.example` committed and complete. `REALTIME_TICKET_SECRET` is shared by Django and the gateway and lives only in the environment.
+13. **Tests alongside the code, not after.** pytest-django for the backend, Vitest for the gateway and frontend logic. User flows are walked in a real browser via Chrome access — **no Playwright**. There is therefore no automated regression net on flows: re-walk the critical ones at every phase gate instead of assuming earlier phases still work.
+14. **Commits are small and phase-scoped.** One concern per commit, present-tense subject, no `git add -A` sweeps of generated noise. A phase is a readable series of commits, not one dump.
+15. **When unsure, ask** — before the phase, not after.
+16. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, **the specs win.** Note the conflict under Decisions and continue — do not stop to ask, do not quietly follow the skill.
 
 ### Skills: do not consult
 

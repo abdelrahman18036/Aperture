@@ -110,6 +110,83 @@ API and worker share models and settings but deploy independently. Realtime shar
 
 **Why `core/` imports no Django:** it's the only way the business logic stays testable in milliseconds without a database, and portable if Django changes its mind about something. Feed ranking, snowflake generation, the celebrity threshold, permission arithmetic — all pure functions there. If a module in `core/` needs `django.`, it belongs in an app instead.
 
+### Every Django app has the same shape
+
+Not a suggestion — the same eight files, in the same order, in every app. Someone opening `posts/` should already know where things are from having read `users/`.
+
+```
+posts/
+├── models.py         data only. No business logic, no queries beyond properties.
+├── selectors.py      READS. Every query lives here and returns querysets.
+├── services.py       WRITES. Business transactions. The only place .save() is called.
+├── serializers.py    DRF shapes. No logic.
+├── views.py          thin. Parse request → call a selector or service → return.
+├── urls.py
+├── admin.py          unfold ModelAdmin
+├── tasks.py          Celery
+└── tests/            test_selectors.py, test_services.py, test_views.py
+```
+
+`models.py` past ~300 lines becomes a `models/` package, one module per aggregate. Same for selectors and services.
+
+**Why selectors and services rather than fat models or fat views** — three of the rules in this document become mechanically checkable instead of aspirational:
+
+- **Block filtering** (§11) lives in one selector helper. "Every read path filters blocks" becomes "every read goes through a selector, and the base selector filters blocks." You audit one file, not forty views.
+- **Publish-after-commit** (§8) lives in services. There is exactly one place a message is written, so there is exactly one place the publish can be wrong.
+- **No `.count()` on a request path** (§11) is greppable when every query is in a file named `selectors.py`.
+
+A view that queries the ORM directly, or a serializer containing an `if`, is the smell. Move it.
+
+### Import direction is one-way
+
+```
+core/  ←  apps/  ←  views
+  (never imports apps)      apps never import each other's internals —
+                            only each other's selectors and services
+```
+
+`packages/ui` never imports from `apps/web`. `apps/web` imports `packages/api-client` and `packages/ui`, never the reverse. `apps/realtime` imports `packages/realtime-events` and nothing else from the repo.
+
+A cycle between two Django apps means the boundary is in the wrong place. Fix the boundary; do not add a local import to silence it.
+
+### And the frontend
+
+```
+apps/web/src/
+├── app/
+│   ├── (auth)/       login, signup — no nav chrome
+│   ├── (app)/        authenticated shell — feed, profile, messages, settings
+│   └── layout.tsx
+├── features/         one folder per domain: feed/, post/, profile/, messages/
+│   └── feed/         components + hooks for that feature, colocated
+├── lib/
+│   ├── api.ts        the openapi-fetch client, configured once
+│   └── realtime.ts   the socket client, configured once
+└── hooks/            cross-feature only
+```
+
+**`packages/ui` is the design system: tokens, primitives, motion. Nothing that knows what a post is.** Feature components live in `apps/web/features/`. The test is whether a component would make sense in a different product — `Button` and `DevelopImage` would, `PostCard` would not.
+
+Route groups do the work that a `Layout` boolean prop otherwise would: `(auth)` has no nav rail, `(app)` has the three-column shell from the design spec.
+
+### Bootstrap with the official CLIs
+
+Do not hand-write scaffolding that a generator produces. Canonical structure, current defaults, no invented boilerplate:
+
+| What | Command |
+|---|---|
+| Monorepo | `pnpm dlx create-turbo@latest` |
+| Django project | `uv init` → `uv add django` → `uv run django-admin startproject config .` |
+| Each Django app | `uv run manage.py startapp <name>` |
+| Next.js | `pnpm create next-app@latest` (TypeScript, Tailwind, App Router, `src/`) |
+| shadcn | `pnpm dlx shadcn@latest init` then `pnpm dlx shadcn@latest add <component>` |
+| Python deps | `uv add <pkg>` — never hand-edit `pyproject.toml` dependencies |
+| JS deps | `pnpm add <pkg>` — never hand-edit `package.json` dependencies |
+
+**`pnpm dlx`, not `npx`** — npm is unreliable on this machine, see `docs/VERSIONS.md`.
+
+Then adapt what the generator produced to the layout above. Generated code is a starting point, not a constraint: delete the demo routes, the boilerplate CSS, and the placeholder assets in the same commit that creates them.
+
 ---
 
 ## 3. The type boundary — read this before Phase 1

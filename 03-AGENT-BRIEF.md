@@ -34,19 +34,22 @@ Then stop.
 
 ## Standing rules
 
-1. **Pinned versions live in `docs/VERSIONS.md`.** Anything not listed gets verified against PyPI or npm before install. Never invent a version number.
-2. **Both languages are strict.** TypeScript: strict, no `any`, no non-null assertions. Python: full type hints, `mypy` strict with `django-stubs`, `ruff` clean. If types get hard, that's information about the design — surface it, don't suppress it.
-3. **`apps/api/core/` imports no Django.** Pure Python, unit-testable in milliseconds without a database.
-4. **`apps/realtime` never touches Postgres.** No ORM, no database driver, no business logic. It authenticates a socket, subscribes it to Redis, and pushes bytes. If it needs to know something durable, Django tells it through Redis.
-5. **`packages/api-client` is generated, never hand-edited.** A serializer change means regenerating it in the same commit. CI fails on drift. This is the seam the Django choice costs us — it is not optional bookkeeping.
-6. **Every read path that returns user content filters blocks.** Feed, search, comments, DMs, notifications, profile. One reusable queryset method, not forty ad-hoc filters. From Phase 3 onward this is non-negotiable and I will check it.
-7. **No `.count()` or `COUNT(*)` on a request path.** Counters table plus Redis.
-8. **Read the SQL the ORM generates.** `.explain()` the feed query and anything on a hot path. The N+1 the ORM hides is the most common way a Django app gets slow.
-9. **Publish after commit, never inside the transaction.** A rollback that already delivered a socket event has told users about a message that doesn't exist.
-10. **No secrets in code.** `.env.local`, with `.env.example` committed and complete. `REALTIME_TICKET_SECRET` is shared by Django and the Node gateway and lives only in the environment.
-11. **Tests alongside the code, not after.** pytest-django for the backend, Vitest for the gateway and frontend logic. User flows are walked in the browser (see below).
-12. **When you're unsure, ask.** One good question beats a thousand lines built on a wrong assumption. Ask before the phase, not after.
-13. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, the specs win. Note the conflict in the handoff under Decisions and continue — do not stop to ask, and do not quietly follow the skill.
+1. **Scaffold with the official CLIs, never by hand.** `create-turbo`, `django-admin startproject`, `manage.py startapp`, `create-next-app`, `shadcn init`. Add dependencies with `uv add` and `pnpm add` — never by editing `pyproject.toml` or `package.json` directly. **Use `pnpm dlx`, not `npx`** (npm is unreliable here — `docs/VERSIONS.md`). Then delete the generated demo routes and placeholder assets in the same commit.
+2. **Structure is uniform.** Every Django app has the same eight files in the same order; reads go in `selectors.py`, writes in `services.py`, views stay thin. Frontend features live in `apps/web/features/`, and `packages/ui` holds nothing that knows what a post is. `01-ARCHITECTURE.md` §2 is the spec — follow it exactly rather than inventing a per-app layout.
+3. **Pinned versions live in `docs/VERSIONS.md`.** Anything not listed gets verified against PyPI or npm before install. Never invent a version number.
+4. **Both languages are strict.** TypeScript: strict, no `any`, no non-null assertions. Python: full type hints, `mypy` strict with `django-stubs`, `ruff` clean. If types get hard, that's information about the design — surface it, don't suppress it.
+5. **`apps/api/core/` imports no Django.** Pure Python, unit-testable in milliseconds without a database.
+6. **`apps/realtime` never touches Postgres.** No ORM, no database driver, no business logic. It authenticates a socket, subscribes it to Redis, and pushes bytes. If it needs to know something durable, Django tells it through Redis.
+7. **`packages/api-client` is generated, never hand-edited.** A serializer change means regenerating it in the same commit. CI fails on drift. This is the seam the Django choice costs us — it is not optional bookkeeping.
+8. **Every read path that returns user content filters blocks.** It lives in the base selector, not in forty views. From Phase 3 onward this is non-negotiable and I will check it.
+9. **No `.count()` or `COUNT(*)` on a request path.** Counters table plus Redis.
+10. **Read the SQL the ORM generates.** `.explain()` the feed query and anything on a hot path. The N+1 the ORM hides is the most common way a Django app gets slow.
+11. **Publish after commit, never inside the transaction.** A rollback that already delivered a socket event has told users about a message that doesn't exist.
+12. **No secrets in code.** `.env.local`, with `.env.example` committed and complete. `REALTIME_TICKET_SECRET` is shared by Django and the Node gateway and lives only in the environment.
+13. **Tests alongside the code, not after.** pytest-django for the backend, Vitest for the gateway and frontend logic. User flows are walked in the browser (see below).
+14. **Commits are small and phase-scoped.** One concern per commit, present-tense subject, no `git add -A` sweeps of generated noise. A phase is a readable series of commits, not one dump.
+15. **When you're unsure, ask.** One good question beats a thousand lines built on a wrong assumption. Ask before the phase, not after.
+16. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, the specs win. Note the conflict in the handoff under Decisions and continue — do not stop to ask, and do not quietly follow the skill.
 
 ## Testing
 
@@ -80,11 +83,24 @@ Ignore anything for Prisma, Supabase, Firebase, or Azure — wrong stack.
 ## Phases
 
 ### Phase 1 — Foundation
-uv workspace with the Django project and its apps; pnpm workspace with `apps/web`, `apps/realtime`, `packages/ui`, `packages/api-client`, `packages/realtime-events`; Turborepo over both. `docker-compose.yml` with all six services. Django models for every table in the spec including indexes and constraints, migrations generated and applied. Django auth with email/password and session cookies. **django-unfold installed and the admin confirmed styled** — it's five minutes now and a migration later. Next.js rewrite of `/api/*` to Django so the session cookie is same-origin. **The full OpenAPI → TypeScript client pipeline, wired and running in CI.** Health check endpoint verifying Postgres, Redis, and MinIO. `.env.example`. A README with exact setup steps for all three processes.
+
+Scaffold with the CLIs, in this order, committing as you go:
+
+```
+pnpm dlx create-turbo@latest                    # monorepo skeleton
+uv init && uv add django                        # then: django-admin startproject config apps/api
+uv run manage.py startapp users                 # …and media, posts, messaging, calls, moderation
+pnpm create next-app@latest apps/web            # TS, Tailwind, App Router, src/
+pnpm dlx shadcn@latest init                     # Base UI defaults
+```
+
+Then: strip the generated demos and placeholder assets. Reshape to the layout in `01-ARCHITECTURE.md` §2 — every Django app gets the same eight files, even where some are near-empty. `docker-compose.yml` with all six services. Django models for every table in the spec including indexes and constraints, migrations generated and applied. Django auth with email/password and session cookies. **django-unfold installed and the admin confirmed styled** — five minutes now, a migration later. Next.js rewrite of `/api/*` to Django so the session cookie is same-origin. **The full OpenAPI → TypeScript client pipeline, wired and running in CI.** Health check endpoint verifying Postgres, Redis, and MinIO. `.env.example`. A README with exact setup steps for all three processes.
 
 `apps/realtime` is scaffolded but not built out — a process that starts, connects to Redis, and accepts an authenticated socket is enough. Phase 6 fills it in.
 
-**Verify:** `docker compose up`, then API, worker, realtime, and web all start on a clean clone. `/api/health` returns all-green. `manage.py showmigrations` fully applied. `/admin` renders with Unfold styling. Changing a serializer field and regenerating produces a diff in `packages/api-client` — demonstrate this, it is the phase's most important outcome.
+Set up `ruff`, `mypy` + `django-stubs`, and TypeScript strict **in this phase**, before there's code to fix. Retrofitting strict mode onto four phases of work is a bad afternoon.
+
+**Verify:** `docker compose up`, then API, worker, realtime, and web all start on a clean clone. `/api/health` returns all-green. `manage.py showmigrations` fully applied. `/admin` renders with Unfold styling. `ruff`, `mypy` and `tsc --noEmit` all clean. Changing a serializer field and regenerating produces a diff in `packages/api-client` — demonstrate this, it is the phase's most important outcome.
 
 ### Phase 2 — Design system
 Frontend only. `packages/ui`: the `@theme` block, the three fonts via `next/font`, the grain overlay, the `meta` type role. Install shadcn on Base UI and override Button, Input, Avatar, Dialog, Skeleton per the spec. Build the develop-in image component (blurhash canvas → real image) and the ambient glow. Ship a `/kitchen-sink` route showing every primitive in every state.
