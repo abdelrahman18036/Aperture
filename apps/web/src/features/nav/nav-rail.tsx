@@ -1,6 +1,13 @@
 "use client";
 
-import { Camera, Compass, House, Search, UserRound } from "lucide-react";
+import {
+  Camera,
+  Compass,
+  House,
+  MessageCircle,
+  Search,
+  UserRound,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -27,6 +34,7 @@ const DESTINATIONS: Destination[] = [
   { href: "/", label: "Feed", icon: House },
   { href: "/explore", label: "Explore", icon: Compass },
   { href: "/search", label: "Search", icon: Search },
+  { href: "/messages", label: "Messages", icon: MessageCircle },
   { href: "/compose", label: "New post", icon: Camera },
 ];
 

@@ -68,6 +68,9 @@ importers:
       '@repo/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@repo/realtime-events':
+        specifier: workspace:*
+        version: link:../../packages/realtime-events
       '@repo/ui':
         specifier: workspace:*
         version: link:../../packages/ui

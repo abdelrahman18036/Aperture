@@ -1,0 +1,316 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import type { Schemas } from "@repo/api-client";
+import type { AnyServerEvent } from "@repo/realtime-events";
+
+import { api } from "@/lib/api";
+
+import { useRealtime, type ConnectionState } from "./use-realtime";
+
+export type Message = Schemas["Message"];
+
+/**
+ * One conversation's state.
+ *
+ * The whole design is: **`seq` is the truth, and everything reconciles to
+ * it.** Messages are held in a Map keyed by `seq` and rendered in sorted
+ * order, which makes the three hard cases fall out rather than need handling:
+ *
+ * - the socket delivers a message the sync also returns → same `seq`, one entry
+ * - a retry creates nothing new → the server returns the original `seq`
+ * - frames arrive out of order → sorting fixes it, because order is not arrival
+ *
+ * Optimistic sends are the one thing without a `seq` yet. They live in a
+ * separate list keyed by `client_id` and disappear when a real message with
+ * that `client_id` shows up — from the POST response *or* from the socket,
+ * whichever wins the race.
+ */
+
+/** A message the server has not confirmed yet. */
+export interface PendingMessage {
+  client_id: string;
+  body: string;
+  /** Set when the send failed and the user can retry. */
+  failed: boolean;
+}
+
+export interface ConversationState {
+  messages: Message[];
+  pending: PendingMessage[];
+  connection: ConnectionState;
+  /** User ids currently typing, excluding you. */
+  typing: string[];
+  loading: boolean;
+  send: (body: string) => void;
+  retry: (clientId: string) => void;
+  noteTyping: () => void;
+  loadOlder: () => void;
+  hasOlder: boolean;
+}
+
+/** How long a typing indicator survives without a refresh. */
+const TYPING_TTL_MS = 5_000;
+
+/** Don't announce typing more than this often. */
+const TYPING_THROTTLE_MS = 2_000;
+
+function newClientId(): string {
+  return crypto.randomUUID();
+}
+
+export function useConversation(
+  conversationId: string,
+  viewerId: string,
+): ConversationState {
+  const [bySeq, setBySeq] = useState<Map<number, Message>>(new Map());
+  const [pending, setPending] = useState<PendingMessage[]>([]);
+  const [typingUntil, setTypingUntil] = useState<Map<string, number>>(
+    new Map(),
+  );
+  const [loading, setLoading] = useState(true);
+  /** Set once a scrollback page comes back empty. See `hasOlder` below. */
+  const [exhausted, setExhausted] = useState(false);
+
+  /** The high-water mark this client actually holds. The resync cursor. */
+  const lastSeq = useRef(0);
+  const oldestSeq = useRef<number | null>(null);
+  const lastTypingSentAt = useRef(0);
+
+  const absorb = useCallback((incoming: Message[]) => {
+    if (incoming.length === 0) return;
+
+    setBySeq((current) => {
+      const next = new Map(current);
+      for (const message of incoming) next.set(message.seq, message);
+      return next;
+    });
+
+    for (const message of incoming) {
+      if (message.seq > lastSeq.current) lastSeq.current = message.seq;
+      if (oldestSeq.current === null || message.seq < oldestSeq.current) {
+        oldestSeq.current = message.seq;
+      }
+    }
+
+    // Anything confirmed clears its optimistic twin, whichever path
+    // delivered it — the POST response or the socket.
+    const confirmed = new Set(incoming.map((m) => m.client_id));
+    setPending((current) =>
+      current.filter((item) => !confirmed.has(item.client_id)),
+    );
+  }, []);
+
+  const drop = useCallback((seq: number) => {
+    setBySeq((current) => {
+      if (!current.has(seq)) return current;
+      const next = new Map(current);
+      next.delete(seq);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Fetch everything after the last `seq` we hold.
+   *
+   * Called on mount and on every reconnect. It is the entire offline story:
+   * one index scan, no clock, no guesswork about what was missed.
+   */
+  const sync = useCallback(() => {
+    void api
+      .GET("/api/messaging/conversations/{conversation_id}/messages", {
+        params: {
+          path: { conversation_id: conversationId },
+          query: { after: lastSeq.current },
+        },
+      })
+      .then((response) => {
+        setLoading(false);
+        if (response.data === undefined) return;
+        absorb(response.data.messages);
+      });
+  }, [absorb, conversationId]);
+
+  const loadOlder = useCallback(() => {
+    const before = oldestSeq.current;
+    if (before === null || before <= 1) return;
+
+    void api
+      .GET("/api/messaging/conversations/{conversation_id}/messages", {
+        params: {
+          path: { conversation_id: conversationId },
+          query: { before },
+        },
+      })
+      .then((response) => {
+        if (response.data === undefined) return;
+        const page = response.data;
+        if (page.messages.length === 0) {
+          setExhausted(true);
+          return;
+        }
+        absorb(page.messages);
+      });
+  }, [absorb, conversationId]);
+
+  const onEvent = useCallback(
+    (event: AnyServerEvent) => {
+      if (event.type === "typing") {
+        if (event.conversation_id !== conversationId) return;
+        if (event.user_id === viewerId) return;
+        setTypingUntil((current) => {
+          const next = new Map(current);
+          if (event.is_typing) next.set(event.user_id, Date.now() + TYPING_TTL_MS);
+          else next.delete(event.user_id);
+          return next;
+        });
+        return;
+      }
+
+      if (event.type === "message.created") {
+        if (event.conversation_id !== conversationId) return;
+        // The payload is the same DRF serializer the REST endpoint returns,
+        // so its type is already generated — §3. The envelope types it as
+        // `unknown` because only the caller knows which `type` it asked for.
+        absorb([event.payload as Message]);
+        return;
+      }
+
+      if (event.type === "message.deleted") {
+        if (event.conversation_id !== conversationId) return;
+        drop(event.seq);
+      }
+    },
+    [absorb, conversationId, drop, viewerId],
+  );
+
+  const conversationIds = useMemo(() => [conversationId], [conversationId]);
+  const { state: connection, sendTyping } = useRealtime({
+    conversationIds,
+    onEvent,
+    onReady: sync,
+  });
+
+  // Typing indicators expire on their own. A client that closed its laptop
+  // mid-word must not leave "ada is typing" on screen forever.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setTypingUntil((current) => {
+        const live = [...current].filter(([, until]) => until > now);
+        return live.length === current.size ? current : new Map(live);
+      });
+    }, 1_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Read receipts: seeing the newest message is what marks it read.
+  useEffect(() => {
+    if (lastSeq.current === 0) return;
+    const seq = lastSeq.current;
+    void api.POST("/api/messaging/conversations/{conversation_id}/read", {
+      params: { path: { conversation_id: conversationId } },
+      body: { up_to_seq: seq },
+    });
+  }, [bySeq, conversationId]);
+
+  const post = useCallback(
+    (clientId: string, body: string) => {
+      void api
+        .POST("/api/messaging/conversations/{conversation_id}/messages", {
+          params: { path: { conversation_id: conversationId } },
+          body: { client_id: clientId, body },
+        })
+        .then((response) => {
+          if (response.data === undefined) {
+            // Leave the optimistic message in place, marked failed. Dropping
+            // it would lose what someone typed; retrying automatically with
+            // the same client_id is safe but should be their choice.
+            setPending((current) =>
+              current.map((item) =>
+                item.client_id === clientId ? { ...item, failed: true } : item,
+              ),
+            );
+            return;
+          }
+          absorb([response.data.message]);
+        });
+    },
+    [absorb, conversationId],
+  );
+
+  const send = useCallback(
+    (body: string) => {
+      const trimmed = body.trim();
+      if (trimmed === "") return;
+
+      // The client mints the id, and that is the whole duplicate story: a
+      // retry after a timeout carries the same one and the unique constraint
+      // turns it into a no-op.
+      const clientId = newClientId();
+      setPending((current) => [
+        ...current,
+        { client_id: clientId, body: trimmed, failed: false },
+      ]);
+      post(clientId, trimmed);
+      sendTyping(conversationId, false);
+    },
+    [conversationId, post, sendTyping],
+  );
+
+  const retry = useCallback(
+    (clientId: string) => {
+      const item = pending.find((entry) => entry.client_id === clientId);
+      if (item === undefined) return;
+      setPending((current) =>
+        current.map((entry) =>
+          entry.client_id === clientId ? { ...entry, failed: false } : entry,
+        ),
+      );
+      // Same client_id deliberately. If the first attempt actually landed,
+      // the server returns that message instead of writing a second one.
+      post(clientId, item.body);
+    },
+    [pending, post],
+  );
+
+  const noteTyping = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTypingSentAt.current < TYPING_THROTTLE_MS) return;
+    lastTypingSentAt.current = now;
+    sendTyping(conversationId, true);
+  }, [conversationId, sendTyping]);
+
+  const messages = useMemo(
+    () => [...bySeq.values()].sort((a, b) => a.seq - b.seq),
+    [bySeq],
+  );
+
+  const typing = useMemo(() => [...typingUntil.keys()], [typingUntil]);
+
+  /**
+   * Whether there is anything above the top of what we hold.
+   *
+   * Derived rather than assumed: holding `seq` 1 means we are at the start of
+   * the conversation and there is nothing to fetch, so offering "earlier
+   * messages" there is a button that cannot do anything. Deleted messages
+   * leave gaps, so seq 1 may never be returned — hence `exhausted`, set when
+   * a scrollback page actually comes back empty.
+   */
+  const hasOlder =
+    !exhausted && messages.length > 0 && (messages[0]?.seq ?? 1) > 1;
+
+  return {
+    messages,
+    pending,
+    connection,
+    typing,
+    loading,
+    send,
+    retry,
+    noteTyping,
+    loadOlder,
+    hasOlder,
+  };
+}
