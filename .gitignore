@@ -14,12 +14,22 @@ build/
 .env.local
 .env.*.local
 
-# test artifacts
+# test artifacts — Playwright is deliberately not in this stack, see docs/VERSIONS.md
 coverage/
-playwright-report/
 test-results/
-blob-report/
-.playwright/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# django
+staticfiles/
+mediafiles/
 
 # local data
 infra/data/
