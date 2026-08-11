@@ -1,6 +1,14 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "NODE_ENV",
+    "API_ORIGIN",
+    "REALTIME_PORT",
+    "REALTIME_TICKET_SECRET",
+    "REALTIME_URL",
+    "REDIS_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
