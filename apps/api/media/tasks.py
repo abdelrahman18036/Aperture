@@ -113,6 +113,14 @@ def process_media(self: Any, media_id: int) -> str:
         blurhash=derived.blurhash,
         dominant_color=derived.dominant_color,
     )
+
+    # §11: CSAM scanning on the bucket. Enqueued rather than inline so a slow
+    # or unavailable scanning provider cannot hold up the upload, and so the
+    # scan retries on its own schedule. Off by default -- see settings.
+    from moderation.tasks import scan_media
+
+    scan_media.delay(media.pk)
+
     return Media.State.READY
 
 

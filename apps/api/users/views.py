@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 from config.auth import current_user
 from counters.models import Counter
 from counters.selectors import get_metrics
+from moderation.throttling import FollowThrottle
 from users import selectors, services
 from users.models import User
 from users.serializers import (
@@ -34,7 +35,11 @@ from users.serializers import (
     UserListSerializer,
     UserSerializer,
 )
-from users.services import AuthenticationFailedError, end_session, start_session
+from users.services import (
+    AuthenticationFailedError,
+    end_session,
+    start_session,
+)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -115,6 +120,22 @@ class CurrentUserView(APIView):
         )
         return Response(CurrentUserSerializer(user).data)
 
+    @extend_schema(
+        operation_id="users_delete_me",
+        responses={204: None, 403: None},
+        description=(
+            "Delete your account. Content disappears from every read path "
+            "immediately; the rows are erased permanently after a grace "
+            "period."
+        ),
+    )
+    def delete(self, request: Request) -> Response:
+        services.delete_account(user=current_user(request))
+        # Ending the session is an HTTP concern, so it happens here rather
+        # than in the service.
+        end_session(request._request)  # noqa: SLF001
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class ProfileView(APIView):
     """`GET /api/users/{username}` — a profile header.
@@ -172,6 +193,8 @@ class FollowView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    # Follow-spam is the first abuse you will see -- §11.
+    throttle_classes = [FollowThrottle]
 
     def _target_or_404(self, request: Request, username: str) -> User:
         user = selectors.visible_profile(

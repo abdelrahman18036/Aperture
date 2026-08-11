@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import dj_database_url
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -93,6 +94,16 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # Serves everything under STATIC_ROOT.
+    #
+    # Not optional, and not only a production concern. Django only serves
+    # static files itself under `runserver`; `uvicorn config.asgi:application`
+    # — which is how this project runs the API in every environment — serves
+    # none. Without this the admin renders as unstyled HTML, which is what it
+    # was doing: the Phase 1 check confirmed Unfold's OKLCH variables were
+    # applied, but those come from an inline <style> block, so they resolved
+    # while the stylesheet 404ed. Looking at it in a browser is what caught it.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -154,6 +165,54 @@ CELERY_TASK_TIME_LIMIT = 600
 CELERY_TASK_SOFT_TIME_LIMIT = 540
 
 # ---------------------------------------------------------------------------
+# Scheduled work
+# ---------------------------------------------------------------------------
+#
+# Celery's own beat schedule rather than django-celery-beat. That package caps
+# at `Django<6.1` as of its 2.9.0 release and we run 6.1, so it cannot be
+# installed. What it would have added is database-backed schedules editable in
+# the admin; every schedule here is static, so the loss is nothing. Revisit if
+# it ever ships 6.1 support and somebody wants to retime a job without a
+# deploy. Recorded as a Deviation in the Phase 5 handoff.
+#
+# Run with: celery -A config beat
+
+CELERY_BEAT_SCHEDULE = {
+    "hard-delete-expired": {
+        "task": "moderation.hard_delete_expired",
+        # Nightly, off-peak. Deleting is I/O against object storage and there
+        # is no reason for it to compete with anyone's feed.
+        "schedule": crontab(hour=3, minute=30),
+    },
+    "reap-abandoned-uploads": {
+        "task": "media.reap_abandoned_intents",
+        "schedule": crontab(minute="*/30"),
+    },
+    "csam-escalation-backlog": {
+        "task": "moderation.report_escalation_backlog",
+        # Hourly. A CSAM report that has not been forwarded is the one backlog
+        # worth waking someone for.
+        "schedule": crontab(minute=0),
+    },
+}
+
+#: How long a soft delete waits before it becomes permanent. Long enough that
+#: a mistaken deletion is recoverable by asking; short enough to be a credible
+#: answer to "delete my data".
+HARD_DELETE_GRACE_DAYS = int(os.environ.get("HARD_DELETE_GRACE_DAYS", "30"))
+
+# ---------------------------------------------------------------------------
+# Safety integrations
+# ---------------------------------------------------------------------------
+#
+# Both default to off and both raise rather than no-op when enabled without an
+# implementation. A safety feature that silently does nothing is worse than one
+# that is visibly absent — see moderation/tasks.py.
+
+CSAM_SCANNING_ENABLED = env_bool("CSAM_SCANNING_ENABLED", False)
+NCMEC_REPORTING_ENABLED = env_bool("NCMEC_REPORTING_ENABLED", False)
+
+# ---------------------------------------------------------------------------
 # Sessions, CSRF and auth
 # ---------------------------------------------------------------------------
 #
@@ -181,6 +240,14 @@ CORS_ALLOWED_ORIGINS = env_list(
     "DJANGO_CORS_ALLOWED_ORIGINS", ["http://localhost:3000", "http://127.0.0.1:3000"]
 )
 CORS_ALLOW_CREDENTIALS = True
+
+#: Whether `X-Forwarded-For` may be believed when identifying a client.
+#:
+#: False by default and that default is load-bearing: the header is
+#: client-controlled unless something upstream overwrites it, so trusting it
+#: without a proxy in front lets anyone reset their own rate limit by sending
+#: a header. That is worse than no limit, because it looks like protection.
+TRUST_X_FORWARDED_FOR = env_bool("DJANGO_TRUST_X_FORWARDED_FOR", False)
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -230,7 +297,9 @@ STORAGES = {
         },
     },
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        # Compresses and fingerprints on collectstatic, so the admin's assets
+        # can be cached forever and busted by name.
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 

@@ -24,6 +24,7 @@ from media.serializers import (
     UploadIntentRequestSerializer,
     UploadIntentResponseSerializer,
 )
+from moderation.throttling import UploadThrottle
 
 
 def _owned_or_404(request: Request, media_id: str) -> Media:
@@ -47,6 +48,9 @@ class UploadIntentView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    # §11: hard upload rate limits, from day one. A presigned URL is cheap for
+    # us to mint and expensive to have minted for free at scale.
+    throttle_classes = [UploadThrottle]
 
     @extend_schema(
         operation_id="media_intent",

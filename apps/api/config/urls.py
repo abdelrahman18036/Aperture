@@ -41,4 +41,6 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/messaging/", include("messaging.urls")),
     path("api/calls/", include("calls.urls")),
     path("api/moderation/", include("moderation.urls")),
+    # The moderation *console* is the Django admin, not an endpoint here.
+    # That is the whole reason §11 chose this stack.
 ]

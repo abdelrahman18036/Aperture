@@ -188,6 +188,32 @@ def unblock(*, blocker: User, blocked: User) -> None:
 # ---------------------------------------------------------------------------
 
 
+@transaction.atomic
+def delete_account(*, user: User) -> User:
+    """The user asked to leave.
+
+    Soft delete now, permanent erasure on a schedule — `01-ARCHITECTURE.md`
+    §11 requires both, and the grace period is what makes an accidental
+    deletion recoverable by asking rather than by restoring a backup.
+
+    The session is not ended here; the view does that, because ending it is
+    an HTTP concern rather than a data one.
+
+    Their content disappears immediately even though the rows survive: every
+    base selector filters on the author's `deleted_at`, so the delay before
+    the hard delete is invisible from outside.
+    """
+    from django.utils import timezone
+
+    if user.deleted_at is not None:
+        return user
+
+    user.deleted_at = timezone.now()
+    user.is_active = False
+    user.save(update_fields=["deleted_at", "is_active"])
+    return user
+
+
 def update_profile(
     *,
     user: User,

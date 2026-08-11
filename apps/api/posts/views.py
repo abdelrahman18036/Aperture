@@ -24,6 +24,7 @@ from rest_framework.views import APIView
 from config.auth import current_user
 from counters.models import Counter
 from counters.selectors import get_many
+from moderation.throttling import CommentThrottle
 from posts import selectors, services
 from posts.models import Comment, Post
 from posts.serializers import (
@@ -237,6 +238,10 @@ class LikeView(APIView):
 
 class CommentListView(APIView):
     permission_classes = [IsAuthenticated]
+    # Applies to the POST as well as the GET. Reading comments is cheap and
+    # the limit is generous, so sharing one bucket is simpler than splitting
+    # the view in two.
+    throttle_classes = [CommentThrottle]
 
     def _post_or_404(self, request: Request, post_id: str) -> Post:
         viewer = current_user(request)

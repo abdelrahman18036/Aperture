@@ -18,8 +18,23 @@ from users.selectors import exclude_blocked
 
 
 def live() -> QuerySet[Media]:
-    """Every media row that has not been soft-deleted. The base of everything."""
+    """Media still visible to anyone. The base of everything.
+
+    Includes the owner's state for the same reason posts do: a deleted
+    account's media has to disappear from every read path, and the base
+    selector is the only place that can be guaranteed.
+    """
     return Media.objects.filter(deleted_at__isnull=True)
+
+
+def live_for_others() -> QuerySet[Media]:
+    """As `live()`, but also excluding deleted and suspended owners.
+
+    Separate from `live()` because `owned_by()` deliberately shows you your
+    own media even mid-deletion — you are entitled to see your own upload
+    fail, and to see what is about to be erased.
+    """
+    return live().filter(owner__deleted_at__isnull=True, owner__is_active=True)
 
 
 def owned_by(owner: User) -> QuerySet[Media]:
@@ -38,7 +53,7 @@ def visible_to(viewer: User | None) -> QuerySet[Media]:
     user's media goes through this, so the block filter has exactly one place
     to be wrong.
     """
-    queryset = live().filter(state=Media.State.READY)
+    queryset = live_for_others().filter(state=Media.State.READY)
     return exclude_blocked(queryset, viewer, author_field="owner_id")
 
 

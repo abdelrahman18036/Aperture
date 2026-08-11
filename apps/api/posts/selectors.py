@@ -26,8 +26,19 @@ MAX_PAGE_SIZE = 60
 
 
 def live() -> QuerySet[Post]:
-    """Posts that have not been soft-deleted. The base of every read."""
-    return Post.objects.filter(deleted_at__isnull=True)
+    """Posts that are still visible to anyone at all. The base of every read.
+
+    Three conditions, not one. A post is gone if *it* was deleted, and also if
+    its author deleted their account or was suspended — §11 requires that a
+    deleted account's content disappears from every read path, and the only
+    way that stays true is for it to be in the base selector rather than
+    remembered at each call site.
+    """
+    return Post.objects.filter(
+        deleted_at__isnull=True,
+        author__deleted_at__isnull=True,
+        author__is_active=True,
+    )
 
 
 def _with_media(queryset: QuerySet[Post]) -> QuerySet[Post]:
@@ -144,7 +155,11 @@ def comments_for(
     to talk to you underneath a photograph.
     """
     comments = Comment.objects.filter(
-        post=post, parent__isnull=True, deleted_at__isnull=True
+        post=post,
+        parent__isnull=True,
+        deleted_at__isnull=True,
+        author__deleted_at__isnull=True,
+        author__is_active=True,
     ).select_related("author")
 
     comments = exclude_blocked(comments, viewer, author_field="author_id")
@@ -159,7 +174,10 @@ def replies_to(
     *, viewer: User | None, comment: Comment, limit: int = DEFAULT_PAGE_SIZE
 ) -> QuerySet[Comment]:
     replies = Comment.objects.filter(
-        parent=comment, deleted_at__isnull=True
+        parent=comment,
+        deleted_at__isnull=True,
+        author__deleted_at__isnull=True,
+        author__is_active=True,
     ).select_related("author")
     replies = exclude_blocked(replies, viewer, author_field="author_id")
     return replies.order_by("id")[: min(limit, MAX_PAGE_SIZE)]
