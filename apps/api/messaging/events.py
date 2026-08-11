@@ -23,6 +23,18 @@ logger = logging.getLogger(__name__)
 
 PROTOCOL_VERSION = 1
 
+#: Every durable event type, and the whole list.
+#:
+#: The browser validates against the same three names in
+#: `packages/realtime-events`, and a frame whose type is not there is dropped
+#: — correct for a client that does not understand an event, but it means
+#: publishing a fourth type from here without adding it there delivers
+#: nothing. Stated in both places so the mismatch is visible rather than
+#: silent; a test asserts these are the only ones published.
+EVENT_TYPES = frozenset(
+    {"message.created", "message.read", "message.deleted"},
+)
+
 
 def channel_for(user_id: int) -> str:
     """One durable channel per **recipient**, not per conversation.
@@ -63,6 +75,13 @@ def publish(
     lost when it was not. The client's next reconnect sync fetches it by `seq`,
     which is the same path that covers someone whose network dropped.
     """
+    if event_type not in EVENT_TYPES:
+        # Loud here rather than silent in the browser. The client validates
+        # against the same list and drops what it does not recognise, so an
+        # unlisted type would simply never arrive — the worst kind of bug to
+        # go looking for.
+        raise ValueError(f"unknown realtime event type: {event_type}")
+
     envelope = {
         "v": PROTOCOL_VERSION,
         "type": event_type,

@@ -429,3 +429,25 @@ def test_channel_name_is_derived_from_the_user_id() -> None:
     from messaging.events import channel_for
 
     assert channel_for(1234) == "user.1234"
+
+
+def test_only_known_event_types_can_be_published() -> None:
+    """Django and the browser validate against the same three names.
+
+    `packages/realtime-events` drops a frame whose type it does not know, so
+    publishing a fourth type without adding it there would deliver nothing at
+    all. Failing here makes that a crash in one place instead of silence in
+    another.
+    """
+    from messaging.events import EVENT_TYPES, publish
+
+    assert set(EVENT_TYPES) == {"message.created", "message.read", "message.deleted"}
+
+    with pytest.raises(ValueError, match="unknown realtime event type"):
+        publish(
+            conversation_id=1,
+            recipient_ids=[1],
+            event_type="message.edited",
+            seq=1,
+            payload={},
+        )

@@ -19,6 +19,27 @@ import { z } from "zod";
 export const PROTOCOL_VERSION = 1;
 
 /**
+ * Everything Django publishes after a commit.
+ *
+ * Named rather than left as `string` for two reasons. It makes the union
+ * below a real discriminated union, so `event.type === "typing"` narrows
+ * instead of leaving every field possibly-absent. And it puts the durable
+ * event vocabulary in one place that both `messaging/events.py` and the
+ * browser can be checked against.
+ *
+ * A type not in this list fails validation and the client drops the frame.
+ * That is the correct behaviour for a client that does not understand an
+ * event — but it does mean adding one in Django means adding it here too.
+ */
+export const durableEventTypeSchema = z.enum([
+  "message.created",
+  "message.read",
+  "message.deleted",
+]);
+
+export type DurableEventType = z.infer<typeof durableEventTypeSchema>;
+
+/**
  * The envelope around every durable server-to-client event.
  *
  * These five fields are the only hand-typed part of the contract. `payload`
@@ -28,7 +49,7 @@ export const PROTOCOL_VERSION = 1;
  */
 export const serverEventSchema = z.object({
   v: z.literal(PROTOCOL_VERSION),
-  type: z.string(),
+  type: durableEventTypeSchema,
   conversation_id: z.string(),
   seq: z.number().int(),
   payload: z.unknown(),
