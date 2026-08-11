@@ -20,6 +20,7 @@ dependencies = [
     "puremagic==2.2.0",
     "redis==8.1.0",
     "uvicorn==0.52.1",
+    "whitenoise==6.12.0",
 ]
 
 [dependency-groups]
@@ -115,6 +116,9 @@ ignore_missing_imports = true
 # codebase keeps the check.
 module = ["*.admin"]
 disallow_subclassing_any = false
+# Unfold's @action is untyped for the same reason, and strict mode treats
+# anything it wraps as untyped. The action bodies are still fully checked.
+disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
 # Celery ships no stubs, so `@shared_task` is an untyped decorator and strict
