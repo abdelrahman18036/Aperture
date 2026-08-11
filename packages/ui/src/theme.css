@@ -240,6 +240,64 @@
 }
 
 /* -----------------------------------------------------------------------
+ * The two motions the design system prescribes for a live conversation.
+ *
+ * "Message arrival: 200ms fade + 8px rise. Typing indicator: three daylight
+ * dots, 1.4s loop." Both live here rather than in the messaging feature
+ * because neither knows what a message is — an arrival is a thing appearing,
+ * and three pulsing dots are three pulsing dots.
+ *
+ * They stay inside the motion budget: the develop-in is the signature effect,
+ * and everything else is functional and under 200ms. The typing loop is the
+ * one exception the spec names, and it is an ambient state rather than a
+ * transition, so it does not compete with anything.
+ * --------------------------------------------------------------------- */
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+@utility animate-arrive {
+  animation: arrive var(--duration-arrive) var(--ease-develop) both;
+}
+
+@utility animate-typing-dot {
+  animation: typing-dot 1.4s ease-in-out infinite;
+}
+
+/* A message that arrives while you are reading should not slide under
+ * reduced motion. It still needs to appear, so the fade stays and only the
+ * movement goes — the same reasoning as the develop-in's 120ms cross-fade. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes arrive {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* -----------------------------------------------------------------------
  * Reduced motion.
  *
  * Note what is *not* here: the usual blanket
