@@ -9,7 +9,8 @@
     "start": "tsx src/index.ts",
     "lint": "eslint . --max-warnings 0",
     "check-types": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "loadtest": "tsx scripts/loadtest.ts"
   },
   "dependencies": {
     "@repo/realtime-events": "workspace:*",
