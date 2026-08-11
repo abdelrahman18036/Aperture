@@ -40,19 +40,34 @@ Next:         what Phase N+1 will touch
 4. **Every read path returning user content filters blocks.** Feed, search, comments, DMs, notifications, profile. Non-negotiable from Phase 3 on, and it will be checked.
 5. **No `COUNT(*)` on a request path.** `counters` table plus Redis.
 6. **No secrets in code.** `.env.local` local-only; `.env.example` committed and complete.
-7. **Tests alongside the code, not after.** Vitest for `core` and `db`; Playwright for the two or three flows that would embarrass us if they broke.
+7. **Tests alongside the code, not after.** Vitest for `core` and `db`. User flows are walked in a real browser via Chrome access — **no Playwright**. There is therefore no automated regression net on flows: re-walk the critical ones at every phase gate instead of assuming earlier phases still work.
 8. **When unsure, ask** — before the phase, not after.
 9. **Skills are advisory.** Where a skill conflicts with `01-ARCHITECTURE.md` or `02-DESIGN-SYSTEM.md`, **the specs win.** Note the conflict under Decisions and continue — do not stop to ask, do not quietly follow the skill.
 
 ### Skills: do not consult
 
-`taste-skill`, `impeccable`, `redesign-skill`, `frontend-design`'s aesthetic direction, or any other
-design-taste skill. They supply aesthetic direction where none is missing — ours is locked in
-`02-DESIGN-SYSTEM.md`, and a second opinion produces exactly the drift the brief is preventing.
-These are installed globally on this machine and cannot be uninstalled per-project; **the rule is
-to not load them.** If one seems like it would help, say so in the handoff instead.
+Several skills are installed globally on this machine and cannot be uninstalled per-project.
+**The rule is to not load them.** If one seems like it would genuinely help, say so in the handoff
+instead of using it.
 
-Also ignore anything for Prisma, Supabase, Firebase, Azure, or GSAP — wrong stack.
+| Skill | Why not |
+|---|---|
+| `taste-skill`, `impeccable`, `redesign-skill`, `frontend-design`'s aesthetic direction | Supply aesthetic direction where none is missing. Ours is locked in `02-DESIGN-SYSTEM.md`; a second opinion is exactly the drift the brief prevents. |
+| `playwright-cli`, `webapp-testing` | We verify flows through Chrome access, not Playwright. |
+| `django-expert` | Wrong language. This is a TypeScript stack — see below. |
+| `gsap-*` | Motion is the animation library. GSAP is not in the stack. |
+| Anything for Prisma, Supabase, Firebase, Azure | Wrong stack. |
+
+### Stack is TypeScript, end to end — not Django
+
+Ruled 2026-08-11. Next.js route handlers and server actions are the backend; there is no separate
+API server. The whole architecture leans on one language across the boundary: `packages/contracts`
+shares Zod schemas and inferred types between browser, route handlers, the WebSocket service and
+the worker, and `packages/core` is plain TypeScript both sides import.
+
+Django would mean DRF + Channels + Celery, a hand-maintained type boundary between Python and the
+React client, and a rewrite of `01-ARCHITECTURE.md` from the schema down. It is a fine framework and
+it is not this project's. Don't reach for it, and don't reach for the `django-expert` skill.
 
 ## Design discipline — load-bearing, not preference
 

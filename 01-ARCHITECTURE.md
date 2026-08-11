@@ -4,36 +4,36 @@ A photo and video social platform. Web only. Local-first, scales without a rewri
 
 **Design rule:** every local component speaks the same protocol as its production replacement. MinIO is S3's API, so Cloudflare R2 is an env var. Self-hosted LiveKit is LiveKit Cloud's API. Postgres is Postgres. You never rewrite to scale — you swap the endpoint.
 
-> **Versions move.** Everything below was current in August 2026. Before you start, run `npm view <pkg> version` on the majors and pin what you actually get. Don't let an agent invent versions.
+> **Versions live in [`docs/VERSIONS.md`](docs/VERSIONS.md)**, verified against the registry and pinned. Use those, not numbers from memory.
 
 ---
 
 ## 1. Stack
 
-| Concern | Package / service | Version (Aug 2026) |
-|---|---|---|
-| Runtime | Node.js | 24 LTS |
-| Framework | Next.js (App Router, Turbopack) | 16.3 |
-| UI runtime | React + React Compiler | 19.x, compiler 1.x |
-| Styling | Tailwind CSS | 4.x (CSS-first `@theme`) |
-| Components | shadcn/ui on **Base UI** | CLI 3.x |
-| Motion | Motion (ex Framer Motion) | 12.x |
-| ORM | Drizzle ORM + drizzle-kit | 0.4x |
-| Database | PostgreSQL | 18 |
-| Cache / queues | Redis + BullMQ | Redis 8, BullMQ 5.x |
-| Auth | BetterAuth | 1.x |
-| Validation | Zod | 4.x |
-| Realtime | `ws` or uWebSockets.js + Redis pub/sub | — |
-| SFU | LiveKit server / client SDK | server 1.x, JS SDK 2.x |
-| TURN | coturn | 4.6.x |
-| Object storage | MinIO → Cloudflare R2 | S3 API |
-| Images | `sharp` → Cloudflare Images | 0.34.x |
-| Video | ffmpeg worker → Mux | — |
-| Search | Postgres FTS → Typesense | 28.x |
-| Monorepo | Turborepo + pnpm | Turbo 2.x, pnpm 10.x |
-| Tests | Vitest + Playwright | 3.x / 1.5x |
+| Concern | Package / service |
+|---|---|
+| Runtime | Node.js (LTS) |
+| Framework | Next.js (App Router, Turbopack) |
+| UI runtime | React + React Compiler |
+| Styling | Tailwind CSS (CSS-first `@theme`) |
+| Components | shadcn/ui on **Base UI** |
+| Motion | Motion (ex Framer Motion) |
+| ORM | Drizzle ORM + drizzle-kit |
+| Database | PostgreSQL |
+| Cache / queues | Redis + BullMQ |
+| Auth | BetterAuth |
+| Validation | Zod |
+| Realtime | `ws` + Redis pub/sub |
+| SFU | LiveKit server / client SDK |
+| TURN | coturn |
+| Object storage | MinIO → Cloudflare R2 (S3 API) |
+| Images | `sharp` → Cloudflare Images |
+| Video | ffmpeg worker → Mux |
+| Search | Postgres FTS → Typesense |
+| Monorepo | Turborepo + pnpm |
+| Tests | Vitest (unit/integration) + Claude's Chrome access (flows) |
 
-Two notes on shadcn specifically. New projects now scaffold on **Base UI** rather than Radix — take that default, it's where the registry is heading. And the registry ships **chat primitives** (`MessageScroller`, `Message`, `Bubble`, `Attachment`) as of mid-2026, which covers a real chunk of Phase 4.
+Two notes on shadcn. New projects scaffold on **Base UI** rather than Radix — take that default, it's where the registry is heading. And the registry ships **chat primitives** (`MessageScroller`, `Message`, `Bubble`, `Attachment`), which covers a real chunk of Phase 6.
 
 ---
 
@@ -76,7 +76,7 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: devpassword
       POSTGRES_DB: aperture
-    ports: ["5432:5432"]
+    ports: ["5433:5432"]        # host 5432 is taken by a native PG service — see docs/VERSIONS.md
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app"]
@@ -89,7 +89,7 @@ services:
     volumes: [redisdata:/data]
 
   minio:
-    image: minio/minio
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -109,13 +109,13 @@ services:
       "
 
   livekit:
-    image: livekit/livekit-server
+    image: livekit/livekit-server:v1.13.5
     command: --config /etc/livekit.yaml --node-ip=127.0.0.1
     ports: ["7880:7880", "7881:7881", "50000-50100:50000-50100/udp"]
     volumes: [./livekit/livekit.yaml:/etc/livekit.yaml]
 
   coturn:
-    image: coturn/coturn
+    image: coturn/coturn:4.17.2
     network_mode: host
     volumes: [./coturn/turnserver.conf:/etc/coturn/turnserver.conf]
 
@@ -131,6 +131,7 @@ volumes: { pgdata:, redisdata:, miniodata:, typesensedata: }
 ```
 
 `docker compose up && pnpm dev` — full backend, cold machine to running stack in about four minutes.
+Start Docker Desktop first; it does not auto-start on this machine.
 
 ---
 

@@ -30,15 +30,31 @@ significant time has passed.
 | typescript | — | 7.0.2 | **5.9.3** | ⚠️ **deliberately behind `latest`.** TS 7 is the native port; 6.0.0-beta and 7.0.1-rc are also published. Ruled: stay on 5.9.3 through Phase 4, then revisit. Strict mode is only enforceable if the checker itself is boring. |
 | turbo | 2.x | **2.10.9** | 2.10.9 | |
 | vitest | 3.x | **4.1.10** | 4.1.10 | ⚠️ **major drift** from spec. |
-| @playwright/test | 1.5x | **1.62.1** | 1.62.1 | |
 | blurhash | — | **2.0.5** | 2.0.5 | |
 | pg | — | **8.23.0** | 8.23.0 | |
 
-## Docker images (from `01-ARCHITECTURE.md` §3)
+Every pin above is the registry's `latest` **stable** tag — no prereleases — except TypeScript,
+which is held back deliberately.
 
-`postgres:18-alpine`, `redis:8-alpine`, `minio/minio`, `minio/mc`,
-`livekit/livekit-server`, `coturn/coturn`, `typesense/typesense:28.0`.
-Not yet pulled — the daemon was not running at check time. Verify tags on first `compose up`.
+**Playwright is not in the stack.** Flows are verified through Claude's Chrome access. Do not add
+`@playwright/test`, `playwright-cli`, or `webapp-testing`.
+
+## Docker images
+
+All tags confirmed to exist on Docker Hub 2026-08-11. Floating `latest` tags have been replaced with
+concrete ones in `01-ARCHITECTURE.md` §3 — a compose file that pulls `latest` is not reproducible.
+
+| Service | Pin | Note |
+|---|---|---|
+| postgres | `postgres:18-alpine` | Host port **5433**, not 5432. |
+| redis | `redis:8-alpine` | |
+| minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | was `latest` |
+| minio-init | `minio/mc` | bootstrap only, floating is fine |
+| livekit | `livekit/livekit-server:v1.13.5` | was `latest`; spec said server 1.x ✓ |
+| coturn | `coturn/coturn:4.17.2` | was `latest`; spec said 4.6.x — drift, current line is 4.17 |
+| typesense | `typesense/typesense:28.0` | matches spec |
+
+Not yet pulled — the daemon was stopped at check time.
 
 ## Drift — ruled 2026-08-11
 
@@ -59,6 +75,7 @@ Specific things to check when the relevant phase arrives:
 | 2 | Are the registry **chat primitives** (`MessageScroller`, `Message`, `Bubble`, `Attachment`) still shipping in v4? Phase 6 budgets for them. |
 | 1/3 | BullMQ **6** worker + connection option changes; confirm the ioredis 6 peer requirement. |
 | 1 | Vitest **4** config/API changes vs 3.x. |
+| 7 | coturn **4.17** config syntax vs the 4.6.x the spec assumed. |
 
 ## Doc/version mismatch to watch
 
