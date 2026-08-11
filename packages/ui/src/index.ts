@@ -6,12 +6,36 @@
  * would, `PostCard` would not. Feature components live in
  * `apps/web/src/features/`.
  *
- * Phase 2 fills this package: the `@theme` block, the three fonts via
- * `next/font`, the grain overlay, the `meta` type role, the shadcn overrides,
- * the develop-in image component and the ambient glow.
- *
- * Empty for now — create-turbo's demo Button, Card and Code were deleted in
- * the commit that generated them.
+ * `theme.css` and `fonts` are separate subpath exports: the stylesheet
+ * belongs to the app's Tailwind entry point, and `fonts` pulls in
+ * `next/font`, which nothing else here should have to carry.
  */
 
-export {};
+export { cn } from "./lib/cn";
+
+export { Button, buttonVariants } from "./primitives/button";
+export { Input } from "./primitives/input";
+export {
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarImage,
+} from "./primitives/avatar";
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "./primitives/dialog";
+export { Skeleton } from "./primitives/skeleton";
+export { Grain } from "./primitives/grain";
+
+export { AmbientGlow } from "./media/ambient-glow";
+export { DevelopImage } from "./media/develop-image";
+export type { DevelopImageProps } from "./media/develop-image";
