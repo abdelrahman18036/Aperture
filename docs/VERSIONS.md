@@ -202,7 +202,10 @@ stack changed (they remain in git history at commit `e1beb29`).
 Django and DRF are extremely well represented in training data and do **not** need vendoring.
 
 - ✅ **django-unfold** — fetched, at `docs/vendor/django-unfold.md`.
-- ⬜ **drf-spectacular** — the OpenAPI generation pipeline. Fetch before Phase 1.
-- ⬜ **Django 6.x release notes** — composite primary keys and `Index(condition=...)`. Fetch before Phase 1.
+- ✅ **drf-spectacular** — fetched, at `docs/vendor/drf-spectacular.md`. Carries a compatibility
+  caveat: upstream advertises Django ≤6.0 / DRF ≤3.17, we pin 6.1 / 3.18.0. Prove it in Phase 1.
+- ✅ **Django 6.1 release notes** — fetched, at `docs/vendor/django-6.1.md`. Answers both questions
+  it was fetched for: composite PKs are unchanged in 6.1 (so we use surrogate + `UniqueConstraint`),
+  and `Index(condition=...)` is unchanged. Also drops PostgreSQL 14 — `postgres:18-alpine` is fine.
 
 Channels docs are no longer needed — sockets moved to Node.

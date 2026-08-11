@@ -67,7 +67,7 @@ instead of using it.
 | `gsap-*` | Motion is the animation library. GSAP is not in the stack. |
 | Anything for Prisma, Supabase, Firebase, Azure | Wrong stack. |
 
-**`django-expert` is allowed** — it matches the stack. Rule 11 still applies: where it disagrees
+**`django-expert` is allowed** — it matches the stack. Rule 16 still applies: where it disagrees
 with the specs, the specs win.
 
 ### Who owns what
