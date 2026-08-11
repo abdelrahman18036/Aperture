@@ -38,4 +38,4 @@ export { Grain } from "./primitives/grain";
 
 export { AmbientGlow } from "./media/ambient-glow";
 export { DevelopImage } from "./media/develop-image";
-export type { DevelopImageProps } from "./media/develop-image";
+export type { DevelopImageProps, ImageSource } from "./media/develop-image";

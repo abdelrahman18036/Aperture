@@ -2,7 +2,6 @@
 
 import { decode } from "blurhash";
 import { useReducedMotion } from "motion/react";
-import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as React from "react";
 
@@ -32,14 +31,31 @@ import { AmbientGlow } from "./ambient-glow";
  * describes two interpolated properties on one easing curve, which is exactly
  * what a transition is, and it keeps a feed of these off the animation frame
  * entirely.
+ *
+ * Deliberately a plain `<img>` rather than `next/image`, for three reasons
+ * that all point the same way. The media worker has *already* produced the
+ * renditions (`sources`), so Next's optimiser would be redoing work that is
+ * done; routing them through it would put media bytes through our own server,
+ * which `01-ARCHITECTURE.md` §6 rules out at every scale; and Next 16 refuses
+ * to optimise a host that resolves to a private IP, which is what MinIO is in
+ * development. The two things `next/image` would otherwise buy us — lazy
+ * loading and no layout shift — this component already does itself.
  */
 
 /** Blurhash decodes to a tiny bitmap and is scaled up by the canvas element. */
 const BLURHASH_RESOLUTION = 32;
 
+/** One rendition, straight from `media.sources`. */
+export interface ImageSource {
+  width: number;
+  url: string;
+}
+
 interface DevelopImageProps {
   src: string;
   alt: string;
+  /** The worker's renditions. Becomes the `srcset`; `src` is the fallback. */
+  sources?: readonly ImageSource[];
   /** From the media row. Reserves the space, so nothing shifts on load. */
   width: number;
   height: number;
@@ -56,6 +72,7 @@ interface DevelopImageProps {
 function DevelopImage({
   src,
   alt,
+  sources,
   width,
   height,
   blurhash,
@@ -160,14 +177,20 @@ function DevelopImage({
           />
         ) : null}
 
-        <Image
+        <img
           src={src}
-          alt={alt}
-          fill
+          srcSet={
+            sources && sources.length > 0
+              ? sources.map((s) => `${s.url} ${String(s.width)}w`).join(", ")
+              : undefined
+          }
           sizes={sizes}
-          priority={priority}
+          alt={alt}
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
           onLoad={onLoad}
-          className="object-cover"
+          className="absolute inset-0 size-full object-cover"
           style={{
             opacity: developed ? 1 : 0,
             // Reduced motion gets a plain cross-fade: no blur, no desaturation.
