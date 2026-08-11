@@ -122,25 +122,56 @@ Not yet pulled — the daemon was stopped at check time.
 | pip / poetry / pipx | Not on PATH. Not needed — uv covers it. |
 | Node | **24.19.0**, via `pnpm env use --global`. At `%LOCALAPPDATA%\pnpm\node.exe`. |
 | pnpm | **10.17.0** (11.21.0 available, not required). Store: `D:\.pnpm-store\v10`. Verified working. |
-| npm / npx | **Broken.** See below. Use `pnpm` and `pnpm dlx`. |
+| npm / npx | **Working** (repaired 2026-08-11, see below). `pnpm` is still the project's package manager. |
 | Docker | Desktop **29.2.1** / Compose **v5.0.2** installed, **daemon stopped**. Start manually. |
 | ffmpeg | **7.1.1** on PATH. Phase 3's worker has what it needs. |
 | git | 2.50.1. Repo on `main`. |
 | Disk | ~184 GB free on D:. |
 
-### `npm` / `npx` are broken on this machine
+### `npm` / `npx` — was broken, now fixed
 
-`%LOCALAPPDATA%\npm-cache` is a **junction** to `D:\cache\npm-cache`, whose target had been deleted.
-Recreating the target was not sufficient — npm still cannot create `_cacache` through the junction.
-It fails identically inside and outside the sandbox, so it is a real machine-config fault.
+**Root cause: two corrupt NTFS junctions**, not a disk or permission fault.
 
-**Impact:** none on this project. Substitute `pnpm dlx <pkg>` for `npx <pkg>` (verified working).
+`%LOCALAPPDATA%\npm-cache` and `%LOCALAPPDATA%\pip` are junctions into `D:\cache`. Both had been
+created in January 2026; the `D:\cache` targets were later deleted. Recreating the targets did not
+help, because the *junctions themselves* had gone bad.
 
-**Permanent fix (one line, when convenient):**
+The signature was distinctive and worth recognising again:
+
+| Operation through the junction | Result |
+|---|---|
+| Read / list | worked |
+| Create a **file** | worked |
+| Create a **directory** | **`EEXIST` for a name that did not exist** |
+| `mkdir -p` (nested) | `ENOENT` |
+| Same directory create written **direct to `D:\…`** | worked |
+
+Directory creation failing with "already exists" for a random unused name, while file creation
+through the same path succeeds, means the reparse point is defective — not the target, not the ACL,
+not the filesystem. D: is healthy NTFS with plenty of space, and identical operations addressed
+directly at `D:\cache\...` always worked.
+
+**Fix — delete and recreate each junction.** No elevation needed; `mklink /J` does not require
+admin, unlike `/D` symlinks. Plain `rmdir` on a junction removes only the link and leaves the
+target's contents intact — do **not** use `rmdir /S` or PowerShell `Remove-Item -Recurse`, which
+have historically followed junctions into the target.
 
 ```
-npm config set cache "D:\npm-cache"
+rmdir "%LOCALAPPDATA%\npm-cache"
+mklink /J "%LOCALAPPDATA%\npm-cache" "D:\cache\npm-cache"
 ```
+
+Applied to both `npm-cache` and `pip` on 2026-08-11 (pip's target had to be recreated first, as
+`D:\cache\pip` was missing entirely). Verified afterwards: `npm view`, `npm cache verify`, and
+`npx` all work.
+
+**If a junction ever misbehaves this way again, recreate it before believing anything else.**
+`%LOCALAPPDATA%\Docker` and `docker-secrets-engine` are also junctions (into `D:\Docker`) and were
+healthy at check time — but they're the same vintage, so they're the first suspects if Docker
+starts failing strangely.
+
+`pnpm` remains the project's package manager. It was never affected: its store is `D:\.pnpm-store\v10`,
+reached directly with no junction in the path.
 
 ### Port conflict — ruled
 

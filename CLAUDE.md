@@ -115,8 +115,9 @@ Full detail in `docs/VERSIONS.md`. The four that will bite:
 
 - **Python is 3.13.12 via `uv`, not the system 3.14.7.** Celery has no 3.14 support. `uv` is the
   Python package manager — pip, poetry and pipx are not on PATH and are not needed.
-- **Use `pnpm dlx`, never `npx`.** npm's cache is broken on this machine (junction to a missing
-  target). pnpm is unaffected. Anywhere a doc says `npx <pkg>`, run `pnpm dlx <pkg>`.
+- **`pnpm` is the JS package manager** — not npm. (npm works again as of 2026-08-11; two corrupt
+  cache junctions were repaired. See `docs/VERSIONS.md` if directory creation under
+  `%LOCALAPPDATA%` ever starts returning `EEXIST` for names that don't exist.)
 - **Postgres is on host port 5433, not 5432.** A native `postgresql-x64-17` service holds 5432.
   Compose binds `5433:5432`; `DATABASE_URL` uses 5433. Inside the compose network it's still
   `postgres:5432`. Record this as a Deviation in the Phase 1 handoff.
