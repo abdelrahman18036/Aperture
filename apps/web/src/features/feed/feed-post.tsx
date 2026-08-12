@@ -10,6 +10,7 @@ import {
   AvatarImage,
   Button,
   DevelopImage,
+  DevelopVideo,
   DialogTrigger,
 } from "@repo/ui";
 
@@ -150,7 +151,20 @@ export function FeedPost({ post }: { post: Post }) {
         />
       </header>
 
-      {image?.width && image.height ? (
+      {/* Video and stills are both `media`; only the renderer differs. The
+          composer has always accepted video and the worker has always
+          processed it — there was simply no branch here, so a video post
+          rendered nothing at all. */}
+      {image?.kind === "video" ? (
+        <DevelopVideo
+          src={image.video_url ?? image.original_url ?? ""}
+          width={image.width ?? 16}
+          height={image.height ?? 9}
+          blurhash={image.blurhash}
+          durationMs={image.duration_ms}
+          label={image.alt_text}
+        />
+      ) : image?.width && image.height ? (
         <DevelopImage
           src={image.sources.at(-1)?.url ?? image.original_url ?? ""}
           sources={image.sources}

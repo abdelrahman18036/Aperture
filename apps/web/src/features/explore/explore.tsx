@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { DevelopImage, Skeleton, cn } from "@repo/ui";
+import { DevelopImage, DevelopVideo, Skeleton, cn } from "@repo/ui";
 
 import { api } from "@/lib/api";
 
@@ -125,6 +125,19 @@ export function Explore() {
               >
                 {image === undefined ? (
                   <Skeleton className="size-full" />
+                ) : image.kind === "video" ? (
+                  // A grid cell is a still even for video — the poster is the
+                  // blurhash, and playing happens on the post page. A grid
+                  // where nine videos load is a grid nobody can scroll.
+                  <DevelopVideo
+                    src={image.video_url ?? image.original_url ?? ""}
+                    width={1}
+                    height={1}
+                    blurhash={image.blurhash}
+                    durationMs={image.duration_ms}
+                    label={image.alt_text}
+                    className="size-full"
+                  />
                 ) : (
                   <DevelopImage
                     src={image.sources.at(-1)?.url ?? image.original_url ?? ""}
