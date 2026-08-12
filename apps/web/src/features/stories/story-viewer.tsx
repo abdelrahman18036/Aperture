@@ -47,6 +47,8 @@ export function StoryViewer({
   const [frameIndex, setFrameIndex] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
+  /** Elapsed on the current frame, carried across a pause. */
+  const elapsedRef = useRef(0);
 
   const entry = entries[authorIndex];
   const story = entry?.stories[frameIndex];
@@ -54,6 +56,7 @@ export function StoryViewer({
   /** Advance one frame, then one author, then close. */
   const next = useCallback(() => {
     setElapsed(0);
+    elapsedRef.current = 0;
     const frames = entries[authorIndex]?.stories.length ?? 0;
     if (frameIndex + 1 < frames) {
       setFrameIndex(frameIndex + 1);
@@ -69,6 +72,7 @@ export function StoryViewer({
 
   const previous = useCallback(() => {
     setElapsed(0);
+    elapsedRef.current = 0;
     if (frameIndex > 0) {
       setFrameIndex(frameIndex - 1);
       return;
@@ -93,21 +97,32 @@ export function StoryViewer({
     });
   }, [story]);
 
-  // The clock. One interval for the whole viewer rather than one per frame,
-  // so there is nothing to leak when frames change fast.
+  /**
+   * The clock.
+   *
+   * Advancing happens in the timer callback, not inside the `setElapsed`
+   * updater. React runs updater functions during render, so calling `next()`
+   * from one meant setting state on the *tray* mid-render of the viewer —
+   * "Cannot update a component while rendering a different component", which
+   * React reported and which would eventually have shown up as a frame that
+   * skipped or a ring that failed to update.
+   *
+   * Progress is measured against a wall-clock start rather than accumulated
+   * per tick, so a throttled background tab does not desynchronise the bar
+   * from the advance. The ref carries elapsed across a pause without putting
+   * it in the dependency array, which would restart the interval every tick.
+   */
   useEffect(() => {
     if (paused) return;
+    const from = Date.now() - elapsedRef.current;
     const timer = setInterval(() => {
-      setElapsed((current) => {
-        if (current + TICK_MS >= FRAME_MS) {
-          next();
-          return 0;
-        }
-        return current + TICK_MS;
-      });
+      const runFor = Date.now() - from;
+      elapsedRef.current = runFor;
+      if (runFor >= FRAME_MS) next();
+      else setElapsed(runFor);
     }, TICK_MS);
     return () => clearInterval(timer);
-  }, [paused, next]);
+  }, [paused, next, frameIndex, authorIndex]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {

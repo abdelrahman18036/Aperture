@@ -51,7 +51,7 @@ export interface ConversationState {
   /** Everyone else has read up to and including this `seq`. 0 for nobody. */
   seenUpToSeq: number;
   /** Seed the read positions from the inbox payload. */
-  setOthersRead: (positions: Record<string, number>) => void;
+  setOthersRead: (positions: Record<string, number> | undefined) => void;
   loading: boolean;
   send: (body: string) => void;
   retry: (clientId: string) => void;
@@ -230,9 +230,17 @@ export function useConversation(
     [absorb, conversationId, drop, viewerId],
   );
 
-  const seedOthersRead = useCallback((positions: Record<string, number>) => {
-    setOthersRead(new Map(Object.entries(positions)));
-  }, []);
+  const seedOthersRead = useCallback(
+    (positions: Record<string, number> | undefined) => {
+      // Guarded, because `Object.entries(undefined)` throws and took the
+      // whole conversation down with it. A summary can arrive without this
+      // — an older cached response, or a payload shape that changes again —
+      // and a missing read position should mean "nothing seen yet", not a
+      // blank screen with an error boundary behind it.
+      setOthersRead(new Map(Object.entries(positions ?? {})));
+    },
+    [],
+  );
 
   const unsend = useCallback(
     (seq: number) => {
