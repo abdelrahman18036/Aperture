@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
 import { Button, DevelopImage, DialogTrigger, cn } from "@repo/ui";
+import { SendHorizontal } from "lucide-react";
 
 import { LinkCard } from "@/features/links/link-card";
 import { Linkify } from "@/features/links/linkify";
@@ -26,6 +27,18 @@ type StoryViewerRow = Schemas["StoryViewer"];
 function firstUnwatched(entry: TrayEntry | undefined): number {
   return entry?.first_unseen ?? 0;
 }
+
+/**
+ * What the reaction row offers.
+ *
+ * Must match `stories.services.REACTIONS` — the server refuses anything not
+ * on its own list, because the emoji rides through to the author's activity
+ * feed and an unbounded field there is a place to put anything at all.
+ */
+const REACTIONS = ["\u2764\ufe0f", "\ud83d\udd25", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude22", "\ud83d\udc4f"] as const;
+
+/** Narrowed by the generated client, which carries the same list. */
+type Reaction = (typeof REACTIONS)[number];
 
 /** How long one frame holds before it advances itself. */
 const FRAME_MS = 5000;
@@ -78,33 +91,130 @@ export function StoryViewer({
   const [frameIndex, setFrameIndex] = useState(() =>
     firstUnwatched(entries[startAt]),
   );
+  /**
+   * Which frame this author was entered on, and whether the tail has run.
+   *
+   * Starting on the first unseen frame means the frames *before* it never
+   * play — somebody with four stories, two already watched, would show two
+   * and move on. So after the last frame the run wraps to the beginning and
+   * plays up to where it came in, and only then moves to the next person.
+   *
+   * `enteredAt` is 0 for a rewatch, which makes the wrap a no-op: there is
+   * nothing before frame zero to come back for.
+   */
+  const [enteredAt, setEnteredAt] = useState(() => firstUnwatched(entries[startAt]));
+  const [wrapped, setWrapped] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
   /** Elapsed on the current frame, carried across a pause. */
   const elapsedRef = useRef(0);
   const [showViewers, setShowViewers] = useState(false);
   const [viewers, setViewers] = useState<StoryViewerRow[]>([]);
+  /**
+   * What this viewer reacted with, keyed by story id.
+   *
+   * Seeded from the payload — `viewer_reaction` comes down with the tray, so
+   * a frame already reacted to shows it the moment it appears rather than
+   * after a request. Overlaid locally as reactions are sent, so the row is
+   * correct without refetching the tray.
+   */
+  const [reactions, setReactions] = useState<Record<string, string>>({});
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replySent, setReplySent] = useState(false);
 
   const entry = entries[authorIndex];
   const story = entry?.stories[frameIndex];
 
-  /** Advance one frame, then one author, then close. */
+  /** Move to the next author, or close if this was the last one. */
+  const nextAuthor = useCallback(() => {
+    if (authorIndex + 1 >= entries.length) {
+      onClose();
+      return;
+    }
+    const at = firstUnwatched(entries[authorIndex + 1]);
+    setAuthorIndex(authorIndex + 1);
+    // The next person starts at *their* first unseen frame too, and wraps
+    // the same way when it runs out.
+    setFrameIndex(at);
+    setEnteredAt(at);
+    setWrapped(false);
+  }, [authorIndex, entries, onClose]);
+
+  /** Advance one frame, wrapping to the start once, then one author. */
   const next = useCallback(() => {
     setElapsed(0);
     elapsedRef.current = 0;
+    setReplySent(false);
     const frames = entries[authorIndex]?.stories.length ?? 0;
+
+    if (wrapped) {
+      // On the way back through what was already seen. Stop where we came in.
+      if (frameIndex + 1 < enteredAt) {
+        setFrameIndex(frameIndex + 1);
+        return;
+      }
+      nextAuthor();
+      return;
+    }
+
     if (frameIndex + 1 < frames) {
       setFrameIndex(frameIndex + 1);
       return;
     }
-    if (authorIndex + 1 < entries.length) {
-      setAuthorIndex(authorIndex + 1);
-      // The next person starts at *their* first unseen frame too.
-      setFrameIndex(firstUnwatched(entries[authorIndex + 1]));
+    if (enteredAt > 0) {
+      setFrameIndex(0);
+      setWrapped(true);
       return;
     }
-    onClose();
-  }, [authorIndex, entries, frameIndex, onClose]);
+    nextAuthor();
+  }, [authorIndex, enteredAt, entries, frameIndex, nextAuthor, wrapped]);
+
+  /**
+   * React, or take the reaction back by pressing the same one again.
+   *
+   * Optimistic, and reconciled to nothing on failure rather than to a
+   * guess — the endpoint replaces rather than accumulates, so a double press
+   * cannot land somewhere the server disagrees with.
+   */
+  const react = useCallback(
+    (emoji: Reaction) => {
+      if (story === undefined) return;
+      const storyId = story.id;
+      const current = reactions[storyId] ?? story.viewer_reaction;
+      const clearing = current === emoji;
+
+      setReactions((held) => ({ ...held, [storyId]: clearing ? "" : emoji }));
+
+      void (clearing
+        ? api.DELETE("/api/stories/{story_id}/react", {
+            params: { path: { story_id: storyId } },
+          })
+        : api.POST("/api/stories/{story_id}/react", {
+            params: { path: { story_id: storyId } },
+            body: { emoji },
+          }));
+    },
+    [reactions, story],
+  );
+
+  /** Answer a story. It lands in the direct conversation, not anywhere new. */
+  const reply = useCallback(() => {
+    const body = replyDraft.trim();
+    if (story === undefined || body === "") return;
+    setReplyDraft("");
+
+    void api
+      .POST("/api/stories/{story_id}/reply", {
+        params: { path: { story_id: story.id } },
+        body: { client_id: crypto.randomUUID(), body },
+      })
+      .then((response) => {
+        // Said either way. A reply that silently did nothing is the failure
+        // mode worth avoiding, and the one thing that can go wrong here —
+        // being blocked — is not something to explain in a story viewer.
+        setReplySent(response.data !== undefined);
+      });
+  }, [replyDraft, story]);
 
   const previous = useCallback(() => {
     setElapsed(0);
@@ -116,6 +226,10 @@ export function StoryViewer({
     if (authorIndex > 0) {
       const before = authorIndex - 1;
       setAuthorIndex(before);
+      // Going back into someone lands on their last frame, which is past
+      // wherever the forward run entered — so the tail is behind us.
+      setEnteredAt(0);
+      setWrapped(false);
       // Land on their *last* frame: going back should be the reverse of
       // going forward, not a jump to the start of the previous person.
       setFrameIndex(Math.max((entries[before]?.stories.length ?? 1) - 1, 0));
@@ -420,11 +534,89 @@ export function StoryViewer({
       ) : null}
 
       {story.caption ? (
-        <p className="px-4 pb-6 pt-3 text-center text-body text-ink">
+        <p className="px-4 pb-3 pt-3 text-center text-body text-ink">
           <Linkify text={story.caption} />
         </p>
-      ) : (
+      ) : null}
+
+      {/* Answering a story, when it is not your own.
+
+          A row of emoji and one field, on the frame rather than behind a
+          menu: a reaction that takes two taps to reach is a reaction nobody
+          sends. The reply goes into the direct conversation — there is no
+          second inbox for story replies and no second unread count. */}
+      {mine ? (
         <div className="pb-6" />
+      ) : (
+        <div className="flex flex-col gap-2 px-4 pb-6 pt-3">
+          <div className="flex justify-center gap-1">
+            {REACTIONS.map((emoji) => {
+              const chosen =
+                (reactions[story.id] ?? story.viewer_reaction) === emoji;
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => {
+                    react(emoji);
+                  }}
+                  aria-pressed={chosen}
+                  aria-label={`React ${emoji}`}
+                  className={cn(
+                    "grid size-9 place-items-center rounded-full text-title",
+                    "transition-colors duration-[var(--duration-hover)]",
+                    // A ring, not a filled block: accents stay at small
+                    // scale, and a row of filled swatches would spend the
+                    // whole accent budget on six buttons.
+                    chosen ? "ring-1 ring-safelight" : "hover:bg-surface",
+                  )}
+                >
+                  {emoji}
+                </button>
+              );
+            })}
+          </div>
+
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              reply();
+            }}
+          >
+            <input
+              value={replyDraft}
+              onChange={(event) => {
+                setReplyDraft(event.target.value);
+              }}
+              // Typing should not race the frame away underneath you.
+              onFocus={() => {
+                setPaused(true);
+              }}
+              onBlur={() => {
+                setPaused(false);
+              }}
+              placeholder={
+                replySent ? "Sent" : `Reply to ${entry.author.username}`
+              }
+              aria-label={`Reply to ${entry.author.username}`}
+              className={cn(
+                "min-h-9 flex-1 bg-transparent py-2 text-body text-ink",
+                "border-b border-line placeholder:text-ink-faint",
+                "focus-visible:border-safelight",
+              )}
+            />
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon-sm"
+              disabled={replyDraft.trim() === ""}
+              aria-label="Send reply"
+            >
+              <SendHorizontal aria-hidden="true" />
+            </Button>
+          </form>
+        </div>
       )}
     </div>
   );
