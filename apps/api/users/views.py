@@ -148,15 +148,18 @@ class CurrentUserView(APIView):
     @extend_schema(
         operation_id="users_update_me",
         request=UpdateProfileSerializer,
-        responses={200: CurrentUserSerializer, 403: None},
+        responses={200: CurrentUserSerializer, 400: None, 403: None},
         description="Update your own profile.",
     )
     def patch(self, request: Request) -> Response:
         form = UpdateProfileSerializer(data=request.data, partial=True)
         form.is_valid(raise_exception=True)
-        user = services.update_profile(
-            user=current_user(request), **form.validated_data
-        )
+        try:
+            user = services.update_profile(
+                user=current_user(request), **form.validated_data
+            )
+        except services.ProfileRejectedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(CurrentUserSerializer(user).data)
 
     @extend_schema(
@@ -210,7 +213,13 @@ class ProfileView(APIView):
         return Response(
             ProfileSerializer(
                 {
-                    "user": UserSerializer(user).data,
+                    # The instance, not `UserSerializer(user).data`.
+                    # `ProfileSerializer.user` is itself a `UserSerializer`,
+                    # so passing a dict serialises the same user twice — and
+                    # the second pass gets a `ReturnDict`, which has no model
+                    # attributes on it. Harmless while every field was plain,
+                    # a 500 the moment one of them reads `avatar_media`.
+                    "user": user,
                     "post_count": counts[Counter.Metric.POSTS],
                     "follower_count": counts[Counter.Metric.FOLLOWERS],
                     "following_count": counts[Counter.Metric.FOLLOWING],
@@ -284,7 +293,8 @@ class FollowRequestsView(APIView):
         pending = selectors.pending_requests_for(current_user(request))
         payload: list[dict[str, Any]] = [
             {
-                "follower": UserSerializer(edge.follower).data,
+                # The instance, for the same reason as in ProfileView.
+                "follower": edge.follower,
                 "created_at": edge.created_at,
             }
             for edge in pending

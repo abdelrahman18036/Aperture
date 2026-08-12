@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { Avatar, AvatarFallback, Input, cn } from "@repo/ui";
+import { Input, cn } from "@repo/ui";
 
+import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
 
 type Person = Schemas["User"];
@@ -112,9 +113,7 @@ export function Search() {
                 "transition-colors duration-[var(--duration-hover)] hover:bg-surface",
               )}
             >
-              <Avatar className="size-9 shrink-0">
-                <AvatarFallback>{person.username.slice(0, 2)}</AvatarFallback>
-              </Avatar>
+              <UserAvatar user={person} className="size-9 shrink-0" />
               <span className="min-w-0">
                 <span className="block truncate text-label text-ink">
                   {person.username}
@@ -136,6 +135,15 @@ export function Search() {
       {searched && results.length === 0 && (
         <p className="px-4 py-12 text-center font-display text-display-l text-ink-faint">
           Nobody by that name
+        </p>
+      )}
+
+      {/* Before anything is typed the page was a heading, a field and a very
+          large amount of nothing, with no indication that it was waiting
+          rather than broken. */}
+      {term === "" && (
+        <p className="px-4 py-12 text-center meta">
+          type a username or a name
         </p>
       )}
     </div>

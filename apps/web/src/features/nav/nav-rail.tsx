@@ -81,6 +81,15 @@ export function NavRail({ username }: { username: string | null }) {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
+            // The label below is `hidden` under 1280px, and `display: none`
+            // removes it from the accessibility tree as well as the screen —
+            // so seven of these eight links had no accessible name at all,
+            // and a screen reader announced "link" eight times. `aria-label`
+            // is unconditional for that reason. `title` gives a sighted
+            // person the same word on hover, which is the whole difference
+            // between a rail of icons and a rail of guesses.
+            aria-label={label}
+            title={label}
             className={cn(
               "flex h-10 items-center gap-3 rounded-control px-2",
               "text-label transition-colors duration-[var(--duration-hover)]",
@@ -91,7 +100,9 @@ export function NavRail({ username }: { username: string | null }) {
               className={cn("size-5 shrink-0", active && "text-safelight")}
               aria-hidden="true"
             />
-            <span className="hidden xl:inline">{label}</span>
+            <span aria-hidden="true" className="hidden xl:inline">
+              {label}
+            </span>
           </Link>
         );
       })}

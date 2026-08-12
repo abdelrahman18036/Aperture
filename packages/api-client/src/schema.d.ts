@@ -610,6 +610,8 @@ export interface components {
             readonly username: string;
             readonly display_name: string;
             readonly avatar_media_id: string | null;
+            /** Format: uri */
+            readonly avatar_url: string | null;
             readonly bio: string;
             /** @description Private accounts turn follows into requests pending approval. */
             readonly is_private: boolean;
@@ -785,6 +787,7 @@ export interface components {
             display_name?: string;
             bio?: string;
             is_private?: boolean;
+            avatar_media_id?: string | null;
         };
         /** @description A post as the feed and the contact sheet see it. */
         Post: {
@@ -948,6 +951,8 @@ export interface components {
             readonly username: string;
             readonly display_name: string;
             readonly avatar_media_id: string | null;
+            /** Format: uri */
+            readonly avatar_url: string | null;
             readonly bio: string;
             /** @description Private accounts turn follows into requests pending approval. */
             readonly is_private: boolean;
@@ -2053,6 +2058,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CurrentUser"];
                 };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No response body */
             403: {

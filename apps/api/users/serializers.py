@@ -11,10 +11,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from config.fields import SnowflakeField
+from core.media import DERIVATIVE_WIDTHS, derivative_key
+from media.models import Media
+from media.storage import public_url
 from users.models import User
+
+#: The narrowest derivative. An avatar renders at 32-56px on every surface it
+#: appears on, so anything larger is bytes nobody sees.
+AVATAR_WIDTH = DERIVATIVE_WIDTHS[0]
 
 
 class UserSerializer(serializers.ModelSerializer[User]):
@@ -22,6 +30,11 @@ class UserSerializer(serializers.ModelSerializer[User]):
 
     id = SnowflakeField(read_only=True)
     avatar_media_id = SnowflakeField(read_only=True, allow_null=True)
+    #: The id alone was useless to a browser — there was no second request
+    #: that would turn it into a picture, so every avatar in the product was
+    #: a two-letter fallback no matter what was stored. The URL is what a
+    #: client actually needs.
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -32,11 +45,27 @@ class UserSerializer(serializers.ModelSerializer[User]):
             "username",
             "display_name",
             "avatar_media_id",
+            "avatar_url",
             "bio",
             "is_private",
             "created_at",
         )
         read_only_fields: tuple[str, ...] = fields
+
+    @extend_schema_field(serializers.URLField(allow_null=True))
+    def get_avatar_url(self, user: User) -> str | None:
+        """Null until an avatar is set and its derivative exists.
+
+        Reads `avatar_media` off the instance, so every caller must
+        `select_related` it — otherwise this is an N+1 on the feed, which is
+        exactly the thing rule 10 asks to be looked for.
+        """
+        media = user.avatar_media
+        if media is None or media.state != Media.State.READY:
+            return None
+        return public_url(
+            bucket=media.bucket, key=derivative_key(media.pk, AVATAR_WIDTH)
+        )
 
 
 class CurrentUserSerializer(UserSerializer):
@@ -103,6 +132,12 @@ class UpdateProfileSerializer(serializers.Serializer[dict[str, Any]]):
     )
     bio = serializers.CharField(max_length=300, allow_blank=True, required=False)
     is_private = serializers.BooleanField(required=False)
+    #: A snowflake, so a string on the wire — above 2^53 a JSON number
+    #: rounds. Empty string clears the avatar, which is the only way to
+    #: express "remove it" in a PATCH that treats absent as unchanged.
+    avatar_media_id = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
 
 
 class FollowRequestSerializer(serializers.Serializer[dict[str, Any]]):

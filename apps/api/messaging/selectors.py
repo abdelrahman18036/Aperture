@@ -94,7 +94,7 @@ def membership_or_none(
 
 def members_of(conversation: Conversation) -> QuerySet[ConversationMember]:
     return ConversationMember.objects.filter(conversation=conversation).select_related(
-        "user"
+        "user", "user__avatar_media"
     )
 
 
@@ -134,7 +134,7 @@ def messages_after(
         conversation=conversation,
         seq__gt=after_seq,
         deleted_at__isnull=True,
-    ).select_related("sender", "media")
+    ).select_related("sender", "sender__avatar_media", "media")
 
     # Rule 8. Filtered before the slice, or a page could come back short of
     # its limit while more messages waited behind the ones removed.
@@ -153,7 +153,7 @@ def messages_before(
     """Scrollback. The same index, read the other way."""
     history = Message.objects.filter(
         conversation=conversation, deleted_at__isnull=True
-    ).select_related("sender", "media")
+    ).select_related("sender", "sender__avatar_media", "media")
 
     if before_seq is not None:
         history = history.filter(seq__lt=before_seq)

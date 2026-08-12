@@ -1490,6 +1490,9 @@
                         },
                         "description": ""
                     },
+                    "400": {
+                        "description": "No response body"
+                    },
                     "403": {
                         "description": "No response body"
                     }
@@ -2086,6 +2089,14 @@
                         ],
                         "readOnly": true
                     },
+                    "avatar_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "readOnly": true
+                    },
                     "bio": {
                         "type": "string",
                         "readOnly": true
@@ -2108,6 +2119,7 @@
                 },
                 "required": [
                     "avatar_media_id",
+                    "avatar_url",
                     "bio",
                     "created_at",
                     "display_name",
@@ -2620,6 +2632,12 @@
                     },
                     "is_private": {
                         "type": "boolean"
+                    },
+                    "avatar_media_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -3069,6 +3087,14 @@
                         ],
                         "readOnly": true
                     },
+                    "avatar_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "readOnly": true
+                    },
                     "bio": {
                         "type": "string",
                         "readOnly": true
@@ -3086,6 +3112,7 @@
                 },
                 "required": [
                     "avatar_media_id",
+                    "avatar_url",
                     "bio",
                     "created_at",
                     "display_name",

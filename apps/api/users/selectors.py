@@ -90,8 +90,16 @@ def is_blocked_between(viewer: User | None, other: User) -> bool:
 
 
 def live() -> QuerySet[User]:
-    """Accounts that still exist. A deleted account is gone from every read."""
-    return User.objects.filter(deleted_at__isnull=True, is_active=True)
+    """Accounts that still exist. A deleted account is gone from every read.
+
+    `avatar_media` is joined here rather than at each call site because
+    `UserSerializer` reads it for every user it renders — a search returning
+    twenty accounts would otherwise be twenty extra queries, which is the
+    N+1 rule 10 asks to be looked for rather than assumed absent.
+    """
+    return User.objects.filter(deleted_at__isnull=True, is_active=True).select_related(
+        "avatar_media"
+    )
 
 
 def by_username(username: str) -> User | None:
@@ -171,7 +179,7 @@ def pending_requests_for(user: User, *, limit: int = 50) -> QuerySet[Follow]:
     """
     return (
         Follow.objects.filter(followee=user, status=Follow.Status.PENDING)
-        .select_related("follower")
+        .select_related("follower", "follower__avatar_media")
         .order_by("-id")[:limit]
     )
 

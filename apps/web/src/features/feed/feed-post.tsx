@@ -5,9 +5,6 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 
 import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
   Button,
   DevelopImage,
   DevelopVideo,
@@ -15,6 +12,7 @@ import {
 } from "@repo/ui";
 
 import { ReportDialog } from "@/features/moderation/report-dialog";
+import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
 
 import { LikeButton } from "./like-button";
@@ -168,14 +166,7 @@ export function FeedPost({ post }: { post: Post }) {
     <article className="flex flex-col gap-3 border-b border-line py-6">
       <header className="flex items-center gap-3">
         <Link href={`/u/${post.author.username}`} aria-label={post.author.username}>
-          <Avatar>
-            {post.author.avatar_media_id ? (
-              <AvatarImage src="" alt="" />
-            ) : null}
-            <AvatarFallback>
-              {post.author.username.slice(0, 2)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar user={post.author} />
         </Link>
 
         <div className="flex min-w-0 flex-col">

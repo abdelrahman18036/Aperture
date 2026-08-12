@@ -126,6 +126,10 @@ def conversation_payload(
         "id": str(conversation.pk),
         "kind": conversation.kind,
         "title": conversation.title,
+        # `.data` here, unlike in `users.views`, because this payload is
+        # returned raw rather than passed through `ConversationSerializer` —
+        # the serializer names the response shape for drf-spectacular and
+        # never runs. Handing instances out would fail JSON encoding.
         "members": UserSerializer(members, many=True).data,
         "last_message_seq": conversation.last_message_seq,
         "last_read_seq": member.last_read_seq,

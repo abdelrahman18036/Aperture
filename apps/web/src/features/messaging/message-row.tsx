@@ -2,9 +2,10 @@
 
 import { Flag, Trash2 } from "lucide-react";
 
-import { Avatar, AvatarFallback, Button, DialogTrigger, cn } from "@repo/ui";
+import { Button, DialogTrigger, cn } from "@repo/ui";
 
 import { ReportDialog } from "@/features/moderation/report-dialog";
+import { UserAvatar } from "@/features/profile/user-avatar";
 
 import type { Message } from "./use-conversation";
 import type { PendingMessage } from "./use-conversation";
@@ -53,11 +54,7 @@ export function MessageRow({
       )}
     >
       {showSender && !mine ? (
-        <Avatar className="size-7 shrink-0">
-          <AvatarFallback>
-            {message.sender.username.slice(0, 2)}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar user={message.sender} className="size-7 shrink-0" />
       ) : (
         // Holds the gutter so consecutive messages line up rather than
         // jumping left when the avatar is omitted.

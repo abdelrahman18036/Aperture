@@ -1,6 +1,7 @@
 "use client";
 
-import { Phone, SendHorizontal } from "lucide-react";
+import { ChevronLeft, Phone, SendHorizontal } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button, cn } from "@repo/ui";
@@ -86,7 +87,19 @@ export function Conversation({
       aria-label={`Conversation with ${title}`}
     >
       <header className="flex items-center justify-between border-b border-line px-4 py-3">
-        <h1 className="text-title text-ink">{title}</h1>
+        <div className="flex min-w-0 items-center gap-2">
+          {/* There was no way out of a thread except the browser's back
+              button, and on mobile the rail is a bottom bar that does not
+              include a way back to the inbox either. */}
+          <Link
+            href="/messages"
+            aria-label="Back to messages"
+            className="-ml-1 flex size-8 shrink-0 items-center justify-center rounded-control text-ink-dim hover:text-ink sm:hidden"
+          >
+            <ChevronLeft className="size-5" aria-hidden="true" />
+          </Link>
+          <h1 className="truncate text-title text-ink">{title}</h1>
+        </div>
         <div className="flex items-center gap-4">
           <ConnectionPip state={connection} />
           <Button

@@ -4,15 +4,10 @@ import { Flag } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  Avatar,
-  AvatarFallback,
-  Button,
-  DialogTrigger,
-  Skeleton,
-} from "@repo/ui";
+import { Button, DialogTrigger, Skeleton } from "@repo/ui";
 
 import { ReportDialog } from "@/features/moderation/report-dialog";
+import { UserAvatar } from "@/features/profile/user-avatar";
 
 import type { Post } from "@/features/feed/use-feed";
 import { api } from "@/lib/api";
@@ -160,9 +155,7 @@ export function ProfileScreen({ username }: { username: string }) {
     <div className="flex flex-col gap-10 py-10">
       <header className="flex flex-col gap-5">
         <div className="flex items-center gap-6">
-          <Avatar size="lg">
-            <AvatarFallback>{profile.user.username.slice(0, 2)}</AvatarFallback>
-          </Avatar>
+          <UserAvatar user={profile.user} className="size-14" />
 
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="font-display text-display-l text-ink">

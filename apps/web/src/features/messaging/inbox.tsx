@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { Avatar, AvatarFallback, cn } from "@repo/ui";
+import { cn } from "@repo/ui";
 
+import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
 
 import {
@@ -84,11 +85,10 @@ export function Inbox({ activeId }: { activeId?: string }) {
                 active ? "bg-surface" : "hover:bg-surface",
               )}
             >
-              <Avatar className="size-9 shrink-0">
-                <AvatarFallback>
-                  {(other?.username ?? title(conversation)).slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                user={other ?? { username: title(conversation) }}
+                className="size-9 shrink-0"
+              />
 
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-label text-ink">

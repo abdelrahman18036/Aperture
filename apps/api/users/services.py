@@ -20,6 +20,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
 from counters.models import Counter
 from counters.tasks import adjust
+from media.models import Media
 from users.models import Block, Follow, User
 
 
@@ -33,6 +34,10 @@ class AuthenticationFailedError(Exception):
 
 class NotAllowedError(Exception):
     """A relationship change the caller is not entitled to make."""
+
+
+class ProfileRejectedError(Exception):
+    """The profile change cannot be applied. Safe to show a user."""
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +306,14 @@ def update_profile(
     display_name: str | None = None,
     bio: str | None = None,
     is_private: bool | None = None,
+    avatar_media_id: str | None = None,
 ) -> User:
+    """Change a profile. `None` means "not mentioned", not "clear it".
+
+    `avatar_media_id=""` is how clearing is expressed, because a PATCH that
+    omits a field must leave it alone and there is no other way to say
+    "remove".
+    """
     fields: list[str] = []
     if display_name is not None:
         user.display_name = display_name
@@ -312,6 +324,10 @@ def update_profile(
     if is_private is not None:
         user.is_private = is_private
         fields.append("is_private")
+
+    if avatar_media_id is not None:
+        user.avatar_media = _own_ready_media(user, avatar_media_id)
+        fields.append("avatar_media")
 
     if fields:
         user.save(update_fields=fields)
@@ -405,3 +421,30 @@ def reset_password(*, uid: str, token: str, password: str) -> User:
     user.set_password(password)
     user.save(update_fields=["password"])
     return user
+
+
+def _own_ready_media(user: User, media_id: str) -> Media | None:
+    """Resolve an avatar id to a media row, or `None` to clear it.
+
+    **Both checks matter and neither is optional.** Without the ownership
+    check anyone could wear someone else's photograph as an avatar by
+    guessing an id, which is impersonation with no upload involved. Without
+    the `ready` check the avatar would point at a derivative the worker has
+    not written yet, and every surface would render a broken image.
+    """
+    if media_id == "":
+        return None
+
+    try:
+        pk = int(media_id)
+    except ValueError:
+        raise ProfileRejectedError("That is not a media id.") from None
+
+    media = Media.objects.filter(
+        pk=pk, owner=user, state=Media.State.READY, deleted_at__isnull=True
+    ).first()
+    if media is None:
+        raise ProfileRejectedError("That image is not yours, or is not ready.")
+    if media.kind != Media.Kind.IMAGE:
+        raise ProfileRejectedError("An avatar has to be a photograph.")
+    return media

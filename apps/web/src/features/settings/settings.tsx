@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Avatar, AvatarFallback, Button, Input, Skeleton } from "@repo/ui";
+import { Button, Input, Skeleton } from "@repo/ui";
 
+import { UserAvatar } from "@/features/profile/user-avatar";
+import { useAvatarUpload } from "./use-avatar-upload";
 import { api } from "@/lib/api";
 
 /**
@@ -26,6 +28,7 @@ interface CurrentUser {
   display_name: string;
   bio: string;
   is_private: boolean;
+  avatar_url: string | null;
 }
 
 /** Matches `users.selectors.pending_requests_for`'s own limit. */
@@ -65,6 +68,10 @@ export function SettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInput = useRef<HTMLInputElement | null>(null);
+  const { uploadAvatar } = useAvatarUpload();
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +131,44 @@ export function SettingsScreen() {
     }
   }, []);
 
+  const setAvatar = useCallback(async (mediaId: string) => {
+    const response = await api.PATCH("/api/users/me", {
+      body: { avatar_media_id: mediaId },
+    });
+    if (response.data === undefined) {
+      const detail = (response.error as { detail?: string } | undefined)?.detail;
+      setAvatarError(detail ?? "That did not save.");
+      return;
+    }
+    setMe(response.data as CurrentUser);
+    setAvatarError(null);
+  }, []);
+
+  const clearAvatar = useCallback(async () => {
+    // An empty string, not an omitted field: PATCH treats absent as
+    // unchanged, so there would otherwise be no way to say "remove it".
+    await setAvatar("");
+  }, [setAvatar]);
+
+  const pickAvatar = useCallback(
+    async (file: File) => {
+      setAvatarBusy(true);
+      setAvatarError(null);
+
+      const media = await uploadAvatar(file);
+      if (media === null) {
+        setAvatarBusy(false);
+        setAvatarError(
+          "That image could not be processed. Try a different one.",
+        );
+        return;
+      }
+      await setAvatar(media.id);
+      setAvatarBusy(false);
+    },
+    [setAvatar, uploadAvatar],
+  );
+
   const signOut = useCallback(async () => {
     await api.DELETE("/api/users/session");
     router.push("/login");
@@ -151,6 +196,61 @@ export function SettingsScreen() {
         <h1 className="font-display text-display-l text-ink">Settings</h1>
         <p className="meta">signed in as {me.username}</p>
       </header>
+
+      <Section
+        title="Avatar"
+        note="a square photograph — everything else is cropped to it"
+      >
+        <div className="flex items-center gap-5">
+          <UserAvatar user={me} className="size-14" />
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                disabled={avatarBusy}
+                onClick={() => {
+                  avatarInput.current?.click();
+                }}
+              >
+                {avatarBusy ? "Uploading…" : "Choose a photograph"}
+              </Button>
+              {me.avatar_url !== null ? (
+                <Button
+                  variant="ghost"
+                  disabled={avatarBusy}
+                  onClick={() => {
+                    void clearAvatar();
+                  }}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+            {avatarError !== null ? (
+              <p className="text-body text-danger" role="alert">
+                {avatarError}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Hidden, and driven by the button beside it: a bare file input
+              cannot be styled and looks like nothing else in the product. */}
+          <input
+            ref={avatarInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              // Cleared so choosing the same file twice fires again — a
+              // retry after a failure would otherwise do nothing.
+              event.target.value = "";
+              if (file) void pickAvatar(file);
+            }}
+          />
+        </div>
+      </Section>
 
       <Section title="Profile" note="what people see on your page">
         <form
@@ -227,11 +327,7 @@ export function SettingsScreen() {
               key={request.follower.username}
               className="flex items-center gap-4 border-b border-line py-3 last:border-b-0"
             >
-              <Avatar>
-                <AvatarFallback>
-                  {request.follower.username.slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar user={request.follower} />
               <div className="flex min-w-0 flex-col">
                 <span className="text-body text-ink">
                   {request.follower.username}

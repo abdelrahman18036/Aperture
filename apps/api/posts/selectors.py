@@ -50,7 +50,7 @@ def _with_media(queryset: QuerySet[Post]) -> QuerySet[Post]:
     hides that from you, which is exactly why rule 10 says to read the SQL it
     generates.
     """
-    return queryset.select_related("author").prefetch_related(
+    return queryset.select_related("author", "author__avatar_media").prefetch_related(
         Prefetch(
             "attachments",
             queryset=PostMedia.objects.select_related("media").order_by("position"),
@@ -250,7 +250,7 @@ def comments_for(
         deleted_at__isnull=True,
         author__deleted_at__isnull=True,
         author__is_active=True,
-    ).select_related("author")
+    ).select_related("author", "author__avatar_media")
 
     comments = exclude_blocked(comments, viewer, author_field="author_id")
 
@@ -268,7 +268,7 @@ def replies_to(
         deleted_at__isnull=True,
         author__deleted_at__isnull=True,
         author__is_active=True,
-    ).select_related("author")
+    ).select_related("author", "author__avatar_media")
     replies = exclude_blocked(replies, viewer, author_field="author_id")
     return replies.order_by("id")[: min(limit, MAX_PAGE_SIZE)]
 

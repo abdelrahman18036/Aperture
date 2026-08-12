@@ -1,13 +1,12 @@
 "use client";
 
-import { Flag, Trash2 } from "lucide-react";
+import { ChevronLeft, Flag, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
 import {
-  Avatar,
-  AvatarFallback,
   Button,
   DialogTrigger,
   Skeleton,
@@ -16,6 +15,7 @@ import {
 
 import { FeedPost } from "@/features/feed/feed-post";
 import { ReportDialog } from "@/features/moderation/report-dialog";
+import { UserAvatar } from "@/features/profile/user-avatar";
 import { useRealtimeApi } from "@/features/realtime/provider";
 import { api } from "@/lib/api";
 
@@ -46,6 +46,7 @@ export function PostDetail({ postId }: { postId: string }) {
   // is null until `connection.ready` arrives, which only means the delete
   // control appears a moment later rather than never.
   const { viewerId } = useRealtimeApi();
+  const router = useRouter();
 
   useEffect(() => {
     void api
@@ -160,6 +161,20 @@ export function PostDetail({ postId }: { postId: string }) {
 
   return (
     <article className="py-6">
+      {/* A post reached from the feed, a profile or a copied link had no way
+          back inside the page — only the browser's own button, which is not
+          there at all when the link was opened fresh. */}
+      <button
+        type="button"
+        onClick={() => {
+          router.back();
+        }}
+        className="mb-2 flex items-center gap-1 px-4 meta text-ink-dim hover:text-ink"
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
+        back
+      </button>
+
       <FeedPost post={post} />
 
       <section aria-label="Comments" className="px-4 pt-6">
@@ -172,11 +187,7 @@ export function PostDetail({ postId }: { postId: string }) {
         <ul className="mt-3 flex flex-col gap-3">
           {comments.map((comment) => (
             <li key={comment.id} className="group flex gap-3">
-              <Avatar className="size-7 shrink-0">
-                <AvatarFallback>
-                  {comment.author.username.slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar user={comment.author} className="size-7 shrink-0" />
               <div className="min-w-0">
                 <Link
                   href={`/u/${comment.author.username}`}
