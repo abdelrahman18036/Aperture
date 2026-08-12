@@ -29,6 +29,8 @@ from users.serializers import (
     FollowRequestSerializer,
     FollowStateSerializer,
     LoginSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     ProfileSerializer,
     RegisterSerializer,
     RespondToRequestSerializer,
@@ -386,3 +388,61 @@ class SearchView(APIView):
             viewer=current_user(request), query=request.query_params.get("q", "")
         )
         return Response({"users": UserSerializer(matches, many=True).data})
+
+
+class PasswordResetView(APIView):
+    """`POST /api/users/password/reset` — ask for a link.
+
+    **Always 204.** Answering 404 for an unknown address would make this an
+    account-enumeration endpoint that needs no credentials at all, which is
+    strictly worse than the sign-in oracle `start_session` avoids.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [make_throttle("password_reset")]
+
+    @extend_schema(
+        operation_id="users_password_reset",
+        request=PasswordResetRequestSerializer,
+        responses={204: None, 400: None, 429: None},
+        description=(
+            "Mail a password reset link. Answers 204 whether or not the "
+            "address is known."
+        ),
+    )
+    def post(self, request: Request) -> Response:
+        form = PasswordResetRequestSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        services.request_password_reset(email=form.validated_data["email"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordResetConfirmView(APIView):
+    """`POST /api/users/password/reset/confirm` — set the new password.
+
+    Does not sign the account in afterwards. The reset has just invalidated
+    every session the account had, and quietly opening a new one here would
+    undo that for whoever happens to be holding the link.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [make_throttle("password_reset")]
+
+    @extend_schema(
+        operation_id="users_password_reset_confirm",
+        request=PasswordResetConfirmSerializer,
+        responses={204: None, 400: None, 429: None},
+        description="Complete a password reset and sign every session out.",
+    )
+    def post(self, request: Request) -> Response:
+        form = PasswordResetConfirmSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        try:
+            services.reset_password(
+                uid=form.validated_data["uid"],
+                token=form.validated_data["token"],
+                password=form.validated_data["password"],
+            )
+        except services.PasswordResetRejectedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)

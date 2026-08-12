@@ -7,11 +7,16 @@ commits, never inside it -- see `01-ARCHITECTURE.md` §8.
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
 from counters.models import Counter
 from counters.tasks import adjust
@@ -310,4 +315,93 @@ def update_profile(
 
     if fields:
         user.save(update_fields=fields)
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Password reset
+# ---------------------------------------------------------------------------
+#
+# Django's own `PasswordResetTokenGenerator` rather than a token table, and
+# that is worth stating because it looks like a missing model. The token is an
+# HMAC over the user's id, their current password hash, their `last_login` and
+# a timestamp — so it needs no storage, expires on its own via
+# `PASSWORD_RESET_TIMEOUT`, and is invalidated the moment it is used, because
+# using it changes the password hash it was derived from. A stolen link
+# forwarded to a friend stops working as soon as either of them completes the
+# reset. A table would give us all of that plus rows to clean up.
+
+
+class PasswordResetRejectedError(Exception):
+    """The link is wrong, used, or expired. Safe to show a user."""
+
+
+def request_password_reset(*, email: str) -> None:
+    """Mail a reset link, if the address belongs to a live account.
+
+    **Returns nothing, and says nothing, either way.** The view answers 204
+    whether or not the address is known — anything else turns this into the
+    account-enumeration oracle that `start_session` is careful not to be, and
+    an unauthenticated one at that.
+
+    Sent inline rather than through Celery on purpose: the console backend in
+    development would otherwise print into the worker's terminal instead of
+    the one being watched, and the SMTP call is a few hundred milliseconds on
+    an endpoint that is rate-limited to three requests anyway.
+    """
+    user = User.objects.filter(
+        email=User.objects.normalize_email(email.strip()),
+        is_active=True,
+        deleted_at__isnull=True,
+    ).first()
+    if user is None:
+        return
+
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    link = f"{settings.FRONTEND_URL}/reset/{uid}/{token}"
+
+    hours = round(settings.PASSWORD_RESET_TIMEOUT / 3600)
+    mail.send_mail(
+        subject="Reset your Aperture password",
+        message=(
+            f"Someone asked to reset the password for {user.username}.\n\n"
+            f"{link}\n\n"
+            f"The link works once and expires in {hours} hours. If this was "
+            f"not you, nothing has changed and you can ignore this mail.\n"
+        ),
+        from_email=None,
+        recipient_list=[user.email],
+    )
+
+
+def reset_password(*, uid: str, token: str, password: str) -> User:
+    """Complete a reset, and end every session the account had open.
+
+    Signing the other sessions out is the point of a reset as often as not:
+    someone resetting a password because it leaked is trying to evict whoever
+    has it. Django ties this to `AuthenticationMiddleware`'s session-hash
+    check — rotating the password changes the hash, and every session carrying
+    the old one fails its next request.
+    """
+    try:
+        pk = int(force_str(urlsafe_base64_decode(uid)))
+    except (ValueError, TypeError, DjangoValidationError):
+        raise PasswordResetRejectedError("This reset link is not valid.") from None
+
+    user = User.objects.filter(pk=pk, is_active=True, deleted_at__isnull=True).first()
+    # Identical message for an unknown user and a bad token, again so this is
+    # not an oracle: "no such account" would confirm an address by absence.
+    if user is None or not default_token_generator.check_token(user, token):
+        raise PasswordResetRejectedError(
+            "This reset link has expired or has already been used."
+        )
+
+    try:
+        validate_password(password, user)
+    except DjangoValidationError as exc:
+        raise PasswordResetRejectedError(" ".join(exc.messages)) from exc
+
+    user.set_password(password)
+    user.save(update_fields=["password"])
     return user

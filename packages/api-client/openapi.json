@@ -1516,6 +1516,98 @@
                 }
             }
         },
+        "/api/users/password/reset": {
+            "post": {
+                "operationId": "users_password_reset",
+                "description": "Mail a password reset link. Answers 204 whether or not the address is known.",
+                "tags": [
+                    "users"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "429": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/password/reset/confirm": {
+            "post": {
+                "operationId": "users_password_reset_confirm",
+                "description": "Complete a password reset and sign every session out.",
+                "tags": [
+                    "users"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetConfirmRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetConfirmRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetConfirmRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "429": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/users/register": {
             "post": {
                 "operationId": "users_register",
@@ -2466,6 +2558,44 @@
                 ],
                 "type": "string",
                 "description": "* `p2p` - p2p\n* `sfu` - sfu"
+            },
+            "PasswordResetConfirmRequest": {
+                "type": "object",
+                "description": "Complete a reset.\n\n`uid` and `token` come straight back out of the link, so they are opaque\nstrings here — validating their shape would only move the same rejection\nearlier and give a probe a way to tell malformed from wrong.",
+                "properties": {
+                    "uid": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "token": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "password",
+                    "token",
+                    "uid"
+                ]
+            },
+            "PasswordResetRequestRequest": {
+                "type": "object",
+                "description": "Ask for a link. An address, and nothing else.",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "email"
+                ]
             },
             "PatchedAltTextRequest": {
                 "type": "object",

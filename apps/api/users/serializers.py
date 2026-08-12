@@ -126,3 +126,22 @@ class FollowStateSerializer(serializers.Serializer[dict[str, Any]]):
     follow_state = serializers.ChoiceField(
         choices=["none", "pending", "accepted"], read_only=True
     )
+
+
+class PasswordResetRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    """Ask for a link. An address, and nothing else."""
+
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer[dict[str, Any]]):
+    """Complete a reset.
+
+    `uid` and `token` come straight back out of the link, so they are opaque
+    strings here — validating their shape would only move the same rejection
+    earlier and give a probe a way to tell malformed from wrong.
+    """
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True)

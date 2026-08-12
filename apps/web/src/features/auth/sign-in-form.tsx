@@ -95,6 +95,14 @@ export function SignInForm() {
         </Button>
       </div>
       <p className="text-body text-ink-dim">
+        <Link
+          href="/reset"
+          className="text-safelight underline underline-offset-4"
+        >
+          Forgot your password?
+        </Link>
+      </p>
+      <p className="text-body text-ink-dim">
         No account yet?{" "}
         <Link
           href="/signup"

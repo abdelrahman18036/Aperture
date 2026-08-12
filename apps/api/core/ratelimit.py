@@ -139,4 +139,10 @@ LIMITS: Final[dict[str, Bucket]] = {
     # It is also the most expensive request in the product — a LiveKit token,
     # TURN credentials and a fanout publish, none of which are cached.
     "call": Bucket(capacity=5, refill_per_second=1 / 30),
+    # Asking for a password reset. Also paid for by somebody else — every
+    # request sends mail to an address the requester merely typed — so three
+    # back to back and one a minute after that. Enough for someone whose mail
+    # is slow to arrive, far too little to use this endpoint as a way to
+    # bombard an inbox.
+    "password_reset": Bucket(capacity=3, refill_per_second=1 / 60),
 }

@@ -440,6 +440,40 @@ export interface paths {
         patch: operations["users_update_me"];
         trace?: never;
     };
+    "/api/users/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mail a password reset link. Answers 204 whether or not the address is known. */
+        post: operations["users_password_reset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/password/reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Complete a password reset and sign every session out. */
+        post: operations["users_password_reset_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/register": {
         parameters: {
             query?: never;
@@ -726,6 +760,23 @@ export interface components {
          * @enum {string}
          */
         ModeEnum: "p2p" | "sfu";
+        /**
+         * @description Complete a reset.
+         *
+         *     `uid` and `token` come straight back out of the link, so they are opaque
+         *     strings here — validating their shape would only move the same rejection
+         *     earlier and give a probe a way to tell malformed from wrong.
+         */
+        PasswordResetConfirmRequest: {
+            uid: string;
+            token: string;
+            password: string;
+        };
+        /** @description Ask for a link. An address, and nothing else. */
+        PasswordResetRequestRequest: {
+            /** Format: email */
+            email: string;
+        };
         /** @description Alt text may be empty, but the field is always present. */
         PatchedAltTextRequest: {
             alt_text?: string;
@@ -2004,6 +2055,82 @@ export interface operations {
             };
             /** @description No response body */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_password_reset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequestRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["PasswordResetRequestRequest"];
+                "multipart/form-data": components["schemas"]["PasswordResetRequestRequest"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_password_reset_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetConfirmRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["PasswordResetConfirmRequest"];
+                "multipart/form-data": components["schemas"]["PasswordResetConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

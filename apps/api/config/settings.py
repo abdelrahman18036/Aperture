@@ -459,6 +459,18 @@ MAILERS = {
     },
 }
 
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@aperture.local")
+
+#: Where a link in an email should point. Django never serves the browser
+#: here — Next.js does — so this cannot be derived from the request, and
+#: deriving it from the `Host` header would let anyone who can reach the API
+#: choose the domain a reset link points at.
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+#: Two hours. Django's default is three days, which is a long time for a
+#: single email to be a working credential for an account.
+PASSWORD_RESET_TIMEOUT = int(os.environ.get("PASSWORD_RESET_TIMEOUT", 60 * 60 * 2))
+
 # ---------------------------------------------------------------------------
 # Internationalisation and static files
 # ---------------------------------------------------------------------------

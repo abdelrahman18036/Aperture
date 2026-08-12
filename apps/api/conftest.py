@@ -86,3 +86,34 @@ def _no_real_tasks(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
     monkeypatch.setattr(tasks.process_media, "delay", lambda *a, **k: None)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits() -> Iterator[None]:
+    """Start every test with empty buckets.
+
+    Rate-limit state lives in Redis, outside the transaction pytest-django
+    rolls back, so without this it leaks from one test into the next. It only
+    became visible with the reset limit — three requests, where the other
+    buckets hold thirty — but it was always there, and the shape of the bug is
+    a test that passes alone and 429s in a full run.
+
+    Fails open the same way the limiter does: no Redis means no state to
+    clear, and a test suite that cannot run without it would be worse than one
+    that occasionally shares a bucket.
+    """
+    import redis as redis_lib
+
+    from moderation.ratelimit import _client
+
+    def clear() -> None:
+        try:
+            client = _client()
+            keys = list(client.scan_iter("ratelimit:*"))
+            if keys:
+                client.delete(*keys)
+        except redis_lib.RedisError:
+            pass
+
+    clear()
+    yield
