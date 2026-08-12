@@ -507,3 +507,72 @@ LOGGING = {
         "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Production posture
+# ---------------------------------------------------------------------------
+#
+# One switch. `DJANGO_DEBUG=0` is what "this is not a laptop" means here, and
+# everything below follows from it rather than from a second settings module —
+# a `settings/production.py` that drifts from `settings/base.py` is the
+# classic way a security setting ends up applied in only one of them.
+
+#: Behind a load balancer that terminates TLS, Django sees plain HTTP and
+#: would redirect forever. This header is how it learns otherwise, and it is
+#: only safe because the proxy sets it — never trust it on a directly exposed
+#: server.
+if env_bool("DJANGO_BEHIND_TLS_PROXY", not DEBUG):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
+
+#: A year, with subdomains, preload-eligible. HSTS is close to irreversible —
+#: a browser that has seen this header refuses plain HTTP for the full year —
+#: so it starts at zero and is opted into by the deployment that is genuinely
+#: HTTPS-only.
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+
+SECURE_REFERRER_POLICY = "same-origin"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+
+#: Every development default that would be a vulnerability in production, and
+#: the variable that replaces it.
+_DEV_DEFAULTS: dict[str, str] = {
+    "DJANGO_SECRET_KEY": SECRET_KEY,
+    "REALTIME_TICKET_SECRET": REALTIME_TICKET_SECRET,
+    "TURN_STATIC_AUTH_SECRET": TURN_STATIC_AUTH_SECRET,
+    "LIVEKIT_API_SECRET": LIVEKIT_API_SECRET,
+}
+
+if not DEBUG:
+    from django.core.exceptions import ImproperlyConfigured
+
+    # Refusing to boot, rather than warning. A signing key that is public on
+    # GitHub is not a degraded mode: anyone can mint a session, a realtime
+    # ticket or a TURN credential. The failure has to be loud and at startup,
+    # because the alternative is a service that looks completely healthy.
+    leaked = sorted(
+        name
+        for name, value in _DEV_DEFAULTS.items()
+        if "dev-only-insecure" in value or value.startswith("devsecret")
+    )
+    if leaked:
+        raise ImproperlyConfigured(
+            "DJANGO_DEBUG is off but these still hold their development "
+            f"defaults: {', '.join(leaked)}. Set them in the environment."
+        )
+
+    if ALLOWED_HOSTS == ["localhost", "127.0.0.1", "[::1]"]:
+        raise ImproperlyConfigured(
+            "DJANGO_ALLOWED_HOSTS must name the real hostnames in production."
+        )
+
+    if "console.EmailBackend" in MAILERS["default"]["BACKEND"]:
+        raise ImproperlyConfigured(
+            "EMAIL_BACKEND is the console backend. Password reset would "
+            "silently send nothing."
+        )

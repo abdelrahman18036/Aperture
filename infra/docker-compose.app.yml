@@ -1,0 +1,137 @@
+# The three deployables, containerised.
+#
+# `docker-compose.yml` is the *backing services* — Postgres, Redis, MinIO,
+# Typesense, and the two behind the `calls` profile. This file is the code:
+# Django, the Celery worker and beat, the socket gateway, and Next.js. They
+# are separate files because they are used at different times. Day to day you
+# run the backing services in Docker and the three processes on the host with
+# hot reload, which is faster and debuggable. This file is for the other
+# case — checking that what actually deploys works.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.app.yml up --build
+#
+# Run from `infra/`. The build context is `..` for all four images, because
+# every one of them needs something outside its own directory: the Python
+# lockfile lives beside the Django app, and both Node images depend on
+# workspace packages.
+#
+# **This is not a production deployment.** It runs with `DJANGO_DEBUG=1` and
+# development secrets, because otherwise the settings module refuses to boot —
+# which is the intended behaviour, not an obstacle to work around here. A real
+# deployment supplies real values for everything in the `x-django-env` block
+# and turns DEBUG off; `apps/api/config/settings.py` lists exactly what that
+# means and fails loudly if any of it is missed.
+
+name: aperture
+
+# Anchored once. Django and Celery load the same settings module and must
+# therefore see the same environment — the classic version of this bug is a
+# worker holding a different `SECRET_KEY` from the API, which fails only on
+# the paths that sign something.
+x-django-env: &django-env
+  DATABASE_URL: postgres://app:devpassword@postgres:5432/aperture
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  # Two addresses for one bucket, and they genuinely differ. Django reaches
+  # MinIO across the compose network; the URLs it hands the browser have to
+  # work from outside it. Setting only the first is the bug this file was
+  # written with — the health check went `degraded` with "Could not connect
+  # to http://localhost:9000/media", because inside a container that is the
+  # container itself.
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_PUBLIC_BASE_URL: http://localhost:9000
+  DJANGO_DEBUG: "1"
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,api,[::1]
+  DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+  FRONTEND_URL: http://localhost:3000
+  REALTIME_URL: ws://localhost:4000/ws
+  REALTIME_TICKET_SECRET: dev-only-insecure-ticket-secret-0123456789abcdef
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment: *django-env
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    healthcheck:
+      # The same check the README curls, and it exercises all three
+      # dependencies rather than merely proving a socket is open.
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      start_period: 20s
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment: *django-env
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    # Runs once and exits. `restart` is deliberately absent — a migration
+    # container that restarts on exit 0 is an infinite loop.
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment: *django-env
+    # No `--pool=solo` here. That flag is a Windows workaround; inside Linux
+    # the default prefork pool is the right one and is what production runs.
+    command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+    depends_on:
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+
+  beat:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment: *django-env
+    # The scheduler for the hard delete and the upload reaper. Exactly one of
+    # these, ever: two beats means every scheduled task runs twice.
+    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
+    depends_on:
+      redis: {condition: service_healthy}
+
+  realtime:
+    build:
+      context: ..
+      dockerfile: apps/realtime/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Redis and the shared ticket secret. **No DATABASE_URL**, and its
+      # absence is the point — this process never touches Postgres.
+      REDIS_URL: redis://redis:6379/0
+      REALTIME_TICKET_SECRET: dev-only-insecure-ticket-secret-0123456789abcdef
+      PORT: "4000"
+    ports: ["4000:4000"]
+    depends_on:
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      start_period: 10s
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      # A build argument, because Next bakes `rewrites()` into the routes
+      # manifest — an `environment:` entry here would be read by nothing and
+      # every `/api/*` request would 500. The Dockerfile already defaults to
+      # this value; it is repeated for the same reason the comment exists.
+      args:
+        API_ORIGIN: http://api:8000
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    depends_on:
+      api: {condition: service_healthy}

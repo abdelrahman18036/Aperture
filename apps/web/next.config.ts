@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { NextConfig } from "next";
 
 /**
@@ -14,6 +16,22 @@ const API_ORIGIN = process.env.API_ORIGIN ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+
+  /**
+   * Traces the server bundle down to the files it actually imports, so the
+   * image is the app rather than the whole workspace. It matters more here
+   * than in a single-package repo: without it a Next image in a pnpm monorepo
+   * carries every package's `node_modules`, symlinks included.
+   */
+  output: "standalone",
+
+  /**
+   * The workspace root, not `apps/web`. Next infers the root from the nearest
+   * lockfile and would otherwise trace only this app's own tree, leaving the
+   * `@repo/*` packages out of the standalone output — which fails at runtime
+   * rather than at build time.
+   */
+  outputFileTracingRoot: path.join(import.meta.dirname, "../.."),
 
   /**
    * Dev only. Next refuses to serve its dev chunks to an origin it was not

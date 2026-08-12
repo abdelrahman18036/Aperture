@@ -1,0 +1,35 @@
+# Everything a build should never carry, whichever of the three it is.
+#
+# `node_modules` first and by a distance: on this machine it is well over a
+# gigabyte of symlinked pnpm store, and copying it into a context makes every
+# build slow and every image wrong — the dependencies are installed from the
+# lockfile inside the image instead.
+
+node_modules
+**/node_modules
+.venv
+**/.venv
+
+.next
+**/.next
+**/staticfiles
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.turbo
+**/.turbo
+
+.git
+.github
+
+# Secrets, and the certificates mkcert issues. `.env.example` is committed and
+# is the one that belongs in an image.
+.env
+.env.*
+!.env.example
+infra/coturn/certs
+
+**/*.md
+!README.md

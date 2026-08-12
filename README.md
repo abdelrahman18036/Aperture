@@ -281,6 +281,50 @@ browser afterwards, because a running one has already cached the root store.
 
 ---
 
+## Running what actually deploys
+
+The three processes above are the development arrangement: backing services in
+Docker, application code on the host with hot reload. Each service also has a
+Dockerfile, and a second compose file brings all of them up together:
+
+```bash
+cd infra && docker compose -f docker-compose.yml -f docker-compose.app.yml up --build
+```
+
+Six application containers — `api`, `migrate`, `worker`, `beat`, `realtime`,
+`web` — against the same Postgres, Redis and MinIO. The API and the worker
+share one image and differ only in their command, because they share models
+and settings; a second Dockerfile for the worker would be a copy waiting to
+drift. Stop the host dev servers first: they hold 3000, 4000 and 8000.
+
+It runs with `DJANGO_DEBUG=1` and the development secrets, and that is not
+laziness. **With DEBUG off, the settings module refuses to boot if any signing
+key still holds its development default**, if `DJANGO_ALLOWED_HOSTS` is still
+localhost, or if `EMAIL_BACKEND` is still the console — see the "Production
+posture" section at the end of `apps/api/config/settings.py`. A leaked
+`SECRET_KEY` is not a degraded mode: anyone holding it can mint a session, a
+realtime ticket or a TURN credential, so the failure is loud and at startup
+rather than a warning nobody reads.
+
+```bash
+cd apps/api && DJANGO_DEBUG=0 uv run manage.py check --deploy
+```
+
+Two things worth knowing before deploying this anywhere:
+
+- **`API_ORIGIN` is a build argument for the web image, not an environment
+  variable.** Next evaluates `rewrites()` during the build and writes the
+  result into `routes-manifest.json`, so setting it at runtime does nothing —
+  visibly nothing: the container starts, pages render, and every `/api/*`
+  request 500s with `ECONNREFUSED 127.0.0.1:8000`. It defaults to
+  `http://api:8000`, so naming the Django service `api` needs no rebuild.
+- **MinIO has two addresses and both are needed.** `S3_ENDPOINT_URL` is how
+  Django reaches it across the network; `S3_PUBLIC_BASE_URL` is what goes into
+  the URLs handed to a browser. Set only the first and the health check reads
+  `degraded`, because inside a container `localhost:9000` is the container.
+
+---
+
 ## The type boundary
 
 Django's serializers are the single source of truth for the frontend's types.
