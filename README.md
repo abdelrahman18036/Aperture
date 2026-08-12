@@ -376,6 +376,29 @@ than assumed still working.
 
 ## Safety
 
+Counters are **at-most-once plus reconciliation**, which is worth knowing
+before reading a count as a bug. `counters.adjust` is enqueued with
+`transaction.on_commit` and never retried: `increment` is not idempotent, so a
+retry policy would trade a missed increment for a double-counted one, and a
+like that shows twice is worse than one that shows a minute late. A count that
+looks wrong while no worker is running is not wrong — the message is waiting in
+Redis and applies as soon as one starts.
+
+Genuine drift is repaired by `counters.reconcile`, which walks a slice every
+ten minutes and wraps. To repair something now rather than within ten minutes:
+
+```bash
+cd apps/api && uv run manage.py recount --user seed000
+```
+
+```bash
+cd apps/api && uv run manage.py recount --all
+```
+
+It prints only what was actually wrong, and `--all` is the one place in this
+codebase where `COUNT(*)` at scale is allowed — rule 9 is about what renders a
+page, not about what an operator runs to fix one.
+
 The moderation console is the Django admin at
 <http://localhost:8000/admin/moderation/report/> — that is what choosing
 Django bought, and there is deliberately no bespoke moderation UI.

@@ -188,6 +188,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "media.reap_abandoned_intents",
         "schedule": crontab(minute="*/30"),
     },
+    "reconcile-counters": {
+        "task": "counters.reconcile",
+        # Every ten minutes, a slice at a time. Counters are at-most-once by
+        # design — see counters/tasks.py — so this is what makes a missed
+        # increment temporary rather than permanent. At 200 entities a run it
+        # sweeps a corpus of 6,000 users in about five hours, which is the
+        # right order for a number nobody watches to the second.
+        "schedule": crontab(minute="*/10"),
+    },
     "csam-escalation-backlog": {
         "task": "moderation.report_escalation_backlog",
         # Hourly. A CSAM report that has not been forwarded is the one backlog

@@ -21,6 +21,15 @@ import { ContactSheet } from "./contact-sheet";
 
 type FollowState = "none" | "pending" | "accepted";
 
+/**
+ * "1 FOLLOWERS" is the kind of thing that reads as unfinished, and this strip
+ * is uppercased `meta` so it is impossible to miss. "following" is left alone
+ * — it does not inflect.
+ */
+function plural(count: number, noun: string): string {
+  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 interface Profile {
   user: {
     id: string;
@@ -222,7 +231,8 @@ export function ProfileScreen({ username }: { username: string }) {
 
         {/* The meta strip again — counts are metadata, so they are set in it. */}
         <p className="meta">
-          {profile.post_count} posts · {profile.follower_count} followers ·{" "}
+          {plural(profile.post_count, "post")} ·{" "}
+          {plural(profile.follower_count, "follower")} ·{" "}
           {profile.following_count} following
           {profile.user.is_private ? " · private" : ""}
         </p>
