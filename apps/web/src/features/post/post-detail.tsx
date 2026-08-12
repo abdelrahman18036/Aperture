@@ -207,7 +207,7 @@ export function PostDetail({ postId }: { postId: string }) {
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Delete this comment"
-                  className="ml-auto opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+                  className="ml-auto opacity-100 transition-opacity duration-[var(--duration-hover)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                   onClick={() => {
                     void removeComment(comment.id);
                   }}
@@ -224,7 +224,7 @@ export function PostDetail({ postId }: { postId: string }) {
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        className="ml-auto opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+                        className="ml-auto opacity-100 transition-opacity duration-[var(--duration-hover)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                         aria-label={`Report this comment from ${comment.author.username}`}
                       />
                     }

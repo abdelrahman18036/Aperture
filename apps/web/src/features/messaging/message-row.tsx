@@ -45,10 +45,16 @@ export function MessageRow({
   return (
     <li
       className={cn(
-        // `group` so the report control can stay hidden until the row is
+        // `group` so the row's controls can stay hidden until it is
         // hovered or something inside it is focused. A flag against every
         // line of a conversation reads as an accusation waiting to happen;
         // one that appears when you reach for it does not.
+        //
+        // **Reveal-on-hover only above `sm`.** A touch screen has no hover
+        // state and never fires `focus-within` from a tap, so hiding these
+        // unconditionally meant a phone could not report a message, unsend
+        // one, or delete a comment at all — the controls existed and were
+        // permanently invisible. Below `sm` they are simply shown.
         "group flex gap-3 px-4 animate-arrive",
         mine ? "flex-row-reverse" : "flex-row",
       )}
@@ -100,7 +106,7 @@ export function MessageRow({
           variant="ghost"
           size="icon-sm"
           aria-label={`Unsend message ${String(message.seq)}`}
-          className="self-center opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+          className="self-center opacity-100 transition-opacity duration-[var(--duration-hover)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
           onClick={() => {
             onUnsend(message.seq);
           }}
@@ -117,7 +123,7 @@ export function MessageRow({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="self-center opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+                  className="self-center opacity-100 transition-opacity duration-[var(--duration-hover)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                   aria-label={`Report this message from ${message.sender.username}`}
                 />
               }
