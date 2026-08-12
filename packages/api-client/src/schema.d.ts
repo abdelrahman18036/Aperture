@@ -195,23 +195,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/posts/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Publish a post from media that has finished processing. */
-        post: operations["posts_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/posts/{post_id}": {
         parameters: {
             query?: never;
@@ -295,6 +278,23 @@ export interface paths {
         post?: never;
         /** @description Soft delete your own comment. */
         delete: operations["posts_comments_destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Publish a post from media that has finished processing. */
+        post: operations["posts_create"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1452,38 +1452,6 @@ export interface operations {
             };
         };
     };
-    posts_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreatePostRequest"];
-                "application/x-www-form-urlencoded": components["schemas"]["CreatePostRequest"];
-                "multipart/form-data": components["schemas"]["CreatePostRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Post"];
-                };
-            };
-            /** @description No response body */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     posts_retrieve: {
         parameters: {
             query?: never;
@@ -1718,6 +1686,38 @@ export interface operations {
             };
             /** @description No response body */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePostRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["CreatePostRequest"];
+                "multipart/form-data": components["schemas"]["CreatePostRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description No response body */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

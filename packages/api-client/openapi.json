@@ -697,55 +697,6 @@
                 }
             }
         },
-        "/api/posts/": {
-            "post": {
-                "operationId": "posts_create",
-                "description": "Publish a post from media that has finished processing.",
-                "tags": [
-                    "posts"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CreatePostRequest"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CreatePostRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CreatePostRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Post"
-                                }
-                            }
-                        },
-                        "description": ""
-                    },
-                    "400": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
         "/api/posts/{post_id}": {
             "get": {
                 "operationId": "posts_retrieve",
@@ -1079,6 +1030,55 @@
                         "description": "No response body"
                     },
                     "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/create": {
+            "post": {
+                "operationId": "posts_create",
+                "description": "Publish a post from media that has finished processing.",
+                "tags": [
+                    "posts"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreatePostRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreatePostRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreatePostRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Post"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
                         "description": "No response body"
                     }
                 }

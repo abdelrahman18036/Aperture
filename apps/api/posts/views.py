@@ -157,8 +157,19 @@ class ExploreView(APIView):
         return Response(_page(posts, viewer, limit))
 
 
-class PostListView(APIView):
-    """`POST /api/posts` — publish."""
+class PostCreateView(APIView):
+    """`POST /api/posts/create` — publish.
+
+    Named rather than sitting at the bare `/api/posts/`, and for the reason
+    `calls/urls.py` records: this is the only route in the API that would
+    carry a trailing slash, Next normalises it away on the `/api/*` rewrite,
+    and Django then refuses to `APPEND_SLASH`-redirect a POST because the
+    redirect would drop the body. The result is a 500 with a message about
+    forms, on the one endpoint the whole product exists to serve.
+
+    There is no `get` here — a global list of every post is not something this
+    API offers. `feed`, `explore` and `by/<username>` are the reads.
+    """
 
     permission_classes = [IsAuthenticated]
 

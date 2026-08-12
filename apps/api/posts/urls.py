@@ -8,8 +8,8 @@ from posts.views import (
     ExploreView,
     FeedView,
     LikeView,
+    PostCreateView,
     PostDetailView,
-    PostListView,
     UserPostsView,
 )
 
@@ -18,7 +18,7 @@ app_name = "posts"
 # `<snowflake:>`, never `<int:>`. See config/converters.py — an integer path
 # parameter becomes a JavaScript number and silently rounds.
 urlpatterns: list[URLPattern | URLResolver] = [
-    path("", PostListView.as_view(), name="list"),
+    path("create", PostCreateView.as_view(), name="create"),
     path("feed", FeedView.as_view(), name="feed"),
     path("explore", ExploreView.as_view(), name="explore"),
     path("by/<str:username>", UserPostsView.as_view(), name="by-user"),

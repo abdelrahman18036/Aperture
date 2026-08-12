@@ -1,6 +1,6 @@
 "use client";
 
-import { Flag } from "lucide-react";
+import { Flag, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -16,6 +16,7 @@ import {
 
 import { FeedPost } from "@/features/feed/feed-post";
 import { ReportDialog } from "@/features/moderation/report-dialog";
+import { useRealtimeApi } from "@/features/realtime/provider";
 import { api } from "@/lib/api";
 
 type Post = Schemas["Post"];
@@ -41,6 +42,10 @@ export function PostDetail({ postId }: { postId: string }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Already known by the shell's socket, so this costs no extra request. It
+  // is null until `connection.ready` arrives, which only means the delete
+  // control appears a moment later rather than never.
+  const { viewerId } = useRealtimeApi();
 
   useEffect(() => {
     void api
@@ -66,6 +71,27 @@ export function PostDetail({ postId }: { postId: string }) {
   }, [postId]);
 
   useEffect(loadComments, [loadComments]);
+
+  const removeComment = useCallback(async (commentId: string) => {
+    const response = await api.DELETE("/api/posts/comments/{comment_id}", {
+      params: { path: { comment_id: commentId } },
+    });
+    if (response.response.status === 204) {
+      // Dropped locally rather than refetched. The row is soft-deleted and
+      // every read path already filters it, so a round trip would only
+      // confirm what we know.
+      setComments((current) => current.filter((item) => item.id !== commentId));
+      // And the count with it. The server decrements it on the queue, so
+      // leaving this alone shows "no comments" directly beneath "view all 1
+      // comment" until a worker catches up — two true-ish numbers
+      // contradicting each other on the same screen.
+      setPost((current) =>
+        current === null
+          ? current
+          : { ...current, comment_count: Math.max(0, current.comment_count - 1) },
+      );
+    }
+  }, []);
 
   function submit(event: React.FormEvent): void {
     event.preventDefault();
@@ -96,6 +122,13 @@ export function PostDetail({ postId }: { postId: string }) {
         // Appended rather than refetched: the response *is* the new comment,
         // and a round trip to learn what we already know is a round trip.
         setComments((current) => [...current, response.data]);
+        // Same reasoning as the delete path: the count is a counter moved on
+        // the queue, so it lags unless this moves it too.
+        setPost((current) =>
+          current === null
+            ? current
+            : { ...current, comment_count: current.comment_count + 1 },
+        );
       });
   }
 
@@ -154,9 +187,23 @@ export function PostDetail({ postId }: { postId: string }) {
                 <span className="text-body text-ink-dim">{comment.body}</span>
               </div>
 
-              {/* The queue has accepted `comment` since Phase 5 and nothing
-                  ever sent one. Hidden until hover, for the same reason as in
-                  a thread: a flag beside every line reads as a suggestion. */}
+              {/* Your own comment is deleted, not reported. `DELETE
+                  /api/posts/comments/{id}` has existed since Phase 4 with
+                  nothing calling it — there was no way to take back a
+                  comment at all. */}
+              {viewerId !== null && comment.author.id === viewerId ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Delete this comment"
+                  className="ml-auto opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+                  onClick={() => {
+                    void removeComment(comment.id);
+                  }}
+                >
+                  <Trash2 aria-hidden="true" />
+                </Button>
+              ) : (
               <ReportDialog
                 subjectType="comment"
                 subjectId={comment.id}
@@ -175,6 +222,7 @@ export function PostDetail({ postId }: { postId: string }) {
                   </DialogTrigger>
                 }
               />
+              )}
             </li>
           ))}
         </ul>

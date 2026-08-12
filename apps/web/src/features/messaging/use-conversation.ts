@@ -51,6 +51,8 @@ export interface ConversationState {
   loading: boolean;
   send: (body: string) => void;
   retry: (clientId: string) => void;
+  /** Withdraw one of your own messages. Yours only — the service checks. */
+  unsend: (seq: number) => void;
   noteTyping: () => void;
   loadOlder: () => void;
   hasOlder: boolean;
@@ -202,6 +204,25 @@ export function useConversation(
     [absorb, conversationId, drop, viewerId],
   );
 
+  const unsend = useCallback(
+    (seq: number) => {
+      void api
+        .DELETE(
+          "/api/messaging/conversations/{conversation_id}/messages/{seq}",
+          { params: { path: { conversation_id: conversationId, seq } } },
+        )
+        .then((response) => {
+          // The socket also delivers `message.deleted` to everyone in the
+          // conversation, including you, and `drop` is keyed by `seq` — so
+          // doing it here as well is idempotent rather than duplicated. It
+          // matters when the socket is down: without it the message stays on
+          // screen after the server has already removed it.
+          if (response.response.status === 204) drop(seq);
+        });
+    },
+    [conversationId, drop],
+  );
+
   const {
     state: connection,
     sendTyping,
@@ -341,6 +362,7 @@ export function useConversation(
     loading,
     send,
     retry,
+    unsend,
     noteTyping,
     loadOlder,
     hasOlder,

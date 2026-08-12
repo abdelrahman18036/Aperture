@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
 import { Button, DevelopImage, Input, Skeleton, cn } from "@repo/ui";
@@ -28,6 +29,15 @@ import { useUpload } from "./use-upload";
  */
 
 const ACCEPT = "image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/webm";
+
+type Visibility = "public" | "followers" | "private";
+
+/** Mirrors `Post.Visibility`, worded for a person rather than a database. */
+const VISIBILITIES: { value: Visibility; label: string }[] = [
+  { value: "public", label: "Everyone" },
+  { value: "followers", label: "Followers" },
+  { value: "private", label: "Only me" },
+];
 
 interface Picked {
   file: File;
@@ -251,36 +261,95 @@ export function Composer() {
       ) : null}
 
       {status.phase === "ready" ? (
-        <ReadyPreview
+        <PublishForm
           media={status.media}
           altText={altText}
           onSaveAltText={saveAltText}
-          onDone={clear}
+          onDiscard={clear}
         />
       ) : null}
     </div>
   );
 }
 
-function ReadyPreview({
+/**
+ * The last step, and until now the missing one.
+ *
+ * The composer uploaded media and then offered to upload more — it never
+ * called `POST /api/posts/`, so **nothing could be published from the UI at
+ * all**. Every post in the database arrived from `seed_demo`. The media
+ * pipeline was complete and the thing it exists for was not connected to it.
+ *
+ * Caption, location and visibility live here rather than beside the file
+ * picker because they describe the post, and the post does not exist until
+ * the media is processed. Alt text is the exception: it belongs to the media
+ * row, and is saved against it.
+ */
+function PublishForm({
   media,
   altText,
   onSaveAltText,
-  onDone,
+  onDiscard,
 }: {
-  media: { id: string; blurhash: string; dominant_color: string; width: number | null; height: number | null; sources: { width: number; url: string }[]; original_url: string | null; poster_url: string | null; kind: string };
+  media: {
+    id: string;
+    blurhash: string;
+    dominant_color: string;
+    width: number | null;
+    height: number | null;
+    sources: { width: number; url: string }[];
+    original_url: string | null;
+    poster_url: string | null;
+    kind: string;
+  };
   altText: string;
   onSaveAltText: (mediaId: string) => Promise<void>;
-  onDone: () => void;
+  onDiscard: () => void;
 }) {
-  const [saved, setSaved] = useState(false);
+  const router = useRouter();
+  const [caption, setCaption] = useState("");
+  const [location, setLocation] = useState("");
+  const [visibility, setVisibility] = useState<Visibility>("public");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const preview =
     media.sources.at(-1)?.url ?? media.poster_url ?? media.original_url;
 
+  const publish = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+
+    // Alt text first. A post that exists with an unsaved description is
+    // worse than a moment more waiting, and this is the only chance the
+    // person has to write it.
+    await onSaveAltText(media.id);
+
+    const response = await api.POST("/api/posts/create", {
+      body: {
+        media_ids: [media.id],
+        caption,
+        location,
+        visibility,
+      },
+    });
+
+    setBusy(false);
+    if (response.data === undefined) {
+      const detail = (response.error as { detail?: string } | undefined)?.detail;
+      setError(detail ?? "That did not publish. Try again.");
+      return;
+    }
+    // Straight to the post. Landing back on an empty composer gives no
+    // evidence that anything happened.
+    router.push(`/p/${response.data.id}`);
+  }, [caption, location, visibility, media.id, onSaveAltText, router]);
+
   return (
-    <div className="flex flex-col gap-5">
-      <span className="meta">ready — {media.width}×{media.height}</span>
+    <div className="flex flex-col gap-6">
+      <span className="meta">
+        ready — {media.width}×{media.height}
+      </span>
 
       {preview && media.width && media.height ? (
         <DevelopImage
@@ -295,19 +364,67 @@ function ReadyPreview({
         />
       ) : null}
 
+      <label className="flex flex-col gap-2">
+        <span className="meta">caption</span>
+        <textarea
+          value={caption}
+          maxLength={2200}
+          rows={3}
+          onChange={(event) => {
+            setCaption(event.target.value);
+          }}
+          className="w-full resize-none border-b border-line bg-transparent pb-2 text-body text-ink placeholder:text-ink-faint focus-visible:border-safelight"
+        />
+      </label>
+
+      <label className="flex flex-col gap-2">
+        <span className="meta">location</span>
+        <Input
+          value={location}
+          maxLength={120}
+          onChange={(event) => {
+            setLocation(event.target.value);
+          }}
+        />
+      </label>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="meta">who can see it</legend>
+        <div className="flex gap-4">
+          {VISIBILITIES.map((option) => (
+            <label key={option.value} className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="visibility"
+                checked={visibility === option.value}
+                onChange={() => {
+                  setVisibility(option.value);
+                }}
+                className="accent-safelight"
+              />
+              <span className="text-body text-ink">{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {error !== null ? (
+        <p className="text-body text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+
       <div className="flex items-center gap-3">
         <Button
-          variant="secondary"
+          disabled={busy}
           onClick={() => {
-            void onSaveAltText(media.id).then(() => {
-              setSaved(true);
-            });
+            void publish();
           }}
         >
-          {saved ? "Alt text saved" : "Save alt text"}
+          {busy ? "Publishing…" : "Publish"}
         </Button>
-        <Button variant="ghost" onClick={onDone}>
-          Upload another
+        <Button variant="ghost" onClick={onDiscard}>
+          Discard
         </Button>
       </div>
     </div>

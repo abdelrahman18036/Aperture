@@ -43,6 +43,7 @@ export function Conversation({
     loading,
     send,
     retry,
+    unsend,
     noteTyping,
     loadOlder,
     hasOlder,
@@ -123,6 +124,7 @@ export function Conversation({
               key={message.seq}
               message={message}
               mine={message.sender.id === viewerId}
+              onUnsend={unsend}
               // Group runs from the same person: repeating the avatar and
               // name on every line makes a conversation read like a list.
               showSender={messages[index - 1]?.sender.id !== message.sender.id}

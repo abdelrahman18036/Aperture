@@ -180,7 +180,11 @@ export function useRealtime({ onEvent, onReady }: RealtimeOptions): Realtime {
             // Resync before anything else. Whatever arrived while the socket
             // was down is fetched by seq, so the gap closes itself.
             ready();
-            return;
+            // And then fall through rather than returning. This event names
+            // the socket's owner, and the provider reads that to learn who is
+            // signed in — returning here meant it never arrived, so
+            // `viewerId` was permanently null and every consumer of it
+            // silently behaved as though nobody was signed in.
           }
 
           emit(event);

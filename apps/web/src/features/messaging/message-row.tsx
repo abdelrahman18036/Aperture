@@ -1,6 +1,6 @@
 "use client";
 
-import { Flag } from "lucide-react";
+import { Flag, Trash2 } from "lucide-react";
 
 import { Avatar, AvatarFallback, Button, DialogTrigger, cn } from "@repo/ui";
 
@@ -34,10 +34,12 @@ export function MessageRow({
   message,
   mine,
   showSender,
+  onUnsend,
 }: {
   message: Message;
   mine: boolean;
   showSender: boolean;
+  onUnsend: (seq: number) => void;
 }) {
   return (
     <li
@@ -93,7 +95,22 @@ export function MessageRow({
           §11's queue covered posts, comments, users and media but never a
           message — and harassment arrives far more often in a thread nobody
           else can see than under a public photograph. */}
-      {!mine && (
+      {/* Your own message is withdrawn, not reported. The endpoint has
+          existed since Phase 6 and nothing called it, so there was no way to
+          take back a message you had just sent. */}
+      {mine ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Unsend message ${String(message.seq)}`}
+          className="self-center opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+          onClick={() => {
+            onUnsend(message.seq);
+          }}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      ) : (
         <ReportDialog
           subjectType="message"
           subjectId={message.id}

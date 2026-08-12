@@ -42,6 +42,45 @@ function formatCount(value: number): string {
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
+/**
+ * Copy text, and say whether it worked.
+ *
+ * Two attempts, because the modern API is the one that fails: `writeText`
+ * needs a permission that an embedded webview, a non-secure origin or a
+ * stricter browser will refuse, and it refuses by rejecting rather than by
+ * doing something visible. `execCommand("copy")` is deprecated and needs no
+ * permission, which makes it exactly the right fallback — it is what actually
+ * works in a locked-down webview.
+ *
+ * **The return value is the point.** Swallowing the failure leaves a button
+ * that does nothing and says nothing, which is indistinguishable from broken.
+ * The caller shows the link itself when this returns false, so there is
+ * always a way to get the URL.
+ */
+async function writeToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fall through.
+  }
+
+  const field = document.createElement("textarea");
+  field.value = text;
+  // Off-screen rather than hidden: `display: none` cannot hold a selection.
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.append(field);
+  field.select();
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    field.remove();
+  }
+}
+
 function formatWhen(iso: string): string {
   const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   if (minutes < 1) return "NOW";
@@ -56,6 +95,12 @@ function formatWhen(iso: string): string {
 export function FeedPost({ post }: { post: Post }) {
   const [liked, setLiked] = useState(post.viewer_has_liked);
   const [likeCount, setLikeCount] = useState(post.like_count);
+  const [copied, setCopied] = useState(false);
+  //: Set only when the clipboard refused, and holding the URL to show
+  //: instead. Read inside the click handler rather than in an effect —
+  //: `window` does not exist during a server render, and the compiler is
+  //: right to reject a `setState` in an effect body just to learn a constant.
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
 
   const image = post.media[0];
 
@@ -100,6 +145,24 @@ export function FeedPost({ post }: { post: Post }) {
     },
     [post.id],
   );
+
+  const copyLink = useCallback(async () => {
+    // The same component renders on localhost, on 127.0.0.1 as a second
+    // signed-in session, and in a deployment, so the host is read rather
+    // than assumed.
+    const url = `${window.location.origin}/p/${post.id}`;
+
+    if (await writeToClipboard(url)) {
+      setCopied(true);
+      window.setTimeout(() => {
+        setCopied(false);
+      }, 2500);
+      return;
+    }
+    // The field stays until it is used. A URL that vanishes while somebody
+    // is reading it is worse than no URL at all.
+    setFallbackUrl(url);
+  }, [post.id]);
 
   return (
     <article className="flex flex-col gap-3 border-b border-line py-6">
@@ -179,25 +242,52 @@ export function FeedPost({ post }: { post: Post }) {
 
       <div className="flex items-center gap-5">
         <LikeButton liked={liked} count={likeCount} onToggle={toggleLike} />
-        <button
-          type="button"
+        {/* A link rather than a button, because it goes somewhere. Both of
+            these rendered and did nothing until now — two of the three
+            actions under every post in the feed. */}
+        <Link
+          href={`/p/${post.id}`}
           className="flex items-center gap-2 text-ink-dim hover:text-ink"
-          aria-label="Comments"
+          aria-label={
+            post.comment_count === 1 ? "1 comment" : `${String(post.comment_count)} comments`
+          }
         >
           <MessageCircle className="size-6" aria-hidden="true" />
           <span className="meta tabular-nums">{post.comment_count}</span>
-        </button>
+        </Link>
         <button
           type="button"
-          className="text-ink-dim hover:text-ink"
-          aria-label="Share"
+          onClick={() => {
+            void copyLink();
+          }}
+          className="flex items-center gap-2 text-ink-dim hover:text-ink"
+          aria-label="Copy a link to this post"
         >
           <Send className="size-6" aria-hidden="true" />
+          {/* Confirmation in words, not a toast. There is no toast in the
+              design system and a post is not the place to introduce one. */}
+          {copied ? <span className="meta text-safelight">copied</span> : null}
         </button>
       </div>
 
+      {/* When the clipboard refuses — an embedded webview, a non-secure
+          origin — the URL is shown instead, selected, so it can still be
+          copied by hand. Telling somebody to press ctrl+c after removing the
+          selection would be worse than saying nothing. */}
+      {fallbackUrl !== null ? (
+        <input
+          readOnly
+          value={fallbackUrl}
+          aria-label="Link to this post"
+          ref={(node) => {
+            node?.select();
+          }}
+          className="w-full border-b border-line bg-transparent pb-1 text-body text-ink"
+        />
+      ) : null}
+
       <p className="meta">
-        {formatCount(likeCount)} likes
+        {formatCount(likeCount)} {likeCount === 1 ? "like" : "likes"}
         {image?.width && image.height
           ? ` · ${String(image.width)}×${String(image.height)}`
           : ""}
@@ -216,10 +306,14 @@ export function FeedPost({ post }: { post: Post }) {
         </p>
       ) : null}
 
+      {/* Was a `<button>` with no handler — the third dead control on this
+          component. The comments live on the post page, so it goes there,
+          which also means middle-click and the keyboard work. */}
       {post.comment_count > 0 ? (
-        <button type="button" className="meta w-fit hover:text-ink-dim">
-          view all {post.comment_count} comments
-        </button>
+        <Link href={`/p/${post.id}`} className="meta w-fit hover:text-ink-dim">
+          view all {post.comment_count}{" "}
+          {post.comment_count === 1 ? "comment" : "comments"}
+        </Link>
       ) : null}
     </article>
   );
