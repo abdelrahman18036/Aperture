@@ -2,7 +2,13 @@
 
 import { Flag, Trash2 } from "lucide-react";
 
-import { Button, DialogTrigger, cn } from "@repo/ui";
+import {
+  Button,
+  DevelopImage,
+  DevelopVideo,
+  DialogTrigger,
+  cn,
+} from "@repo/ui";
 
 import { ReportDialog } from "@/features/moderation/report-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
@@ -74,16 +80,57 @@ export function MessageRow({
         {showSender && !mine && (
           <p className="meta mb-0.5">{message.sender.username}</p>
         )}
-        <p
-          className={cn(
-            "inline-block rounded-image px-3 py-2 text-body text-ink",
-            // A hairline surface, not a bubble: enough to group the words,
-            // not enough to become a container.
-            mine ? "bg-surface" : "bg-transparent border-b border-line",
-          )}
-        >
-          {message.body}
-        </p>
+        {/* An attachment, when there is one. `Message.media` has been on
+            the model and in the send payload since Phase 6 and nothing ever
+            set it or drew it — a photograph could be attached by an API
+            client and would render as an empty message. */}
+        {message.media ? (
+          /* An explicit width, because neither side of this has one
+             otherwise: the bubble shrink-wraps to its content and
+             `DevelopImage` sizes itself from its parent and an aspect ratio.
+             Together that resolved to 59px — a photograph rendered as a
+             thumbnail of itself. */
+          <span className="mb-1 block w-64 max-w-full overflow-hidden rounded-image">
+            {message.media.kind === "video" ? (
+              <DevelopVideo
+                src={message.media.video_url ?? message.media.original_url ?? ""}
+                width={message.media.width ?? 16}
+                height={message.media.height ?? 9}
+                blurhash={message.media.blurhash}
+                durationMs={message.media.duration_ms}
+                label={message.media.alt_text}
+              />
+            ) : message.media.width && message.media.height ? (
+              <DevelopImage
+                src={
+                  message.media.sources.at(-1)?.url ??
+                  message.media.original_url ??
+                  ""
+                }
+                sources={message.media.sources}
+                alt={message.media.alt_text}
+                width={message.media.width}
+                height={message.media.height}
+                blurhash={message.media.blurhash}
+                dominantColor={message.media.dominant_color}
+                sizes="256px"
+              />
+            ) : null}
+          </span>
+        ) : null}
+
+        {message.body ? (
+          <p
+            className={cn(
+              "inline-block rounded-image px-3 py-2 text-body text-ink",
+              // A hairline surface, not a bubble: enough to group the words,
+              // not enough to become a container.
+              mine ? "bg-surface" : "bg-transparent border-b border-line",
+            )}
+          >
+            {message.body}
+          </p>
+        ) : null}
         <p className="meta mt-0.5">
           <time dateTime={message.created_at}>
             {formatTime(message.created_at)}

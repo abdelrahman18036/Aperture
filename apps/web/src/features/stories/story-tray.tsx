@@ -8,6 +8,7 @@ import type { Schemas } from "@repo/api-client";
 import { Skeleton, cn } from "@repo/ui";
 
 import { UserAvatar } from "@/features/profile/user-avatar";
+import { useRealtimeApi } from "@/features/realtime/provider";
 import { api } from "@/lib/api";
 
 import { StoryViewer } from "./story-viewer";
@@ -36,6 +37,7 @@ export function StoryTray() {
   const [entries, setEntries] = useState<TrayEntry[] | null>(null);
   const [openAt, setOpenAt] = useState<number | null>(null);
   const started = useRef(false);
+  const { viewerId } = useRealtimeApi();
 
   const load = useCallback(() => {
     void api.GET("/api/stories/tray").then((response) => {
@@ -125,6 +127,7 @@ export function StoryTray() {
         <StoryViewer
           entries={entries}
           startAt={openAt}
+          viewerId={viewerId}
           onClose={() => {
             setOpenAt(null);
             // Rings go faint for whatever was just watched. Refetching is one

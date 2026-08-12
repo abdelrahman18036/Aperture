@@ -1,12 +1,14 @@
 "use client";
 
-import { ChevronLeft, Phone, SendHorizontal } from "lucide-react";
+import { ChevronLeft, ImagePlus, Phone, SendHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { Button, cn } from "@repo/ui";
+import type { Schemas } from "@repo/api-client";
+import { Button, Spinner, cn } from "@repo/ui";
 
 import { useCallControls } from "@/features/calls/provider";
+import { useMediaUpload } from "@/features/media/use-media-upload";
 
 import { MessageRow, PendingRow } from "./message-row";
 import { TypingLine } from "./typing-dots";
@@ -20,6 +22,8 @@ import { useConversation } from "./use-conversation";
  * through a thread the moment a message arrives, so it only auto-scrolls when
  * they were already at the bottom.
  */
+
+type Media = Schemas["Media"];
 
 /** How close to the bottom still counts as "at the bottom", in pixels. */
 const STICK_THRESHOLD_PX = 80;
@@ -64,6 +68,10 @@ export function Conversation({
   const { session, busy } = useCallControls();
 
   const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState<Media | null>(null);
+  const [attaching, setAttaching] = useState(false);
+  const attachInput = useRef<HTMLInputElement | null>(null);
+  const { uploadMedia } = useMediaUpload();
   const scroller = useRef<HTMLDivElement | null>(null);
   const wasAtBottom = useRef(true);
 
@@ -91,10 +99,24 @@ export function Conversation({
     0,
   );
 
+  const attach = useCallback(
+    async (file: File) => {
+      setAttaching(true);
+      const media = await uploadMedia(file);
+      setAttaching(false);
+      // A failure says nothing here on purpose — the attach button simply
+      // stays empty, which is the state the person can act on. An error
+      // about object storage is not.
+      if (media !== null) setAttachment(media);
+    },
+    [uploadMedia],
+  );
+
   function submit(event: React.FormEvent): void {
     event.preventDefault();
-    send(draft);
+    send(draft, attachment?.id);
     setDraft("");
+    setAttachment(null);
   }
 
   return (
@@ -182,6 +204,27 @@ export function Conversation({
         names={typing.map((id) => names.get(id) ?? "Someone")}
       />
 
+      {/* What is attached but not yet sent. Shown rather than implied: an
+          attach button that silently arms itself is a button people press
+          twice. */}
+      {attachment !== null ? (
+        <div className="flex items-center gap-3 border-t border-line px-4 pt-3">
+          <span className="meta text-safelight">
+            {attachment.kind === "video" ? "clip attached" : "photograph attached"}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Remove attachment"
+            onClick={() => {
+              setAttachment(null);
+            }}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+      ) : null}
+
       <form
         onSubmit={submit}
         className="flex items-end gap-2 border-t border-line px-4 py-3"
@@ -189,6 +232,36 @@ export function Conversation({
         <label htmlFor="message-body" className="sr-only">
           Message
         </label>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          disabled={attaching}
+          aria-label="Attach a photograph or clip"
+          onClick={() => {
+            attachInput.current?.click();
+          }}
+        >
+          {attaching ? (
+            <Spinner label="Uploading attachment" />
+          ) : (
+            <ImagePlus aria-hidden="true" />
+          )}
+        </Button>
+        <input
+          ref={attachInput}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/webm"
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // Cleared so the same file can be chosen twice — otherwise a
+            // retry after a failure does nothing at all.
+            event.target.value = "";
+            if (file) void attach(file);
+          }}
+        />
         <textarea
           id="message-body"
           rows={1}
@@ -202,8 +275,9 @@ export function Conversation({
             // is correct for a document and wrong for a conversation.
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              send(draft);
+              send(draft, attachment?.id);
               setDraft("");
+              setAttachment(null);
             }
           }}
           placeholder="Write a message"
@@ -218,7 +292,11 @@ export function Conversation({
             "focus-visible:border-safelight",
           )}
         />
-        <Button type="submit" disabled={draft.trim() === ""} aria-label="Send">
+        <Button
+          type="submit"
+          disabled={draft.trim() === "" && attachment === null}
+          aria-label="Send"
+        >
           <SendHorizontal className="size-4" aria-hidden="true" />
           Send
         </Button>

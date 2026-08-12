@@ -411,6 +411,12 @@ scheduled flag would leave a window where an expired story is still being
 served, and that window is exactly what someone posting to one is trusting us
 not to have.
 
+A profile's avatar wears the same ring when that account has something
+live, and opening it plays their frames. On your own, the header swaps the
+report control for a viewer count and a delete — reporting your own content
+is refused by the service, so offering it would be offering a control that
+cannot work.
+
 The tray shows your own stories and those of accounts you follow, never
 strangers'. A story is a day rather than a portfolio, and a discovery surface
 full of other people's days is a different product.

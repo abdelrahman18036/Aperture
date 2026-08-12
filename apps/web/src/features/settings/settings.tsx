@@ -7,7 +7,7 @@ import { Button, Input, Skeleton, TabBar } from "@repo/ui";
 import type { TabDefinition } from "@repo/ui";
 
 import { UserAvatar } from "@/features/profile/user-avatar";
-import { useAvatarUpload } from "./use-avatar-upload";
+import { useMediaUpload } from "@/features/media/use-media-upload";
 import { api } from "@/lib/api";
 
 /**
@@ -88,7 +88,7 @@ export function SettingsScreen() {
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const avatarInput = useRef<HTMLInputElement | null>(null);
-  const { uploadAvatar } = useAvatarUpload();
+  const { uploadMedia } = useMediaUpload();
 
   useEffect(() => {
     let cancelled = false;
@@ -172,7 +172,7 @@ export function SettingsScreen() {
       setAvatarBusy(true);
       setAvatarError(null);
 
-      const media = await uploadAvatar(file);
+      const media = await uploadMedia(file);
       if (media === null) {
         setAvatarBusy(false);
         setAvatarError(
@@ -183,7 +183,7 @@ export function SettingsScreen() {
       await setAvatar(media.id);
       setAvatarBusy(false);
     },
-    [setAvatar, uploadAvatar],
+    [setAvatar, uploadMedia],
   );
 
   const signOut = useCallback(async () => {

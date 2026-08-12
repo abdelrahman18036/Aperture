@@ -38,6 +38,8 @@ export type Message = Schemas["Message"];
 export interface PendingMessage {
   client_id: string;
   body: string;
+  /** An attachment already uploaded and processed, awaiting its message. */
+  mediaId?: string | null;
   /** Set when the send failed and the user can retry. */
   failed: boolean;
 }
@@ -53,7 +55,7 @@ export interface ConversationState {
   /** Seed the read positions from the inbox payload. */
   setOthersRead: (positions: Record<string, number> | undefined) => void;
   loading: boolean;
-  send: (body: string) => void;
+  send: (body: string, mediaId?: string | null) => void;
   retry: (clientId: string) => void;
   /** Withdraw one of your own messages. Yours only — the service checks. */
   unsend: (seq: number) => void;
@@ -305,11 +307,11 @@ export function useConversation(
   }, [bySeq, conversationId]);
 
   const post = useCallback(
-    (clientId: string, body: string) => {
+    (clientId: string, body: string, mediaId?: string | null) => {
       void api
         .POST("/api/messaging/conversations/{conversation_id}/messages", {
           params: { path: { conversation_id: conversationId } },
-          body: { client_id: clientId, body },
+          body: { client_id: clientId, body, media_id: mediaId ?? null },
         })
         .then((response) => {
           if (response.data === undefined) {
@@ -330,9 +332,13 @@ export function useConversation(
   );
 
   const send = useCallback(
-    (body: string) => {
+    (body: string, mediaId?: string | null) => {
       const trimmed = body.trim();
-      if (trimmed === "") return;
+      // An attachment is a message on its own. The service asks only that a
+      // message have *something* in it, and requiring a caption to send a
+      // photograph would be this client inventing a rule the API does not
+      // have.
+      if (trimmed === "" && !mediaId) return;
 
       // The client mints the id, and that is the whole duplicate story: a
       // retry after a timeout carries the same one and the unique constraint
@@ -340,9 +346,9 @@ export function useConversation(
       const clientId = newClientId();
       setPending((current) => [
         ...current,
-        { client_id: clientId, body: trimmed, failed: false },
+        { client_id: clientId, body: trimmed, mediaId, failed: false },
       ]);
-      post(clientId, trimmed);
+      post(clientId, trimmed, mediaId);
       sendTyping(conversationId, false);
     },
     [conversationId, post, sendTyping],
@@ -359,7 +365,7 @@ export function useConversation(
       );
       // Same client_id deliberately. If the first attempt actually landed,
       // the server returns that message instead of writing a second one.
-      post(clientId, item.body);
+      post(clientId, item.body, item.mediaId);
     },
     [pending, post],
   );

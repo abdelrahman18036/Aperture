@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Flag, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Flag, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
@@ -11,6 +11,7 @@ import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
 
 type TrayEntry = Schemas["StoryTrayEntry"];
+type StoryViewerRow = Schemas["StoryViewer"];
 
 /** How long one frame holds before it advances itself. */
 const FRAME_MS = 5000;
@@ -37,10 +38,13 @@ const TICK_MS = 50;
 export function StoryViewer({
   entries,
   startAt,
+  viewerId,
   onClose,
 }: {
   entries: TrayEntry[];
   startAt: number;
+  /** Who is watching, so the header knows whether these frames are theirs. */
+  viewerId: string | null;
   onClose: () => void;
 }) {
   const [authorIndex, setAuthorIndex] = useState(startAt);
@@ -49,6 +53,8 @@ export function StoryViewer({
   const [paused, setPaused] = useState(false);
   /** Elapsed on the current frame, carried across a pause. */
   const elapsedRef = useRef(0);
+  const [showViewers, setShowViewers] = useState(false);
+  const [viewers, setViewers] = useState<StoryViewerRow[]>([]);
 
   const entry = entries[authorIndex];
   const story = entry?.stories[frameIndex];
@@ -124,6 +130,37 @@ export function StoryViewer({
     return () => clearInterval(timer);
   }, [paused, next, frameIndex, authorIndex]);
 
+  // Whose it is decides what the header offers. Compared by author rather
+  // than trusting the tray's ordering, which puts your own entry wherever
+  // "unwatched first" happens to place it.
+  const mine = entry !== undefined && entry.author.id === viewerId;
+
+  // The viewer list, for your own frames only. Fetched when the frame
+  // changes rather than when the panel opens, so the count beside the eye is
+  // right before anybody asks for the names.
+  useEffect(() => {
+    if (!mine || story === undefined) {
+      return;
+    }
+    void api
+      .GET("/api/stories/{story_id}/viewers", {
+        params: { path: { story_id: story.id } },
+      })
+      .then((response) => {
+        setViewers(response.data ?? []);
+      });
+  }, [mine, story]);
+
+  const remove = useCallback(async () => {
+    if (story === undefined) return;
+    const response = await api.DELETE("/api/stories/{story_id}", {
+      params: { path: { story_id: story.id } },
+    });
+    // Closing rather than advancing: the frame that was on screen no longer
+    // exists, and the tray behind this is about to be refetched anyway.
+    if (response.response.status === 204) onClose();
+  }, [story, onClose]);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
       if (event.key === "Escape") onClose();
@@ -176,27 +213,79 @@ export function StoryViewer({
           {entry.author.username}
         </span>
 
-        <ReportDialog
-          subjectType="story"
-          subjectId={story.id}
-          trigger={
-            <DialogTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Report this story"
-                />
-              }
+        {/* Your own story gets a viewer count and a delete instead of a
+            report. Both endpoints existed with nothing calling them — the
+            same dead-end this codebase keeps producing when an API lands
+            before its screen. */}
+        {mine ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setShowViewers(!showViewers);
+              }}
+              aria-expanded={showViewers}
+              className="flex items-center gap-1.5 meta text-ink-dim hover:text-ink"
             >
-              <Flag aria-hidden="true" />
-            </DialogTrigger>
-          }
-        />
+              <Eye className="size-4" aria-hidden="true" />
+              <span className="tabular-nums">{viewers.length}</span>
+            </button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Delete this story"
+              onClick={() => {
+                void remove();
+              }}
+            >
+              <Trash2 aria-hidden="true" />
+            </Button>
+          </>
+        ) : null}
+
+        {/* Not on your own. `file_report` refuses it outright, so offering
+            it is offering a control that cannot work — the same mistake the
+            comment row made before the delete branch replaced it. */}
+        {mine ? null : (
+          <ReportDialog
+            subjectType="story"
+            subjectId={story.id}
+            trigger={
+              <DialogTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Report this story"
+                  />
+                }
+              >
+                <Flag aria-hidden="true" />
+              </DialogTrigger>
+            }
+          />
+        )}
         <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
           <X aria-hidden="true" />
         </Button>
       </header>
+
+      {showViewers ? (
+        <div className="border-b border-line px-4 pb-3">
+          {viewers.length === 0 ? (
+            <p className="meta">nobody yet</p>
+          ) : (
+            <ul className="flex flex-wrap gap-3">
+              {viewers.map((row) => (
+                <li key={row.viewer.id} className="flex items-center gap-2">
+                  <UserAvatar user={row.viewer} className="size-6" />
+                  <span className="meta">{row.viewer.username}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
         {media.width && media.height ? (

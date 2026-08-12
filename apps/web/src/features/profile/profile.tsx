@@ -8,13 +8,17 @@ import { Button, DialogTrigger, Skeleton } from "@repo/ui";
 
 import { ReportDialog } from "@/features/moderation/report-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
+import { useRealtimeApi } from "@/features/realtime/provider";
+import { StoryViewer } from "@/features/stories/story-viewer";
+
+import type { Schemas } from "@repo/api-client";
 
 import type { Post } from "@/features/feed/use-feed";
+
+type Story = Schemas["Story"];
 import { api } from "@/lib/api";
 
 import { ContactSheet } from "./contact-sheet";
-
-type FollowState = "none" | "pending" | "accepted";
 
 /**
  * "1 FOLLOWERS" is the kind of thing that reads as unfinished, and this strip
@@ -25,21 +29,16 @@ function plural(count: number, noun: string): string {
   return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-interface Profile {
-  user: {
-    id: string;
-    username: string;
-    display_name: string;
-    bio: string;
-    is_private: boolean;
-  };
-  post_count: number;
-  follower_count: number;
-  following_count: number;
-  follow_state: FollowState;
-  is_self: boolean;
-  can_view_posts: boolean;
-}
+/**
+ * The generated type, not a hand-written copy of it.
+ *
+ * There was a local `interface Profile` here restating the DRF serializer
+ * field by field, which `01-ARCHITECTURE.md` §3 rules out in as many words —
+ * and it had already drifted: `user` was missing `avatar_url`, so the avatar
+ * this component renders was invisible to the typechecker.
+ */
+type Profile = Schemas["Profile"];
+type FollowState = Profile["follow_state"];
 
 /**
  * A profile: header, then the contact sheet.
@@ -54,23 +53,33 @@ export function ProfileScreen({ username }: { username: string }) {
   const [missing, setMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [watching, setWatching] = useState(false);
+  const { viewerId } = useRealtimeApi();
 
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
-      const [profileResponse, postsResponse] = await Promise.all([
-        api.GET("/api/users/{username}", { params: { path: { username } } }),
-        api.GET("/api/posts/by/{username}", { params: { path: { username } } }),
-      ]);
+      const [profileResponse, postsResponse, storiesResponse] =
+        await Promise.all([
+          api.GET("/api/users/{username}", { params: { path: { username } } }),
+          api.GET("/api/posts/by/{username}", {
+            params: { path: { username } },
+          }),
+          api.GET("/api/stories/by/{username}", {
+            params: { path: { username } },
+          }),
+        ]);
       if (cancelled) return;
 
       if (profileResponse.data === undefined) {
         setMissing(true);
         return;
       }
-      setProfile(profileResponse.data as Profile);
+      setProfile(profileResponse.data);
       setPosts(postsResponse.data?.posts ?? []);
+      setStories(storiesResponse.data ?? []);
     })();
 
     return () => {
@@ -155,7 +164,24 @@ export function ProfileScreen({ username }: { username: string }) {
     <div className="flex flex-col gap-10 py-10">
       <header className="flex flex-col gap-5">
         <div className="flex items-center gap-6">
-          <UserAvatar user={profile.user} className="size-14" />
+          {/* A live story turns the avatar into a way in — the ring is the
+              same one the tray uses, so the two surfaces agree about what a
+              warm ring means. `GET /api/stories/by/{username}` had no caller
+              at all until this. */}
+          {stories.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setWatching(true);
+              }}
+              aria-label={`Watch ${profile.user.username}'s story`}
+              className="rounded-full p-[2px] ring-2 ring-safelight"
+            >
+              <UserAvatar user={profile.user} className="size-14" />
+            </button>
+          ) : (
+            <UserAvatar user={profile.user} className="size-14" />
+          )}
 
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="font-display text-display-l text-ink">
@@ -234,6 +260,26 @@ export function ProfileScreen({ username }: { username: string }) {
           <p className="max-w-prose text-body text-ink">{profile.user.bio}</p>
         ) : null}
       </header>
+
+      {watching ? (
+        <StoryViewer
+          // One author, so the viewer's author-to-author advance simply has
+          // nowhere to go and it closes at the end — which is right here.
+          entries={[
+            {
+              author: profile.user,
+              stories,
+              all_seen: false,
+              latest_at: stories[0]?.created_at ?? "",
+            },
+          ]}
+          startAt={0}
+          viewerId={viewerId}
+          onClose={() => {
+            setWatching(false);
+          }}
+        />
+      ) : null}
 
       {profile.can_view_posts ? (
         <ContactSheet posts={posts} />
