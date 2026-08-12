@@ -14,6 +14,74 @@ UI.** Three deployables, one repo.
 
 ---
 
+## What it looks like
+
+```mermaid
+flowchart TB
+    subgraph browser["Browser — one origin"]
+        WEB["Next.js<br/><i>UI. Not a second backend.</i>"]
+    end
+
+    subgraph node["apps/realtime"]
+        GW["Node ws gateway<br/><i>sockets only</i>"]
+    end
+
+    subgraph django["apps/api"]
+        API["Django + DRF<br/><i>data · auth · admin · tokens</i>"]
+        WORKER["Celery worker"]
+        BEAT["Celery beat"]
+    end
+
+    PG[("Postgres")]
+    REDIS[("Redis<br/>queue · cache · pub/sub · presence")]
+    S3[("MinIO / S3")]
+    TS[("Typesense")]
+    LK["LiveKit SFU"]
+    TURN["coturn"]
+
+    WEB -->|"/api/* rewrite"| API
+    WEB -->|"wss + 60s ticket"| GW
+    WEB -->|"presigned PUT"| S3
+    WEB -.->|"WebRTC media"| TURN
+    WEB -.->|"WebRTC media"| LK
+
+    API --> PG
+    API --> REDIS
+    API --> S3
+    API --> TS
+    API -->|"signs join tokens"| LK
+    API -->|"mints credentials"| TURN
+    WORKER --> PG
+    WORKER --> REDIS
+    WORKER --> S3
+    BEAT --> REDIS
+
+    API -->|"PUBLISH after commit"| REDIS
+    REDIS -->|"SUBSCRIBE"| GW
+    GW -->|"presence + last-seen keys"| REDIS
+    GW -.->|"never"| PG
+```
+
+Three deployables because they scale on different things: the API on request
+rate, the worker on queue depth, the gateway on concurrent sockets. The
+`/api/*` rewrite is the **only** integration point between the frontend and the
+backend, and it exists so the browser stays on one origin and Django's session
+cookie stays same-site.
+
+The dashed `never` edge is a rule, not an omission. A gateway that could read
+Postgres would become a second application fighting over one schema.
+
+**Where a change goes:**
+
+| If it… | it belongs in |
+|---|---|
+| must survive a restart | Django — HTTP up, Redis pub/sub down, socket delivers |
+| must not (typing, presence, call signalling) | the Node gateway; it never reaches Postgres |
+| is a shape the browser reads | a DRF serializer, then `pnpm generate` |
+| is pure arithmetic or a rule | `apps/api/core/`, which imports no Django |
+
+---
+
 ## Setup from a clean clone
 
 ### 0. Prerequisites
@@ -446,6 +514,125 @@ than assumed still working.
 
 ---
 
+## What is on the socket
+
+Nothing in the product waits for a refresh. Six event types cross the wire,
+and the split between them is the whole design — if an event must survive a
+restart it goes through Django, and if it does not it stays in Node.
+
+| Event | Reaches | Carries |
+|---|---|---|
+| `message.created` / `.read` / `.deleted` | the room | the message, or a seq |
+| `post.created` | your followers | ids only |
+| `story.created` | your followers | ids only |
+| `notification.created` | one person | the verb |
+
+**The ones outside messaging carry ids rather than rows**, and that is
+deliberate: the feed, the tray and the activity list are the only places
+blocks, privacy and deleted accounts are applied, so the client is told *that*
+something arrived and fetches it through the path that already gets those
+right. A payload carrying the post would need every one of those checks
+re-implemented for the wire.
+
+`packages/realtime-events` holds the same list the publisher does, and the
+client drops what it does not recognise — so publishing a type that is not
+listed there means it silently never arrives. The enum is shared for exactly
+that reason.
+
+Typing, presence and call signalling never reach Django at all. Presence is
+two Redis keys written by the gateway: `presence:{id}` with a 75-second TTL
+refreshed by heartbeat, and `last-seen:{id}` with none, because the point of
+"last seen" is that it outlives the thing saying you are here. Django reads
+both and **fails closed to "nobody is online"** — a Redis hiccup that reported
+everyone online would put a live dot next to people who are not there.
+
+---
+
+## Activity
+
+Every like, comment, follow, follow request, repost and story reaction writes
+one row in `notifications`, and the count in the nav moves over the socket.
+
+It is deliberately **not** a `GenericForeignKey`. A GFK costs a join per row
+and cannot be `select_related`, and this is a list people open constantly; five
+nullable foreign keys read in one query instead.
+
+Two properties are worth knowing because they are the ones that would rot
+quietly:
+
+- **A double tap is one row.** A partial unique constraint on
+  `(recipient, actor, verb, post)` dedupes likes and follows. Comments are
+  exempt, because two comments genuinely are two pieces of news.
+- **Undoing something takes its notification with it.** Unlike, un-repost and
+  un-react all withdraw the row. "Ada liked your post" surviving Ada changing
+  her mind is a small lie with no reason to exist.
+
+`unread_count` is the one place a `COUNT(*)` is allowed on a request path —
+it is index-served over one person's own rows, which is the case rule 9 was
+never about.
+
+One loose end, recorded rather than hidden: the `mention` verb is declared and
+nothing raises it, because captions are not parsed for `@names` yet. It is the
+same built-but-unreachable shape this codebase has been bitten by before, so
+it is written down here rather than left to be discovered.
+
+---
+
+## Reposts and sharing
+
+**A repost is a `Post`.** Not a second model: it appears in feeds, is
+paginated by the same cursor query, and deletes through every path that
+already exists. A separate table would mean every read path unioning two
+sources forever.
+
+Two things follow, and both are load-bearing:
+
+- **The chain flattens on write.** Reposting a repost points at the root, so
+  nothing walks a list to find the photograph and the count on the original is
+  the number of people who reposted it rather than the length of a chain.
+- **Likes and comments belong to the original.** Every action under a repost
+  posts to the post it came from. Otherwise one conversation forks into as
+  many threads as there are reposts, each invisible from the others.
+
+**Reshare is a direct message carrying a post.** The same mechanism as any
+other message rather than a parallel one — there is no separate "shares" inbox
+to check and no second unread count. Copying a link lives in the same sheet,
+because "send this to someone" is one intention with two answers.
+
+---
+
+## Messaging
+
+The thread does what a thread is expected to do, and the two deletions are the
+part worth reading twice.
+
+- **Reply** quotes what it answers, in-thread, by `seq`.
+- **Delete for everyone** sets `deleted_at` and requires the message to be
+  yours. **Delete for me** writes a `message_hidden` row and changes nothing
+  anybody else sees. They are two controls, never one with a confirmation
+  dialog — collapsing them is how people unsend things they meant to hide.
+- Hiding does **not** delete the row, because `seq` has to stay dense. A hole
+  in `seq` is a client that believes it missed something forever, and `seq` is
+  what reconnect sync walks.
+- **Message info** — when it was sent, and whether the room has read it —
+  sits behind a per-row toggle. A thread where every line carries two
+  timestamps is a log file, not a conversation.
+- A **chime** plays for a message arriving anywhere except the thread already
+  on screen. Chiming for the conversation somebody is reading is the thing
+  every chat app gets wrong once: they can see it, and the noise is pure
+  interruption.
+- The **unread total** rides in the nav and moves over the socket.
+
+The inbox costs the **same number of queries whatever it holds** — member
+lists and read positions are batched, and last messages come back in one
+`DISTINCT ON`. A test pins that, and pins it as a comparison rather than as an
+absolute: the constant part legitimately moves when a `select_related` is
+added, and what must never move is the count's dependence on how many
+conversations there are. The N+1 the ORM hides is the most common way a Django
+app gets slow.
+
+---
+
 ## Stories
 
 `01-ARCHITECTURE.md` §11 says "the report button ships before stories". It
@@ -481,6 +668,32 @@ no future call site can write an empty frame.
 The tray shows your own stories and those of accounts you follow, never
 strangers'. A story is a day rather than a portfolio, and a discovery surface
 full of other people's days is a different product.
+
+**A run starts on the first unseen frame and then wraps.** Opening somebody
+with four stories and landing on the first one you already saw means tapping
+past your own history to reach the new thing — so playback enters at the first
+unwatched frame, and after the last one wraps to the beginning and plays up to
+where it came in before moving on. Without the wrap the earlier frames never
+played at all.
+
+**Reactions and replies sit on the frame**, not behind a menu — a reaction
+that takes two taps to reach is a reaction nobody sends. Six emoji, and the
+list is enforced server-side because the emoji rides through to the author's
+activity feed, where an unbounded field is a place to put anything at all.
+Reacting again replaces rather than accumulates, so changing your mind reads
+as a correction.
+
+A reply is a **direct message** and nothing else: it opens the conversation the
+two of you already have, or starts one, and sends a message that remembers
+which frame it was about. No second inbox, no second unread count, and a block
+still stops it, because the reply path must not be a way around one.
+
+Links in a story are clickable. That sounds like nothing, and it was a real
+bug: the tap halves that advance a frame are siblings rendered *after* the
+text, so they were painted over every link — the words looked clickable and
+tapping them advanced the story. The text block is raised but transparent to
+pointers now, with only the links themselves taking them, so tapping the words
+still advances.
 
 ---
 
@@ -598,6 +811,18 @@ done by something that did not do it.
 ```
 apps/
   api/        Django — data, API, queue, auth, admin. Never holds sockets.
+    core/           pure Python, imports no Django. Testable in milliseconds.
+    config/         settings, urls, celery, broadcast
+    users/          accounts, follows, blocks, presence reads
+    media/          upload intent, derivatives, Celery tasks
+    posts/          posts, reposts, likes, comments, feed
+    stories/        expiring frames, views, reactions, replies
+    notifications/  one row per thing that happened to you
+    counters/       the counts nothing is allowed to COUNT(*)
+    links/          Open Graph previews, SSRF-guarded
+    messaging/      conversations, messages, realtime tickets
+    calls/          LiveKit and TURN credential minting
+    moderation/     reports, unfold admin, rate limits, CSAM path
   realtime/   Node — socket gateway. Never touches Postgres.
   web/        Next.js — UI. Not a second backend.
 packages/

@@ -111,7 +111,11 @@ Wide tracking, faint ink, uppercase. It reads as film-edge printing, and it's *t
 
 The **ambient glow** is a blurred radial of the image's `dominant_color` at 8% opacity behind the photo, extending ~60px. It's the reason the feed feels lit rather than pasted onto black, and it costs one CSS gradient using a value the worker already computed.
 
-**Profile — contact sheet.** 3-column grid, 2px gutters (not the usual 4-8px — contact sheets are tight), and a frame-number gutter running down the left in `meta` type: `01 02 03…`. Numbering is legitimate here because a contact sheet genuinely is a numbered sequence; don't use numbered markers anywhere else in the product.
+**Profile — contact sheet.** 2px gutters (not the usual 4-8px — contact sheets are tight), and a frame-number gutter running down the left in `meta` type: `01 06 11…`, numbering the frame each row starts on. Numbering is legitimate here because a contact sheet genuinely is a numbered sequence; don't use numbered markers anywhere else in the product.
+
+Columns are **3 / 4 / 5** by width, not a flat 3. Three was written when every screen was the 640px feed column; the profile is `data-wide` now, and on a 1152px page the same instruction produces 380px thumbnails — a contact sheet of six enormous frames is a gallery wall, which is the opposite of the metaphor. More, smaller frames as the page widens is the more faithful reading. The gutter is a real grid column, so the numbers follow the count instead of assuming it.
+
+**Explore — mosaic, not a second contact sheet.** The feed answers "what did the people I chose post?"; explore answers "who else is here?", and the difference has to show in the layout or it is the same page twice — which it was, distinguishable only by the heading. Same 2px gutters and the same 3/4/5 columns, but every seventh tile prints at 2×2 from `md` up. That is information, not decoration: a wall of equal squares has no entry point and the eye slides off it. It stays off below `md`, where two of three columns is most of the row and the effect is a lopsided page rather than a rhythm. No frame numbers — a discovery grid is an arbitrary set of other people's posts, so numbering it would be decoration pretending to be information.
 
 ---
 

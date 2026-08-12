@@ -82,6 +82,23 @@ Ignore anything for Prisma, Supabase, Firebase, or Azure — wrong stack.
 
 ## Phases
 
+### Where we are
+
+Phases 1–8 are done, and the product has grown past the list. What exists
+beyond it, in the order it landed: link previews with an SSRF guard, stories
+(text or picture, expiring on a column rather than a job, with views,
+reactions and replies), an activity feed, reposts and reshare, presence and
+last-seen, and the socket carrying posts, stories and notifications rather
+than only messages.
+
+The list below is the plan as it was written. It is left intact because the
+verification lines are still the ones to re-walk at a gate — not because it
+describes the frontier.
+
+**Rule 13 still bites here.** There is no automated regression net on user
+flows, so "Phase 6 passed" is a statement about the day it passed. Re-walk the
+critical flows at every gate.
+
 ### Phase 1 — Foundation
 
 Scaffold with the CLIs, in this order, committing as you go:

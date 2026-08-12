@@ -69,17 +69,87 @@ Two notes on shadcn. New projects scaffold on **Base UI** rather than Radix — 
 
 ---
 
+### The shape of it
+
+Three deployables, four backing services, one browser. Everything below is a
+consequence of the ownership line at the top of this document.
+
+```mermaid
+flowchart TB
+    subgraph browser["Browser"]
+        WEB["Next.js app<br/><i>UI only</i>"]
+    end
+
+    subgraph node["apps/realtime — Node"]
+        GW["ws gateway<br/><i>sockets only, no Postgres</i>"]
+    end
+
+    subgraph python["apps/api — Django"]
+        API["uvicorn / DRF<br/><i>data, auth, admin</i>"]
+        WORKER["Celery worker"]
+        BEAT["Celery beat"]
+    end
+
+    subgraph backing["Backing services"]
+        PG[("Postgres")]
+        REDIS[("Redis<br/>queue · cache · pub/sub · presence")]
+        S3[("MinIO / S3")]
+        TS[("Typesense")]
+    end
+
+    subgraph media["Media transport"]
+        LK["LiveKit SFU<br/><i>3+ participants</i>"]
+        TURN["coturn<br/><i>1:1 relay, TLS 443</i>"]
+    end
+
+    WEB -->|"/api/* rewrite, same origin"| API
+    WEB -->|"wss + 60s ticket"| GW
+    WEB -->|"presigned PUT"| S3
+    WEB -.->|"WebRTC"| TURN
+    WEB -.->|"WebRTC"| LK
+
+    API --> PG
+    API --> REDIS
+    API --> S3
+    API --> TS
+    API -->|"mints tokens for"| LK
+    API -->|"mints credentials for"| TURN
+
+    WORKER --> PG
+    WORKER --> REDIS
+    WORKER --> S3
+    BEAT --> REDIS
+
+    API -->|"PUBLISH after commit"| REDIS
+    REDIS -->|"SUBSCRIBE"| GW
+    GW -->|"presence keys + TTL"| REDIS
+
+    GW -.->|"never"| PG
+```
+
+The dashed `never` edge is the rule §8 is built on, drawn so that adding it
+looks like what it is.
+
+**The gateway learns nothing from Postgres.** It is told by Redis, and what it
+is told was written by Django inside a committed transaction.
+
+---
+
 ## 2. Repo layout
 
 ```
 aperture/
 ├── apps/
 │   ├── api/                    Django project — the entire backend
-│   │   ├── config/             settings, urls, asgi.py, celery.py
+│   │   ├── config/             settings, urls, asgi.py, celery.py, broadcast
 │   │   ├── core/               domain logic — pure Python, NO django imports
-│   │   ├── users/              accounts, follows, blocks
+│   │   ├── users/              accounts, follows, blocks, presence reads
 │   │   ├── media/              upload intent, derivatives, Celery tasks
-│   │   ├── posts/              posts, likes, comments, feed
+│   │   ├── posts/              posts, reposts, likes, comments, feed
+│   │   ├── stories/            expiring frames, views, reactions, replies
+│   │   ├── notifications/      one row per thing that happened to you
+│   │   ├── counters/           the counts nothing is allowed to COUNT(*)
+│   │   ├── links/              Open Graph previews, SSRF-guarded
 │   │   ├── messaging/          conversations, messages, ticket minting
 │   │   ├── calls/              LiveKit token minting
 │   │   ├── moderation/         reports, unfold admin, rate limits
@@ -320,9 +390,17 @@ media
   -- dominant_color feeds the UI's ambient glow, see design spec
 
 posts
-  id, author_id, caption, location, visibility, created_at, deleted_at
+  id, author_id, caption, location, visibility, created_at, deleted_at,
+  reposted_from_id,                    -- self-FK; NULL for an original
+  link_preview_id
   INDEX (author_id, id DESC)                    -- profile contact sheet
   INDEX (id DESC) WHERE deleted_at IS NULL      -- Django: condition= on Index
+  -- A repost is a post, not a second model: it appears in feeds, is paginated
+  -- by the same cursor query and deletes through the same path. The chain is
+  -- flattened on write, so reposted_from_id never points at another repost.
+  -- Likes and comments belong to the ORIGINAL — forking a conversation into
+  -- one thread per repost, each invisible from the others, is the failure
+  -- mode this avoids. A repost row's own like/comment counters stay at zero.
 
 post_media    post_id, media_id, position       -- carousels
 
@@ -338,7 +416,37 @@ comments
 counters
   entity_type, entity_id, metric, value
   PK (entity_type, entity_id, metric)
+  -- metric: followers|following|posts|likes|comments|replies|reposts|shares
   -- Celery-updated, Redis-cached. NEVER .count() on a hot path.
+
+stories
+  id, author_id, media_id NULL, text, background, caption,
+  link_preview_id, created_at, expires_at, deleted_at
+  CHECK (media_id IS NOT NULL OR text <> '')   -- no empty frames, ever
+  -- expires_at is a COLUMN, not a job. Filtered on every read, so a story is
+  -- gone the instant it lapses whether or not a worker is running.
+
+story_views        id, story_id, user_id, created_at   UNIQUE (story_id, user_id)
+
+story_reactions
+  id, story_id, user_id, emoji, created_at
+  UNIQUE (story_id, user_id)           -- reacting again REPLACES
+  -- A row rather than a counter, for the same reason story_views is one: the
+  -- author wants to know who, and a reaction can be taken back.
+
+notifications
+  id, recipient_id, actor_id, verb, detail,
+  post_id NULL, comment_id NULL, story_id NULL,
+  read_at NULL, created_at
+  INDEX (recipient_id, id DESC)
+  INDEX (recipient_id, read_at)
+  UNIQUE (recipient_id, actor_id, verb, post_id)
+         WHERE post_id IS NOT NULL AND comment_id IS NULL
+  -- Five nullable FKs, deliberately NOT a GenericForeignKey: a GFK costs a
+  -- join per row and cannot be select_related, and this list is read
+  -- constantly. The partial unique makes a like idempotent — a double tap is
+  -- one row — while leaving comments free to repeat, because two comments
+  -- genuinely are two pieces of news.
 
 timeline                               -- push fanout, Phase 8 only
   user_id, post_id, author_id, score, created_at
@@ -363,10 +471,34 @@ messages
   conversation_id, seq BIGINT,         -- server-assigned, monotonic per convo
   id, sender_id, body, media_id,
   client_id UUID,                      -- idempotency key from client
-  reply_to_seq, created_at, deleted_at
+  reply_to_seq,                        -- what this answers, in-thread
+  shared_post_id NULL,                 -- a post sent into the room: "reshare"
+  replied_story_id NULL,               -- a story answered: "story reply"
+  created_at, deleted_at
   PK (conversation_id, seq)
   UNIQUE (conversation_id, client_id)
+
+message_hidden
+  id, message_id, user_id, created_at
+  UNIQUE (message_id, user_id)
+  -- "Delete for me". A row rather than a flag on the message, because the
+  -- message is shared and the decision is not — and rather than an actual
+  -- delete, because seq has to stay DENSE. A hole in seq is a client that
+  -- believes it missed something forever. Filtered in the read path, next to
+  -- the block filter, for the same reason.
 ```
+
+**Deleting for everyone and deleting for yourself are different operations**
+and this is where that is decided. The first sets `messages.deleted_at` and
+requires the message to be yours; the second writes a `message_hidden` row and
+works on anybody's, changing nothing that anybody else sees. They are two
+service functions and two controls, never one with a flag — a flag between two
+operations that differ in *who they affect* is a flag that eventually gets
+passed wrong.
+
+A story reply is a direct message and nothing else: no second inbox, no second
+unread count, no second delivery path. `replied_story_id` is only the context
+that tells the author which of four frames was answered.
 
 That `seq` column and that `UNIQUE` constraint are the two most important lines in the entire schema. `seq` gives correct ordering without trusting browser clocks, plus cursor sync (*"send me everything after 4821"*) for free. The unique constraint makes a flaky-network retry a no-op instead of a duplicate message. Both are miserable to retrofit onto live conversations.
 
@@ -449,6 +581,30 @@ The split is arithmetic, not taste: pure push means a 10M-follower account trigg
 
 ### Two classes of event, two paths
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant D as Django
+    participant P as Postgres
+    participant R as Redis
+    participant G as Gateway
+
+    Note over B,G: Durable — must survive a restart
+    B->>D: POST /api/... (session cookie)
+    D->>P: BEGIN … INSERT … COMMIT
+    D-->>B: 200, the row as the client will render it
+    D->>R: PUBLISH (on_commit, never inside the transaction)
+    R->>G: SUBSCRIBE delivers
+    G-->>B: WSS envelope {v, type, conversation_id, seq, payload}
+
+    Note over B,G: Ephemeral — typing, presence, call signalling
+    B->>G: WSS
+    G->>R: PUBLISH conv.{id}.ephemeral
+    R->>G: other replicas
+    G-->>B: peers
+```
+
 **Persisted events** — messages, reactions, read receipts. These go **up over HTTP** to Django and come **down over the socket**:
 
 ```
@@ -472,6 +628,44 @@ Browser ──WSS──> realtime ──PUBLISH conv.{id}.ephemeral──> other
 Nothing here is worth a database write or an HTTP request per keystroke. Presence is Redis keys with a TTL, refreshed by heartbeat.
 
 That split is the whole design. **If an event must survive a restart it goes through Django; if it doesn't, it stays in Node.**
+
+### The durable event types
+
+Two channel shapes. `conv.{id}` addresses a room; `user.{id}` addresses one
+person and is the one a client can neither name nor opt out of, so its
+membership is decided entirely by the publisher.
+
+| Type | Channel | Payload | Why not more |
+|---|---|---|---|
+| `message.created` | `conv.{id}` | the serialised message | it is the message; the client renders it directly |
+| `message.read` | `conv.{id}` | reader id, seq | |
+| `message.deleted` | `conv.{id}` | seq | |
+| `post.created` | `user.{id}` × followers | post id, author id | ids only — the feed applies visibility, blocks and privacy, and a payload carrying the post would need every one of those checks re-implemented for the wire |
+| `story.created` | `user.{id}` × followers | story id, author id | same |
+| `notification.created` | `user.{id}` | the verb | same; the client refetches the list, which is the only place blocks are applied |
+
+**The list is closed on both sides.** `packages/realtime-events` holds the same
+enum the publisher does, and the client drops what it does not recognise — so a
+type published but not listed there simply never arrives. That is the worst
+kind of bug to go looking for, which is why the enum is shared rather than
+duplicated.
+
+Fanout is capped at `MAX_RECIPIENTS` (5,000) per publish. A very large account's
+followers do not all get a live update; they get it on their next fetch, which
+is what everyone got before any of this existed. The alternative is a fanout
+worker, which §7 puts behind a measurement nobody has taken yet.
+
+### Presence, and the two keys
+
+The gateway owns presence because it is the only process that can observe it.
+It writes `presence:{user_id}` with a 75-second TTL, refreshed on heartbeat,
+and `last-seen:{user_id}` with **no** TTL — the point of "last seen" is that it
+outlives the thing saying you are here.
+
+Django reads both and writes neither. `users/presence.py` batches into one
+`MGET` and **fails closed to "nobody is online"**: a Redis hiccup that reported
+everyone online would put a live dot next to people who are not there, which is
+worse than a dot briefly missing.
 
 ### Authentication
 
