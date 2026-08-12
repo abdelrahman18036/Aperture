@@ -290,6 +290,32 @@ socket whose token it rejects, so a response at all proves `LIVEKIT_API_SECRET`
 matches on both sides. A token signed with the wrong secret is well-formed,
 looks perfect from Django, and is refused at the door.
 
+**Media, too, on a machine with no camera.** The join is where the token
+story ends and the media story starts, and the rest is reachable by lying to
+the browser rather than bypassing the app:
+
+```bash
+cat docs/verify-sfu-media.js
+```
+
+It replaces `getUserMedia` with a canvas `captureStream` and an oscillator, so
+`livekit-client` acquires, encodes and publishes real tracks through the
+product's own call UI. Then check the far side from the server, because a
+local preview renders whether or not anything was published:
+
+```bash
+cd apps/api && uv run manage.py shell
+```
+
+```bash
+cat docs/check-sfu-room.py
+```
+
+Measured: LiveKit holding **`video/VP8` at 640×480 and `audio/red`, both
+unmuted**, from a participant identified by the caller's snowflake. That is
+the SFU path end to end — token, join, encode, publish, ingest — with only
+the capture synthetic.
+
 Reaching that row needs a certificate the browser trusts. See
 `infra/coturn/turnserver.conf` — and note both traps recorded there: issue the
 certificate from the same shell that ran `mkcert -install`, and restart the
