@@ -8,18 +8,21 @@ import { Avatar, AvatarFallback, cn } from "@repo/ui";
 
 import { api } from "@/lib/api";
 
-import { useRealtime } from "./use-realtime";
+import {
+  useRealtimeEvents,
+  useRealtimeReady,
+} from "@/features/realtime/provider";
 
 export type Conversation = Schemas["Conversation"];
 
 /**
  * The inbox.
  *
- * It holds a socket of its own so the list stays live while you are looking
- * at it — a new message should reorder the inbox without a refresh. The
- * socket carries no conversation subscriptions here: durable events arrive on
- * your own channel regardless, which is exactly the property that makes the
- * gateway able to work without a database.
+ * It subscribes to the application's socket so the list stays live while you
+ * are looking at it — a new message should reorder the inbox without a
+ * refresh. It asks for no conversation channels of its own: durable events
+ * arrive on your own channel regardless, which is exactly the property that
+ * makes the gateway able to work without a database.
  *
  * The unread badge is **daylight**. It is new, and new is cool — the same
  * rule that makes the typing indicator cool and the send button warm.
@@ -50,7 +53,8 @@ export function Inbox({ activeId }: { activeId?: string }) {
     load();
   }, [load]);
 
-  useRealtime({ conversationIds: [], onEvent, onReady: load });
+  useRealtimeEvents(onEvent);
+  useRealtimeReady(load);
 
   useEffect(load, [load]);
 

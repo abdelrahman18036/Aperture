@@ -7,7 +7,13 @@ import type { AnyServerEvent } from "@repo/realtime-events";
 
 import { api } from "@/lib/api";
 
-import { useRealtime, type ConnectionState } from "./use-realtime";
+import {
+  useRealtimeApi,
+  useRealtimeEvents,
+  useRealtimeReady,
+} from "@/features/realtime/provider";
+
+import type { ConnectionState } from "./use-realtime";
 
 export type Message = Schemas["Message"];
 
@@ -58,16 +64,6 @@ export interface ConversationState {
   setCallIds: (callIds: readonly string[]) => void;
 }
 
-export interface ConversationOptions {
-  /**
-   * Anything this hook does not handle itself — today, call events.
-   *
-   * Returning the event rather than swallowing it keeps messaging ignorant of
-   * calls, which is what lets the two features change independently.
-   */
-  onOtherEvent?: (event: AnyServerEvent) => void;
-}
-
 /** How long a typing indicator survives without a refresh. */
 const TYPING_TTL_MS = 5_000;
 
@@ -81,7 +77,6 @@ function newClientId(): string {
 export function useConversation(
   conversationId: string,
   viewerId: string,
-  options: ConversationOptions = {},
 ): ConversationState {
   const [bySeq, setBySeq] = useState<Map<number, Message>>(new Map());
   const [pending, setPending] = useState<PendingMessage[]>([]);
@@ -199,27 +194,33 @@ export function useConversation(
       if (event.type === "message.deleted") {
         if (event.conversation_id !== conversationId) return;
         drop(event.seq);
-        return;
       }
 
-      // Not ours. Calls are the only other thing on this socket today, and
-      // messaging is deliberately kept from knowing that.
-      options.onOtherEvent?.(event);
+      // Anything else on this socket belongs to somebody else — calls, today.
+      // Messaging is deliberately kept from knowing that.
     },
-    [absorb, conversationId, drop, viewerId, options],
+    [absorb, conversationId, drop, viewerId],
   );
 
-  const conversationIds = useMemo(() => [conversationId], [conversationId]);
   const {
     state: connection,
     sendTyping,
     sendCallSignal,
     setCallIds,
-  } = useRealtime({
-    conversationIds,
-    onEvent,
-    onReady: sync,
-  });
+    setConversationIds,
+  } = useRealtimeApi();
+
+  useRealtimeEvents(onEvent);
+  // Every reconnect resyncs from the last `seq` we hold. The socket is a
+  // delivery path, never a source of truth, so a drop costs one `?after=`.
+  useRealtimeReady(sync);
+
+  // Point the shared socket at this thread's ephemeral channel while it is on
+  // screen, and let it go when it is not.
+  useEffect(() => {
+    setConversationIds([conversationId]);
+    return () => setConversationIds([]);
+  }, [conversationId, setConversationIds]);
 
   // Typing indicators expire on their own. A client that closed its laptop
   // mid-word must not leave "ada is typing" on screen forever.

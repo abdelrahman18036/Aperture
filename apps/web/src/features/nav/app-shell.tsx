@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { CallProvider } from "@/features/calls/provider";
+import { RealtimeProvider } from "@/features/realtime/provider";
 import { api } from "@/lib/api";
 
 import { NavBar, NavRail } from "./nav-rail";
@@ -26,7 +28,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-dvh">
+    // One socket for the whole shell, and one place a call can appear. Both
+    // live here rather than inside a screen because a call that only rings
+    // when you are already looking at the right thread is not a call.
+    <RealtimeProvider>
+      <CallProvider>
+        <div className="min-h-dvh">
       <NavRail username={username} />
       <NavBar username={username} />
 
@@ -45,6 +52,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </aside>
         </div>
       </div>
-    </div>
+        </div>
+      </CallProvider>
+    </RealtimeProvider>
   );
 }

@@ -48,8 +48,6 @@ const HEARTBEAT_MS = 30_000;
 export type ConnectionState = "connecting" | "open" | "offline";
 
 interface RealtimeOptions {
-  /** Conversations whose ephemeral events this client wants. */
-  conversationIds: readonly string[];
   /** Every durable and ephemeral event, already validated. */
   onEvent: (event: AnyServerEvent) => void;
   /**
@@ -82,17 +80,22 @@ export interface Realtime {
    * milliseconds of the invite.
    */
   setCallIds: (callIds: readonly string[]) => void;
+  /**
+   * Point this socket at some conversations' ephemeral channels.
+   *
+   * A setter for the same reason `setCallIds` is one: the screen that wants a
+   * subscription is not the component that owns the socket, and routing the
+   * request back up through a render before it takes effect loses events in
+   * the gap.
+   */
+  setConversationIds: (conversationIds: readonly string[]) => void;
 }
 
-export function useRealtime({
-  conversationIds,
-  onEvent,
-  onReady,
-}: RealtimeOptions): Realtime {
+export function useRealtime({ onEvent, onReady }: RealtimeOptions): Realtime {
   const [state, setState] = useState<ConnectionState>("connecting");
 
   const socket = useRef<WebSocket | null>(null);
-  const wanted = useRef<readonly string[]>(conversationIds);
+  const wanted = useRef<readonly string[]>([]);
   const wantedCalls = useRef<readonly string[]>([]);
 
   // Effect events, so the effect below can call the latest handler without
@@ -104,8 +107,6 @@ export function useRealtime({
   const ready = useEffectEvent(() => {
     onReady();
   });
-  const currentConversations = useEffectEvent(() => conversationIds);
-
   const pushSubscription = useCallback(() => {
     const live = socket.current;
     if (live?.readyState !== WebSocket.OPEN) return;
@@ -173,7 +174,8 @@ export function useRealtime({
 
           if (event.type === "connection.ready") {
             setState("open");
-            wanted.current = currentConversations();
+            // Re-send whatever this client was subscribed to before the drop.
+            // The refs survived it; the gateway's memory of them did not.
             pushSubscription();
             // Resync before anything else. Whatever arrived while the socket
             // was down is fetched by seq, so the gap closes itself.
@@ -233,13 +235,6 @@ export function useRealtime({
     // exactly once per mount.
   }, [pushSubscription]);
 
-  // Re-subscribe when the set of open conversations changes. Calls go
-  // through `setCallIds` instead — see there for why.
-  useEffect(() => {
-    wanted.current = conversationIds;
-    pushSubscription();
-  }, [conversationIds, pushSubscription]);
-
   const sendTyping = useCallback(
     (conversationId: string, isTyping: boolean) => {
       const live = socket.current;
@@ -283,5 +278,19 @@ export function useRealtime({
     [pushSubscription],
   );
 
-  return { state, sendTyping, sendCallSignal, setCallIds };
+  const setConversationIds = useCallback(
+    (ids: readonly string[]) => {
+      wanted.current = ids;
+      pushSubscription();
+    },
+    [pushSubscription],
+  );
+
+  return {
+    state,
+    sendTyping,
+    sendCallSignal,
+    setCallIds,
+    setConversationIds,
+  };
 }
