@@ -50,12 +50,34 @@ def _with_media(queryset: QuerySet[Post]) -> QuerySet[Post]:
     hides that from you, which is exactly why rule 10 says to read the SQL it
     generates.
     """
-    return queryset.select_related(
-        "author", "author__avatar_media", "link_preview"
-    ).prefetch_related(
-        Prefetch(
-            "attachments",
-            queryset=PostMedia.objects.select_related("media").order_by("position"),
+    return (
+        queryset.select_related(
+            "author",
+            "author__avatar_media",
+            "link_preview",
+            # A repost carries the original inline. One extra join rather than
+            # one extra query per repost — the same reasoning as the line
+            # above, applied to a row that is a post's whole content.
+            #
+            # Only one level deep, and that is a guarantee rather than a hope:
+            # `repost` resolves a chain to its root, so a repost's
+            # `reposted_from` is never itself a repost.
+            "reposted_from",
+            "reposted_from__author",
+            "reposted_from__author__avatar_media",
+            "reposted_from__link_preview",
+        )
+        .prefetch_related(
+            Prefetch(
+                "attachments",
+                queryset=PostMedia.objects.select_related("media").order_by("position"),
+            )
+        )
+        .prefetch_related(
+            Prefetch(
+                "reposted_from__attachments",
+                queryset=PostMedia.objects.select_related("media").order_by("position"),
+            )
         )
     )
 
@@ -283,3 +305,21 @@ def comment_owned_by(*, author: User, comment_id: int) -> Comment | None:
 
 def post_owned_by(*, author: User, post_id: int) -> Post | None:
     return live().filter(pk=post_id, author=author).first()
+
+
+def reposted_post_ids(*, viewer: User | None, post_ids: list[int]) -> set[int]:
+    """Which of these the viewer has reposted. One query for the page.
+
+    Keyed on the *original*, because that is what the button sits under: a
+    repost on somebody's own feed shows the original's state, and asking "have
+    I reposted this" about a repost means asking about what it came from.
+    """
+    if viewer is None or not post_ids:
+        return set()
+    return set(
+        Post.objects.filter(
+            author=viewer,
+            reposted_from_id__in=post_ids,
+            deleted_at__isnull=True,
+        ).values_list("reposted_from_id", flat=True)
+    )

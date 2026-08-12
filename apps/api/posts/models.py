@@ -36,6 +36,20 @@ class Post(models.Model):
     author = models.ForeignKey(
         "users.User", on_delete=models.CASCADE, related_name="posts"
     )
+    #: What this is a repost of, if it is one.
+    #:
+    #: A repost is a `Post` rather than its own model, because it *is* one:
+    #: it appears in feeds, carries its own likes and comments, and can be
+    #: deleted independently. A separate table would mean every read path
+    #: unioning two sources forever. `CASCADE` — a repost of a hard-deleted
+    #: post has nothing left to show.
+    reposted_from = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="reposts",
+    )
     caption = models.TextField(max_length=2200, blank=True)
     location = models.CharField(max_length=120, blank=True)
     visibility = models.CharField(

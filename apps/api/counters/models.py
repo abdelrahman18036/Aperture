@@ -33,6 +33,8 @@ class Counter(models.Model):
         LIKES = "likes", "Likes"
         COMMENTS = "comments", "Comments"
         REPLIES = "replies", "Replies"
+        REPOSTS = "reposts", "Reposts"
+        SHARES = "shares", "Shares"
 
     id = models.BigIntegerField(primary_key=True, default=snowflake, editable=False)
     entity_type = models.CharField(max_length=20, choices=EntityType.choices)

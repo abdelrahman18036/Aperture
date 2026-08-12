@@ -52,7 +52,12 @@ CURSOR = OpenApiParameter(
 
 def _post_context(viewer: User | None, posts: list[Post]) -> dict[str, Any]:
     """Everything the serializer needs, fetched once for the whole page."""
+    # Originals too: a repost renders the original's numbers, and looking
+    # them up per row is the N+1 rule 10 is about.
     post_ids = [post.pk for post in posts]
+    post_ids += [
+        post.reposted_from_id for post in posts if post.reposted_from_id is not None
+    ]
     return {
         "like_counts": get_many(
             entity_type=Counter.EntityType.POST,
@@ -64,7 +69,20 @@ def _post_context(viewer: User | None, posts: list[Post]) -> dict[str, Any]:
             entity_ids=post_ids,
             metric=Counter.Metric.COMMENTS,
         ),
+        "repost_counts": get_many(
+            entity_type=Counter.EntityType.POST,
+            entity_ids=post_ids,
+            metric=Counter.Metric.REPOSTS,
+        ),
+        "share_counts": get_many(
+            entity_type=Counter.EntityType.POST,
+            entity_ids=post_ids,
+            metric=Counter.Metric.SHARES,
+        ),
         "liked_post_ids": selectors.liked_post_ids(viewer=viewer, post_ids=post_ids),
+        "reposted_post_ids": selectors.reposted_post_ids(
+            viewer=viewer, post_ids=post_ids
+        ),
     }
 
 
@@ -234,6 +252,55 @@ class PostDetailView(APIView):
             raise NotFound("No such post.")
         services.soft_delete_post(post=post)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RepostView(APIView):
+    """`POST`/`DELETE /api/posts/{id}/repost`.
+
+    Idempotent both ways, like `LikeView` and for the same reason. Returns the
+    *original* post, because that is what the button that was pressed belongs
+    to and what its count is read from.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="posts_repost",
+        request=None,
+        responses={200: PostSerializer, 403: None, 404: None},
+        description="Repost a post onto your own feed. Idempotent.",
+    )
+    def post(self, request: Request, post_id: str) -> Response:
+        viewer = current_user(request)
+        post = selectors.visible_post(viewer=viewer, post_id=int(post_id))
+        if post is None or not can_view_posts(viewer=viewer, author=post.author):
+            raise NotFound("No such post.")
+        try:
+            services.repost(user=viewer, post=post)
+        except services.NotAllowedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except services.PostRejectedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        original = post.reposted_from or post
+        return Response(
+            PostSerializer(original, context=_post_context(viewer, [original])).data
+        )
+
+    @extend_schema(
+        operation_id="posts_undo_repost",
+        responses={200: PostSerializer, 404: None},
+        description="Take a repost back. Idempotent.",
+    )
+    def delete(self, request: Request, post_id: str) -> Response:
+        viewer = current_user(request)
+        post = selectors.visible_post(viewer=viewer, post_id=int(post_id))
+        if post is None:
+            raise NotFound("No such post.")
+        services.undo_repost(user=viewer, post=post)
+        original = post.reposted_from or post
+        return Response(
+            PostSerializer(original, context=_post_context(viewer, [original])).data
+        )
 
 
 class LikeView(APIView):

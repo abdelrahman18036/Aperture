@@ -39,6 +39,16 @@ class PostSerializer(serializers.ModelSerializer[Post]):
     like_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
     viewer_has_liked = serializers.SerializerMethodField()
+    repost_count = serializers.SerializerMethodField()
+    share_count = serializers.SerializerMethodField()
+    viewer_has_reposted = serializers.SerializerMethodField()
+    #: The post this one is a repost of, rendered in full.
+    #:
+    #: A method field rather than `PostSerializer(read_only=True)`, because a
+    #: serializer cannot name itself in its own class body. The recursion
+    #: terminates at one level by construction — `services.repost` flattens a
+    #: chain to its root — so this cannot run away.
+    reposted_from = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
@@ -54,6 +64,10 @@ class PostSerializer(serializers.ModelSerializer[Post]):
             "like_count",
             "comment_count",
             "viewer_has_liked",
+            "repost_count",
+            "share_count",
+            "viewer_has_reposted",
+            "reposted_from",
         )
         read_only_fields = fields
 
@@ -80,6 +94,31 @@ class PostSerializer(serializers.ModelSerializer[Post]):
     def get_viewer_has_liked(self, post: Post) -> bool:
         liked: set[int] = self.context.get("liked_post_ids", set())
         return post.pk in liked
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_repost_count(self, post: Post) -> int:
+        counts: dict[int, int] = self.context.get("repost_counts", {})
+        return counts.get(post.pk, 0)
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_share_count(self, post: Post) -> int:
+        counts: dict[int, int] = self.context.get("share_counts", {})
+        return counts.get(post.pk, 0)
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_viewer_has_reposted(self, post: Post) -> bool:
+        reposted: set[int] = self.context.get("reposted_post_ids", set())
+        return post.pk in reposted
+
+    # A `$ref` written by hand, because the field is the class it lives in and
+    # naming it would be a forward reference to a type that does not exist yet.
+    @extend_schema_field(
+        {"allOf": [{"$ref": "#/components/schemas/Post"}], "nullable": True}
+    )
+    def get_reposted_from(self, post: Post) -> dict[str, Any] | None:
+        if post.reposted_from_id is None:
+            return None
+        return dict(PostSerializer(post.reposted_from, context=self.context).data)
 
 
 class PostPageSerializer(serializers.Serializer[dict[str, Any]]):

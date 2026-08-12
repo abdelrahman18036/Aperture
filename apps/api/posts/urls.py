@@ -10,6 +10,7 @@ from posts.views import (
     LikeView,
     PostCreateView,
     PostDetailView,
+    RepostView,
     UserPostsView,
 )
 
@@ -29,5 +30,6 @@ urlpatterns: list[URLPattern | URLResolver] = [
     ),
     path("<snowflake:post_id>", PostDetailView.as_view(), name="detail"),
     path("<snowflake:post_id>/like", LikeView.as_view(), name="like"),
+    path("<snowflake:post_id>/repost", RepostView.as_view(), name="repost"),
     path("<snowflake:post_id>/comments", CommentListView.as_view(), name="comments"),
 ]
