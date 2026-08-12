@@ -16,6 +16,7 @@ import { Linkify } from "@/features/links/linkify";
 import { ReportDialog } from "@/features/moderation/report-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
+import { stamp } from "@/lib/time";
 
 import { LikeButton } from "./like-button";
 import type { Post } from "./use-feed";
@@ -79,17 +80,6 @@ async function writeToClipboard(text: string): Promise<boolean> {
   } finally {
     field.remove();
   }
-}
-
-function formatWhen(iso: string): string {
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return "NOW";
-  if (minutes < 60) return `${String(minutes)} MIN`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${String(hours)} HR`;
-  return new Date(iso)
-    .toLocaleDateString("en-GB", { day: "numeric", month: "short" })
-    .toUpperCase();
 }
 
 export function FeedPost({ post }: { post: Post }) {
@@ -182,7 +172,7 @@ export function FeedPost({ post }: { post: Post }) {
               actual properties of the image. */}
           <span className="meta truncate">
             {post.location ? `${post.location} · ` : ""}
-            {formatWhen(post.created_at)}
+            {stamp(post.created_at)}
           </span>
         </div>
 
@@ -284,7 +274,7 @@ export function FeedPost({ post }: { post: Post }) {
         {image?.width && image.height
           ? ` · ${String(image.width)}×${String(image.height)}`
           : ""}
-        {` · ${formatWhen(post.created_at)}`}
+        {` · ${stamp(post.created_at)}`}
       </p>
 
       {post.caption ? (

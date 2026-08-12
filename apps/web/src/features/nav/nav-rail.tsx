@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bell,
   Camera,
   Compass,
   House,
@@ -42,6 +43,7 @@ const DESTINATIONS: Destination[] = [
   { href: "/explore", label: "Explore", icon: Compass },
   { href: "/search", label: "Search", icon: Search },
   { href: "/messages", label: "Messages", icon: MessageCircle },
+  { href: "/notifications", label: "Activity", icon: Bell },
 ];
 
 /** Not a destination. Composing happens over the page, not instead of it. */
@@ -87,6 +89,22 @@ function queues(counts: NavCounts): Destination[] {
 export interface NavCounts {
   requests: number;
   unread: number;
+  activity: number;
+}
+
+/**
+ * The counts that belong to a permanent destination rather than to a queue.
+ *
+ * Activity is always there — unlike Requests, which only exists when it has
+ * something in it — so its number rides on the entry instead of conjuring a
+ * second one.
+ */
+function withCounts(items: Destination[], counts: NavCounts): Destination[] {
+  return items.map((item) =>
+    item.href === "/notifications" && counts.activity > 0
+      ? { ...item, count: counts.activity }
+      : item,
+  );
 }
 
 export function NavRail({
@@ -100,7 +118,7 @@ export function NavRail({
   const pathname = usePathname();
 
   const items: Destination[] = [
-    ...DESTINATIONS,
+    ...withCounts(DESTINATIONS, counts),
     ...queues(counts),
     ...(username
       ? [
@@ -224,7 +242,6 @@ export function NavBar({
   username: string | null;
   counts: NavCounts;
 }) {
-  const { start: onCompose } = useCompose();
   const pathname = usePathname();
   // No queue entries here. The bar is six wide at 375px already, and a
   // seventh target would be under the 24px floor — the pip on Messages
@@ -235,7 +252,14 @@ export function NavBar({
       ? [{ href: `/u/${username}`, label: "Profile", icon: UserRound }]
       : []),
   ];
-  const waiting = counts.requests + counts.unread;
+  // Requests has no entry down here, so its count rides on Messages
+  // alongside unread — both are one tap away through it. Activity has its
+  // own entry now, so its pip belongs there rather than piled onto the same
+  // dot, where "you have something" would stop saying where.
+  const waitingAt: Record<string, number> = {
+    "/messages": counts.requests + counts.unread,
+    "/notifications": counts.activity,
+  };
 
   return (
     <nav
@@ -244,10 +268,8 @@ export function NavBar({
     >
       {items.map(({ href, label, icon: Icon }) => {
         const active = pathname === href;
-        // The pip rides on Messages rather than adding a seventh target: the
-        // bar is already six wide at 375px, and a seventh would land under
-        // the 24px floor. Both queues are one tap away through it.
-        const pip = href === "/messages" && waiting > 0;
+        const waiting = waitingAt[href] ?? 0;
+        const pip = waiting > 0;
         return (
           <Link
             key={label}

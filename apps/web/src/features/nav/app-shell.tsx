@@ -55,7 +55,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { viewerId } = useRealtimeApi();
   const [username, setUsername] = useState<string | null>(null);
-  const [counts, setCounts] = useState<NavCounts>({ requests: 0, unread: 0 });
+  const [counts, setCounts] = useState<NavCounts>({
+    requests: 0,
+    unread: 0,
+    activity: 0,
+  });
 
   useEffect(() => {
     void api.GET("/api/users/me").then((response) => {
@@ -74,22 +78,39 @@ function Shell({ children }: { children: React.ReactNode }) {
   /**
    * What the rail's pips read from.
    *
-   * Two requests on mount, and no polling — the socket carries the changes.
+   * Three requests on mount, and no polling — the socket carries the changes.
    */
   useEffect(() => {
     void Promise.all([
       api.GET("/api/users/requests"),
       api.GET("/api/messaging/conversations"),
-    ]).then(([requests, conversations]) => {
+      api.GET("/api/notifications/list"),
+    ]).then(([requests, conversations, activity]) => {
       setCounts({
         requests: requests.data?.requests.length ?? 0,
         unread: (conversations.data ?? []).reduce(
           (total, row) => total + row.unread_count,
           0,
         ),
+        activity: activity.data?.unread_count ?? 0,
       });
     });
   }, []);
+
+  /**
+   * Opening the activity page is what marks it read.
+   *
+   * The shell owns this rather than the page, because the shell owns the
+   * number in the rail. Two owners would mean the page telling the server and
+   * the rail guessing, and the guess would be wrong every time a notification
+   * arrived between the two.
+   */
+  useEffect(() => {
+    if (pathname !== "/notifications") return;
+    void api.POST("/api/notifications/read").then(() => {
+      setCounts((current) => ({ ...current, activity: 0 }));
+    });
+  }, [pathname]);
 
   /**
    * A message arrived somewhere.
@@ -103,6 +124,16 @@ function Shell({ children }: { children: React.ReactNode }) {
    */
   const onEvent = useCallback(
     (event: AnyServerEvent) => {
+      if (event.type === "notification.created") {
+        // No chime. A like is not an interruption, and a sound for every one
+        // of them is how an app teaches somebody to turn sound off.
+        setCounts((current) =>
+          pathname === "/notifications"
+            ? current
+            : { ...current, activity: current.activity + 1 },
+        );
+        return;
+      }
       if (event.type !== "message.created") return;
       const message = event.payload as { sender?: { id?: string } };
       if (message.sender?.id === viewerId) return;

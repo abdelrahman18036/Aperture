@@ -66,6 +66,11 @@ def notify(
         lambda: broadcast.publish_to_users(
             user_ids=[recipient_id],
             event_type="notification.created",
+            # The verb and nothing else, deliberately — the same shape and the
+            # same reasoning as `post.created` in `posts.services`. The client
+            # is told *that* something arrived and fetches it through the path
+            # that already applies blocks and deleted accounts. Serialising the
+            # row here would mean a second place those rules have to be right.
             payload={"verb": verb},
         )
     )

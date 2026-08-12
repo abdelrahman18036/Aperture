@@ -9,6 +9,7 @@ import { Button, Spinner, cn } from "@repo/ui";
 
 import { useCallControls } from "@/features/calls/provider";
 import { useMediaUpload } from "@/features/media/use-media-upload";
+import { relativeTime } from "@/lib/time";
 
 import { MessageRow, PendingRow } from "./message-row";
 import { TypingLine } from "./typing-dots";
@@ -341,17 +342,6 @@ export function Conversation({
  * rather than danger red: a dropped socket is not an error, it is a state
  * that resolves itself, and colouring it red teaches people to ignore red.
  */
-/** "2 min ago", "3 hr ago", "5 days ago". Coarse on purpose. */
-function ago(iso: string): string {
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${String(minutes)} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${String(hours)} hr ago`;
-  const days = Math.round(hours / 24);
-  return days === 1 ? "yesterday" : `${String(days)} days ago`;
-}
-
 function PresencePip({
   state,
   othersOnline,
@@ -387,7 +377,7 @@ function PresencePip({
         : // "Away" alone says nothing about whether they left a minute ago
           // or last week, which is the only thing anybody wants from it.
           lastSeen !== null
-          ? `Last seen ${ago(lastSeen)}`
+          ? `Last seen ${relativeTime(lastSeen)}`
           : "Away";
 
   // Daylight is "happening now" — somebody actually being there qualifies,
