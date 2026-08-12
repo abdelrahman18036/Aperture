@@ -95,16 +95,26 @@ def test_a_conversation_that_does_not_exist_answers_identically(
     assert response.status_code == 404
 
 
-def test_a_block_is_400_and_says_nothing(
+def test_a_blocked_dm_cannot_be_rung_and_says_nothing(
     signed_in: APIClient, user: User, other_user: User, dm: Conversation
 ) -> None:
+    """404, identical to a conversation that does not exist.
+
+    Blocking is filtered in `messaging.selectors.membership_or_none`, which
+    `callable_conversation` is built on — so this endpoint never even reaches
+    the service that would have explained itself with a 400.
+    """
     Block.objects.create(blocker=other_user, blocked=user)
 
-    response = signed_in.post(
+    blocked = signed_in.post(
         "/api/calls/start", {"conversation_id": str(dm.pk)}, format="json"
     )
-    assert response.status_code == 400
-    assert "block" not in response.json()["detail"].lower()
+    absent = signed_in.post(
+        "/api/calls/start", {"conversation_id": "80000000000000000"}, format="json"
+    )
+
+    assert blocked.status_code == 404
+    assert blocked.json() == absent.json()
 
 
 def test_joining_a_call_in_someone_elses_conversation_is_404(
@@ -191,3 +201,38 @@ def test_the_other_party_is_rung(
 
     assert len(_no_ringing) == 1
     assert _no_ringing[0]["recipient_ids"] == [other_user.pk]
+
+
+def test_ringing_is_throttled(
+    signed_in: APIClient, dm: Conversation, settings: Any
+) -> None:
+    """The one limit whose cost lands on somebody else.
+
+    An unthrottled call endpoint is a way to make another person's device ring
+    without ever sending them a word, so this asserts the throttle is actually
+    attached rather than merely configured.
+    """
+    from core.ratelimit import LIMITS
+    from moderation.ratelimit import _client
+
+    capacity = LIMITS["call"].capacity
+
+    # The bucket is Redis state and outlives a test; start from a full one.
+    try:
+        client = _client()
+        for key in client.scan_iter("ratelimit:call:*"):
+            client.delete(key)
+    except Exception:
+        pytest.skip("Redis is not available, and the limiter fails open without it")
+
+    codes = [
+        signed_in.post(
+            "/api/calls/start", {"conversation_id": str(dm.pk)}, format="json"
+        ).status_code
+        for _ in range(capacity + 3)
+    ]
+
+    assert codes[0] == 201
+    assert 429 in codes, codes
+    # And it refuses only after the burst is spent, not before.
+    assert codes[:capacity].count(429) == 0, codes

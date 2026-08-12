@@ -28,6 +28,7 @@ from calls.serializers import (
 )
 from config.auth import current_user
 from messaging.models import Conversation
+from moderation.throttling import make_throttle
 
 
 def _conversation_or_404(request: Request, conversation_id: str) -> Conversation:
@@ -45,9 +46,16 @@ def _conversation_or_404(request: Request, conversation_id: str) -> Conversation
 
 
 class StartCallView(APIView):
-    """`POST /api/calls/start` — ring a conversation."""
+    """`POST /api/calls/start` — ring a conversation.
+
+    Throttled, and it is the one limit in the product whose cost lands on
+    somebody else: a call makes another person's device ring, so an
+    unthrottled endpoint is a way to harass someone without sending them a
+    single word.
+    """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [make_throttle("call")]
 
     @extend_schema(
         operation_id="calls_start",

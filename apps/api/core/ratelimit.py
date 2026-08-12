@@ -130,4 +130,13 @@ LIMITS: Final[dict[str, Bucket]] = {
     # more likely to be having a bad day than attacking us, and a report costs
     # us one row.
     "report": Bucket(capacity=30, refill_per_second=1 / 4),
+    # Placing a call. The tightest limit here, and the only one whose cost is
+    # paid by somebody else: a call makes another person's device ring, so an
+    # unlimited endpoint is a way to harass someone without ever sending them
+    # a word. Five back to back covers a bad line and redialling; one every
+    # thirty seconds after that is far below what ring-spam needs.
+    #
+    # It is also the most expensive request in the product — a LiveKit token,
+    # TURN credentials and a fanout publish, none of which are cached.
+    "call": Bucket(capacity=5, refill_per_second=1 / 30),
 }

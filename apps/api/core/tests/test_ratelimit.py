@@ -140,9 +140,30 @@ class TestConfiguredLimits:
             "comment": 360,
             "message": 3600,
             "report": 900,
+            "call": 120,
         }
 
     def test_every_burst_is_survivable_by_a_person(self) -> None:
-        """A limit a real user hits by accident is a bug, not a defence."""
+        """A limit a real user hits by accident is a bug, not a defence.
+
+        Stated per limit rather than as one floor. The floor used to be a flat
+        fifteen, which was right while every limit throttled something you do
+        to your own account — and wrong the moment `call` arrived, where five
+        redials is already generous and fifteen would be ring-spam.
+        """
+        floors = {
+            # A carousel of ten, plus room to retry.
+            "upload": 15,
+            "follow": 15,
+            "comment": 15,
+            # Typing fast is not abuse.
+            "message": 30,
+            "report": 15,
+            # Nobody dials the same person five times in a row by accident,
+            # and this is the one limit whose cost lands on the person being
+            # called rather than the caller.
+            "call": 5,
+        }
+        assert set(floors) == set(LIMITS), "a new limit needs a burst rationale"
         for name, bucket in LIMITS.items():
-            assert bucket.capacity >= 15, name
+            assert bucket.capacity >= floors[name], name
