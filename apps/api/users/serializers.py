@@ -47,6 +47,27 @@ class CurrentUserSerializer(UserSerializer):
         read_only_fields = fields
 
 
+class RegisterSerializer(serializers.Serializer[dict[str, Any]]):
+    """What it takes to open an account.
+
+    `username` is constrained here rather than only at the database, because
+    the model's uniqueness will not tell you that a space is not allowed. The
+    pattern matches what a profile URL can carry — `/u/<username>` — so a name
+    that cannot be linked to cannot be chosen.
+    """
+
+    email = serializers.EmailField()
+    username = serializers.RegexField(
+        r"^[A-Za-z0-9_.]+$",
+        min_length=3,
+        max_length=30,
+        error_messages={
+            "invalid": "Usernames use letters, numbers, underscores and dots."
+        },
+    )
+    password = serializers.CharField(min_length=8, max_length=128, write_only=True)
+
+
 class LoginSerializer(serializers.Serializer[dict[str, Any]]):
     """Credentials. Email is the login identifier here, not username."""
 

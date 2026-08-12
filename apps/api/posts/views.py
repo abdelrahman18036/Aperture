@@ -16,7 +16,7 @@ from typing import Any
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -117,6 +117,35 @@ class FeedView(APIView):
         limit = _limit_of(request)
         posts = list(
             selectors.feed(viewer=viewer, cursor=_cursor_of(request), limit=limit)
+        )
+        return Response(_page(posts, viewer, limit))
+
+
+class ExploreView(APIView):
+    """`GET /api/posts/explore` — discovery.
+
+    Deliberately not the feed with a different name. The feed answers "what
+    did the people I chose post?"; this answers "who else is here?", and a
+    grid that repeats the feed is a second copy of a page already read.
+
+    Open to signed-out visitors: everything it returns is from a public
+    account by definition, and requiring an account to look at public posts
+    is a decision to have no front door.
+    """
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        operation_id="posts_explore",
+        parameters=[CURSOR],
+        responses={200: PostPageSerializer},
+        description="Recent public posts from accounts you do not follow.",
+    )
+    def get(self, request: Request) -> Response:
+        viewer = request.user if request.user.is_authenticated else None
+        limit = _limit_of(request)
+        posts = list(
+            selectors.explore(viewer=viewer, cursor=_cursor_of(request), limit=limit)
         )
         return Response(_page(posts, viewer, limit))
 

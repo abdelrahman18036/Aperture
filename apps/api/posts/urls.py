@@ -5,6 +5,7 @@ from django.urls import URLPattern, URLResolver, path
 from posts.views import (
     CommentDetailView,
     CommentListView,
+    ExploreView,
     FeedView,
     LikeView,
     PostDetailView,
@@ -19,6 +20,7 @@ app_name = "posts"
 urlpatterns: list[URLPattern | URLResolver] = [
     path("", PostListView.as_view(), name="list"),
     path("feed", FeedView.as_view(), name="feed"),
+    path("explore", ExploreView.as_view(), name="explore"),
     path("by/<str:username>", UserPostsView.as_view(), name="by-user"),
     path(
         "comments/<snowflake:comment_id>",

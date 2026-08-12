@@ -14,7 +14,7 @@ from posts import selectors, services
 from posts.models import Post
 from users import selectors as user_selectors
 from users import services as user_services
-from users.models import User
+from users.models import Block, User
 
 pytestmark = pytest.mark.django_db
 
@@ -178,3 +178,75 @@ class TestPrivateAccounts:
         author.is_private = True
         author.save(update_fields=["is_private"])
         assert user_selectors.can_view_posts(viewer=author, author=author)
+
+
+# ---------------------------------------------------------------------------
+# Explore — discovery, not a second copy of the feed
+# ---------------------------------------------------------------------------
+
+
+class TestExplore:
+    def test_it_excludes_who_you_already_follow(self, db: object) -> None:
+        """Otherwise it is the feed with a different name, and a page you have
+        already read."""
+        viewer = User.objects.create_user("ex-a@example.com", "ex-a", "pw-explore-12")
+        followed = User.objects.create_user("ex-b@example.com", "ex-b", "pw-explore-12")
+        stranger = User.objects.create_user("ex-c@example.com", "ex-c", "pw-explore-12")
+
+        user_services.follow(follower=viewer, followee=followed)
+        _post(followed, "followed")
+        _post(stranger, "stranger")
+
+        bodies = [p.caption for p in selectors.explore(viewer=viewer)]
+        assert bodies == ["stranger"]
+
+    def test_it_excludes_your_own_posts(self, db: object) -> None:
+        viewer = User.objects.create_user("ex-d@example.com", "ex-d", "pw-explore-12")
+        _post(viewer, "mine")
+
+        assert list(selectors.explore(viewer=viewer)) == []
+
+    def test_private_accounts_never_appear(self, db: object) -> None:
+        """Someone who set their account private did not opt into discovery.
+
+        `can_view_posts` would let a follower through, which is right for a
+        profile and wrong for a discovery surface.
+        """
+        viewer = User.objects.create_user("ex-e@example.com", "ex-e", "pw-explore-12")
+        shy = User.objects.create_user(
+            "ex-f@example.com", "ex-f", "pw-explore-12", is_private=True
+        )
+        _post(shy, "private")
+
+        assert list(selectors.explore(viewer=viewer)) == []
+
+    def test_it_filters_blocks(self, db: object) -> None:
+        """Rule 8 reaches every read path, discovery included."""
+        viewer = User.objects.create_user("ex-g@example.com", "ex-g", "pw-explore-12")
+        blocked = User.objects.create_user("ex-h@example.com", "ex-h", "pw-explore-12")
+        _post(blocked, "hidden")
+        Block.objects.create(blocker=viewer, blocked=blocked)
+
+        assert list(selectors.explore(viewer=viewer)) == []
+
+    def test_a_signed_out_visitor_sees_public_posts(self, db: object) -> None:
+        """Requiring an account to look at public posts is a decision to have
+        no front door."""
+        author = User.objects.create_user("ex-i@example.com", "ex-i", "pw-explore-12")
+        _post(author, "public")
+
+        assert [p.caption for p in selectors.explore(viewer=None)] == ["public"]
+
+    def test_the_cursor_is_a_snowflake_walked_downwards(self, db: object) -> None:
+        """Same shape as the feed: no offsets, so nothing shifts or repeats
+        while someone is scrolling."""
+        viewer = User.objects.create_user("ex-j@example.com", "ex-j", "pw-explore-12")
+        author = User.objects.create_user("ex-k@example.com", "ex-k", "pw-explore-12")
+        posts = [_post(author, f"p{i}") for i in range(5)]
+
+        first = list(selectors.explore(viewer=viewer, limit=2))
+        assert [p.caption for p in first] == ["p4", "p3"]
+
+        second = list(selectors.explore(viewer=viewer, cursor=first[-1].pk, limit=2))
+        assert [p.caption for p in second] == ["p2", "p1"]
+        assert posts[0].pk not in {p.pk for p in second}

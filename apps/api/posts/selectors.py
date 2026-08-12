@@ -96,6 +96,40 @@ def feed(
     return _with_media(posts).order_by("-id")[: min(limit, MAX_PAGE_SIZE)]
 
 
+def explore(
+    *, viewer: User | None, cursor: int | None = None, limit: int = 30
+) -> QuerySet[Post]:
+    """Recent public posts from accounts the viewer does not already follow.
+
+    The feed answers "what did the people I chose post?"; this answers "who
+    else is here?", and they are different questions — an explore grid that
+    repeats your feed is a second copy of a page you have already read.
+
+    Private accounts are excluded outright rather than filtered per-viewer.
+    Someone who set their account private did not opt into being discovered,
+    and `can_view_posts` would let a follower see them here, which is the
+    wrong answer for a discovery surface even though it is the right one for
+    a profile.
+
+    Same cursor shape as the feed: a snowflake, descending. No offsets, so
+    nothing shifts or repeats while someone is scrolling.
+    """
+    posts = live().filter(author__is_private=False)
+
+    if viewer is not None and viewer.is_authenticated:
+        # Your own posts and the ones you already follow belong in the feed.
+        posts = posts.exclude(author=viewer).exclude(
+            author_id__in=accepted_followee_ids(viewer)
+        )
+
+    posts = exclude_blocked(posts, viewer)
+
+    if cursor is not None:
+        posts = posts.filter(id__lt=cursor)
+
+    return _with_media(posts).order_by("-id")[:limit]
+
+
 def by_author(
     *,
     viewer: User | None,

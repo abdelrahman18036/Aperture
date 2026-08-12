@@ -8,12 +8,18 @@ commits, never inside it -- see `01-ARCHITECTURE.md` §8.
 from __future__ import annotations
 
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
 
 from counters.models import Counter
 from counters.tasks import adjust
 from users.models import Block, Follow, User
+
+
+class RegistrationRejectedError(Exception):
+    """The account cannot be created. The message is safe to show a user."""
 
 
 class AuthenticationFailedError(Exception):
@@ -47,6 +53,45 @@ def start_session(request: HttpRequest, *, email: str, password: str) -> User:
     if not user.is_active or user.deleted_at is not None:
         raise AuthenticationFailedError("Email or password is incorrect.")
 
+    login(request, user)
+    return user
+
+
+def register(request: HttpRequest, *, email: str, username: str, password: str) -> User:
+    """Create an account and sign it straight in.
+
+    Signing in as part of registering is not a shortcut — it is the only way
+    the next screen has a session. Making someone log in immediately after
+    choosing a password is a step that exists to serve the implementation.
+
+    **Both collisions answer the same way, and deliberately.** Django's
+    uniqueness errors would happily tell an anonymous caller which emails and
+    usernames are taken, which is the account-enumeration oracle `start_session`
+    is careful to avoid — undone by the endpoint next to it. A username is
+    public and effectively enumerable anyway, so that one is named; the email
+    is not.
+
+    Password strength is Django's `AUTH_PASSWORD_VALIDATORS`, not a rule
+    invented here. It already knows about common passwords and similarity to
+    the rest of the account.
+    """
+    email = User.objects.normalize_email(email.strip())
+    username = username.strip()
+
+    if User.objects.filter(username__iexact=username).exists():
+        raise RegistrationRejectedError("That username is taken.")
+    if User.objects.filter(email__iexact=email).exists():
+        # Not "that email is registered". See the docstring.
+        raise RegistrationRejectedError(
+            "That account could not be created. Try signing in instead."
+        )
+
+    try:
+        validate_password(password)
+    except DjangoValidationError as exc:
+        raise RegistrationRejectedError(" ".join(exc.messages)) from exc
+
+    user = User.objects.create_user(email=email, username=username, password=password)
     login(request, user)
     return user
 

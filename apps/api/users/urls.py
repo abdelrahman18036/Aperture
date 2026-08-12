@@ -8,6 +8,7 @@ from users.views import (
     FollowRequestsView,
     FollowView,
     ProfileView,
+    RegisterView,
     RespondToRequestView,
     SearchView,
     SessionView,
@@ -18,6 +19,7 @@ app_name = "users"
 # Order matters: the literal routes come before `<str:username>`, or signing
 # in would be looked up as an account called "session".
 urlpatterns: list[URLPattern | URLResolver] = [
+    path("register", RegisterView.as_view(), name="register"),
     path("session", SessionView.as_view(), name="session"),
     path("me", CurrentUserView.as_view(), name="me"),
     path("search", SearchView.as_view(), name="search"),

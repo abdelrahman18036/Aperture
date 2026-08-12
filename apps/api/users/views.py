@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 from config.auth import current_user
 from counters.models import Counter
 from counters.selectors import get_metrics
-from moderation.throttling import FollowThrottle
+from moderation.throttling import FollowThrottle, make_throttle
 from users import selectors, services
 from users.models import User
 from users.serializers import (
@@ -30,6 +30,7 @@ from users.serializers import (
     FollowStateSerializer,
     LoginSerializer,
     ProfileSerializer,
+    RegisterSerializer,
     RespondToRequestSerializer,
     UpdateProfileSerializer,
     UserListSerializer,
@@ -43,6 +44,42 @@ from users.services import (
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
+class RegisterView(APIView):
+    """`POST /api/users/register` — open an account and sign in.
+
+    Rate-limited on the same bucket as follows: account creation is cheap for
+    us and cheap for a script, and this is the endpoint that fills a database
+    with nobody.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [make_throttle("follow")]
+
+    @extend_schema(
+        operation_id="users_register",
+        request=RegisterSerializer,
+        responses={201: CurrentUserSerializer, 400: None},
+        description="Create an account. Signs the new account in.",
+    )
+    def post(self, request: Request) -> Response:
+        form = RegisterSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+
+        try:
+            user = services.register(
+                request._request,  # noqa: SLF001
+                email=form.validated_data["email"],
+                username=form.validated_data["username"],
+                password=form.validated_data["password"],
+            )
+        except services.RegistrationRejectedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            CurrentUserSerializer(user).data, status=status.HTTP_201_CREATED
+        )
+
+
 class SessionView(APIView):
     """`/api/users/session` — sign in and out.
 
