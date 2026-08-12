@@ -221,6 +221,18 @@ HARD_DELETE_GRACE_DAYS = int(os.environ.get("HARD_DELETE_GRACE_DAYS", "30"))
 CSAM_SCANNING_ENABLED = env_bool("CSAM_SCANNING_ENABLED", False)
 NCMEC_REPORTING_ENABLED = env_bool("NCMEC_REPORTING_ENABLED", False)
 
+#: Dotted paths to the two providers. The defaults refuse rather than
+#: no-op — see `moderation/backends.py` for the contracts. They are settings
+#: rather than inline functions so the code *around* them can be exercised:
+#: before this, "a match suspends the owner and files a report" had never
+#: run, because there was no way to produce a match.
+CSAM_HASH_BACKEND = os.environ.get(
+    "CSAM_HASH_BACKEND", "moderation.backends.unconfigured_match"
+)
+NCMEC_BACKEND = os.environ.get(
+    "NCMEC_BACKEND", "moderation.backends.unconfigured_deliver"
+)
+
 # ---------------------------------------------------------------------------
 # Sessions, CSRF and auth
 # ---------------------------------------------------------------------------

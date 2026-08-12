@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
+from django.utils.module_loading import import_string
 
 from moderation import selectors, services
 from moderation.models import Report
@@ -70,11 +71,12 @@ def escalate_csam_report(self: Any, report_id: int) -> str:
 
 
 def _deliver(report: Report) -> None:
-    """Hand the report to NCMEC. Not implemented — see the task's docstring."""
-    raise NotImplementedError(
-        "NCMEC CyberTipline delivery is not wired. Set "
-        "NCMEC_REPORTING_ENABLED only once it is."
-    )
+    """Hand the report to NCMEC, via whatever `NCMEC_BACKEND` names.
+
+    Resolved per call rather than at import, so a test — or a deployment
+    reloading settings — can change it without reimporting this module.
+    """
+    import_string(settings.NCMEC_BACKEND)(report)
 
 
 @shared_task(name="moderation.scan_media")
@@ -115,11 +117,9 @@ def scan_media(media_id: int) -> str:
 
 
 def _match(media: Media) -> bool:
-    """Hash-match against a known-CSAM corpus. Not implemented."""
-    raise NotImplementedError(
-        "No CSAM hash-matching provider is wired. Set CSAM_SCANNING_ENABLED "
-        "only once one is."
-    )
+    """Hash-match against a known-CSAM corpus, via `CSAM_HASH_BACKEND`."""
+    matched: bool = import_string(settings.CSAM_HASH_BACKEND)(media)
+    return matched
 
 
 @shared_task(name="moderation.hard_delete_expired")

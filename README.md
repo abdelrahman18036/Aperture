@@ -274,6 +274,22 @@ path end to end, with a credential Django minted. That is the transport that
 survives a network dropping UDP, and it is the reason the connection rate does
 not quietly sit near 70%.
 
+The **SFU branch** is the other half, and it is a different chain: past
+`SFU_THRESHOLD` participants a call stops being a mesh and becomes a LiveKit
+room. What belongs to this codebase there is everything up to the join —
+threshold, room name, and a token Django signs.
+
+```bash
+cat docs/verify-sfu.js
+```
+
+Measured on the development machine, a three-member group: `mode: "sfu"`, a
+409-byte token, and LiveKit answering the signalling socket with a 626-byte
+JoinResponse. That last part is the point — LiveKit sends *nothing* to a
+socket whose token it rejects, so a response at all proves `LIVEKIT_API_SECRET`
+matches on both sides. A token signed with the wrong secret is well-formed,
+looks perfect from Django, and is refused at the door.
+
 Reaching that row needs a certificate the browser trusts. See
 `infra/coturn/turnserver.conf` — and note both traps recorded there: issue the
 certificate from the same shell that ran `mkcert -install`, and restart the
@@ -410,10 +426,22 @@ down when Redis hiccups has done more damage than the abuse it prevented.
 Two integrations are seams rather than implementations, both off by default
 and both raising rather than silently passing if switched on unwired:
 
-| Setting | What it needs |
-|---|---|
-| `CSAM_SCANNING_ENABLED` | a hash-matching provider (PhotoDNA, Cloudflare CSAM Scanning) |
-| `NCMEC_REPORTING_ENABLED` | a registered ESP account and CyberTipline access |
+| Setting | Provider | What it needs |
+|---|---|---|
+| `CSAM_SCANNING_ENABLED` | `CSAM_HASH_BACKEND` | a hash-matching provider (PhotoDNA, Cloudflare CSAM Scanning) |
+| `NCMEC_REPORTING_ENABLED` | `NCMEC_BACKEND` | a registered ESP account and CyberTipline access |
+
+Each provider is a dotted path, defaulting to a callable that **raises**.
+That matters more than it looks: a scanner returning `False` because nothing
+is configured is a scanner that passes everything and reports itself as
+working. `moderation/backends.py` holds both contracts.
+
+Making them settings is also what lets the code *around* them be tested —
+that a match suspends the owner and files a report, that a report is stamped
+`escalated_at` only after delivery returns, that a retry after a successful
+filing does not file twice with a national clearinghouse. All of that is
+covered against a fake provider in `moderation/tests/test_safety_path.py`;
+before, the enabled branch of both tasks had never executed.
 
 A CSAM report that has not been forwarded stays visibly un-escalated and is
 counted hourly by `moderation.report_escalation_backlog`. It is never marked
