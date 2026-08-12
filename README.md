@@ -495,6 +495,33 @@ That matters more than it looks: a scanner returning `False` because nothing
 is configured is a scanner that passes everything and reports itself as
 working. `moderation/backends.py` holds both contracts.
 
+**One CSAM backend ships and runs.** `moderation.hashlist.match` does exact
+SHA-256 matching against a list the operator supplies — the form NCMEC, IWF
+and the Tech Coalition distribute to registered entities:
+
+```bash
+CSAM_HASH_BACKEND=moderation.hashlist.match CSAM_HASH_LIST=/etc/aperture/known-hashes.txt
+```
+
+It is **not** PhotoDNA and does not pretend to be: exact hashing catches
+redistribution of known files unchanged and misses anything re-encoded, which
+is why it is one backend among others rather than the answer. Read
+`moderation/hashlist.py` before enabling it. A missing, unreadable or empty
+list raises rather than matching nothing, for the same reason the default
+does.
+
+An un-escalated backlog is visible in the console — the report list has an
+**escalation** filter — and drainable once a provider is wired:
+
+```bash
+cd apps/api && uv run manage.py escalate_backlog --dry-run
+```
+
+Nothing else picks those up: escalation runs once, when a report is filed. So
+every CSAM report from before the day a provider was configured is sitting
+correctly marked as having gone nowhere, and this is the command that files
+them.
+
 Making them settings is also what lets the code *around* them be tested —
 that a match suspends the owner and files a report, that a report is stamped
 `escalated_at` only after delivery returns, that a retry after a successful

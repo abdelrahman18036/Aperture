@@ -241,6 +241,12 @@ NCMEC_BACKEND = os.environ.get(
     "NCMEC_BACKEND", "moderation.backends.unconfigured_deliver"
 )
 
+#: Used only by `moderation.hashlist.match`. One lowercase hex SHA-256 per
+#: line. Read that module before pointing `CSAM_HASH_BACKEND` at it — exact
+#: hashing catches redistribution of known files unchanged and nothing else,
+#: which is a floor rather than the answer.
+CSAM_HASH_LIST = os.environ.get("CSAM_HASH_LIST", "")
+
 # ---------------------------------------------------------------------------
 # Sessions, CSRF and auth
 # ---------------------------------------------------------------------------

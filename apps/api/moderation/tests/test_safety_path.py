@@ -12,7 +12,10 @@ which is the whole of this system except the vendor.
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
+from django.core.management import call_command
 from django.test import override_settings
 
 from media.models import Media
@@ -62,12 +65,15 @@ def _clear_filed() -> None:
 
 
 def an_image(owner: User) -> Media:
+    # A distinct `object_key` per row: `(bucket, object_key)` is unique, so
+    # leaving it blank means the second image in any test collides.
     return Media.objects.create(
         owner=owner,
         kind=Media.Kind.IMAGE,
         declared_mime="image/jpeg",
         declared_size_bytes=1000,
         bucket="media",
+        object_key=f"test/{uuid4().hex}.jpg",
         state=Media.State.READY,
     )
 
@@ -193,3 +199,49 @@ class TestEscalation:
 
         report.refresh_from_db()
         assert report.escalated_at is None
+
+
+class TestTheBacklogCommand:
+    """`escalate_backlog` — the command run the day a provider is wired.
+
+    Until then every CSAM report sits correctly un-escalated, and nothing
+    else will ever pick those up: the escalation task runs once, when the
+    report is filed. Without this the backlog is permanent.
+    """
+
+    def test_a_dry_run_files_nothing(self, user: User, other_user: User) -> None:
+        a_csam_report(user, other_user)
+
+        call_command("escalate_backlog", "--dry-run")
+
+        assert filed == []
+
+    @override_settings(NCMEC_REPORTING_ENABLED=True, NCMEC_BACKEND=DELIVERS)
+    def test_it_files_the_whole_backlog(self, user: User, other_user: User) -> None:
+        first = a_csam_report(user, other_user)
+        second = a_csam_report(user, other_user)
+
+        call_command("escalate_backlog")
+
+        assert sorted(filed) == sorted([first.pk, second.pk])
+        for report in (first, second):
+            report.refresh_from_db()
+            assert report.escalated_at is not None
+
+    @override_settings(NCMEC_REPORTING_ENABLED=True, NCMEC_BACKEND=UNDELIVERABLE)
+    def test_one_failure_does_not_strand_the_rest(
+        self, user: User, other_user: User
+    ) -> None:
+        # A provider that refuses must not stop the command at the first row,
+        # and every report must stay un-escalated so the next run retries it.
+        first = a_csam_report(user, other_user)
+        second = a_csam_report(user, other_user)
+
+        call_command("escalate_backlog")
+
+        for report in (first, second):
+            report.refresh_from_db()
+            assert report.escalated_at is None
+
+    def test_an_empty_backlog_says_so(self) -> None:
+        call_command("escalate_backlog")

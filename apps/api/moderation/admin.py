@@ -17,6 +17,8 @@ order to decide in one click.
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.contrib import admin
 from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponse
@@ -30,6 +32,43 @@ from unfold.decorators import action
 from moderation import services
 from moderation.models import Report
 from users.models import User
+
+
+class AwaitingEscalation(admin.SimpleListFilter):
+    """CSAM reports that have not been forwarded.
+
+    `moderation.report_escalation_backlog` counts these hourly and logs at
+    CRITICAL, which is the right alarm and the wrong place to work from — a
+    number in a log names no rows. This is the same query as a filter, so a
+    moderator can see *which* reports are outstanding and an operator who has
+    just wired a provider can check the queue drained.
+    """
+
+    title = _("escalation")
+    parameter_name = "escalation"
+
+    def lookups(
+        self,
+        request: HttpRequest,
+        model_admin: Any,
+    ) -> list[tuple[str, Any]]:
+        # `Any` on the label: `gettext_lazy` returns a promise rather than a
+        # `str`, and django-stubs types this return as plain strings.
+        return [
+            ("awaiting", _("CSAM, not yet forwarded")),
+            ("done", _("CSAM, forwarded")),
+        ]
+
+    def queryset(
+        self, request: HttpRequest, queryset: QuerySet[Report]
+    ) -> QuerySet[Report]:
+        if self.value() == "awaiting":
+            return queryset.filter(reason=Report.Reason.CSAM, escalated_at__isnull=True)
+        if self.value() == "done":
+            return queryset.filter(
+                reason=Report.Reason.CSAM, escalated_at__isnull=False
+            )
+        return queryset
 
 
 @admin.register(Report)
@@ -48,8 +87,9 @@ class ReportAdmin(ModelAdmin):
         "reporter_label",
         "status",
         "created_at",
+        "escalated_at",
     )
-    list_filter = ("status", "reason", "subject_type")
+    list_filter = ("status", "reason", "subject_type", AwaitingEscalation)
     search_fields = (
         "subject_id",
         "note",
