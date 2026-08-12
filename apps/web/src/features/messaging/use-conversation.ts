@@ -48,6 +48,24 @@ export interface ConversationState {
   noteTyping: () => void;
   loadOlder: () => void;
   hasOlder: boolean;
+  /** The socket's call-signalling channel, so a call need not open its own. */
+  sendCallSignal: (
+    callId: string,
+    signal: "offer" | "answer" | "ice" | "hangup",
+    payload: unknown,
+  ) => void;
+  /** Point the same socket at a call's channel. */
+  setCallIds: (callIds: readonly string[]) => void;
+}
+
+export interface ConversationOptions {
+  /**
+   * Anything this hook does not handle itself — today, call events.
+   *
+   * Returning the event rather than swallowing it keeps messaging ignorant of
+   * calls, which is what lets the two features change independently.
+   */
+  onOtherEvent?: (event: AnyServerEvent) => void;
 }
 
 /** How long a typing indicator survives without a refresh. */
@@ -63,6 +81,7 @@ function newClientId(): string {
 export function useConversation(
   conversationId: string,
   viewerId: string,
+  options: ConversationOptions = {},
 ): ConversationState {
   const [bySeq, setBySeq] = useState<Map<number, Message>>(new Map());
   const [pending, setPending] = useState<PendingMessage[]>([]);
@@ -180,13 +199,23 @@ export function useConversation(
       if (event.type === "message.deleted") {
         if (event.conversation_id !== conversationId) return;
         drop(event.seq);
+        return;
       }
+
+      // Not ours. Calls are the only other thing on this socket today, and
+      // messaging is deliberately kept from knowing that.
+      options.onOtherEvent?.(event);
     },
-    [absorb, conversationId, drop, viewerId],
+    [absorb, conversationId, drop, viewerId, options],
   );
 
   const conversationIds = useMemo(() => [conversationId], [conversationId]);
-  const { state: connection, sendTyping } = useRealtime({
+  const {
+    state: connection,
+    sendTyping,
+    sendCallSignal,
+    setCallIds,
+  } = useRealtime({
     conversationIds,
     onEvent,
     onReady: sync,
@@ -304,6 +333,8 @@ export function useConversation(
   return {
     messages,
     pending,
+    sendCallSignal,
+    setCallIds,
     connection,
     typing,
     loading,

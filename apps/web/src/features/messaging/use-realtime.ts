@@ -63,6 +63,25 @@ export interface Realtime {
   state: ConnectionState;
   /** Tell the other side you are typing. Best effort; never queued. */
   sendTyping: (conversationId: string, isTyping: boolean) => void;
+  /**
+   * Send one step of a call negotiation. Best effort, and deliberately so:
+   * a queued ICE candidate that arrives after the call is a candidate for a
+   * negotiation that no longer exists.
+   */
+  sendCallSignal: (
+    callId: string,
+    signal: "offer" | "answer" | "ice" | "hangup",
+    payload: unknown,
+  ) => void;
+  /**
+   * Point this socket at a call's signalling channel, or at none.
+   *
+   * Stable, and deliberately not a piece of React state: joining a call must
+   * not have to travel back up through the component that owns the socket
+   * before the subscription happens. The first offer can arrive within
+   * milliseconds of the invite.
+   */
+  setCallIds: (callIds: readonly string[]) => void;
 }
 
 export function useRealtime({
@@ -74,6 +93,7 @@ export function useRealtime({
 
   const socket = useRef<WebSocket | null>(null);
   const wanted = useRef<readonly string[]>(conversationIds);
+  const wantedCalls = useRef<readonly string[]>([]);
 
   // Effect events, so the effect below can call the latest handler without
   // listing it as a dependency. Without this, a parent re-render that changes
@@ -93,6 +113,7 @@ export function useRealtime({
       JSON.stringify({
         type: "subscribe",
         conversation_ids: [...wanted.current],
+        call_ids: [...wantedCalls.current],
       }),
     );
   }, []);
@@ -212,7 +233,8 @@ export function useRealtime({
     // exactly once per mount.
   }, [pushSubscription]);
 
-  // Re-subscribe when the set of open conversations changes.
+  // Re-subscribe when the set of open conversations changes. Calls go
+  // through `setCallIds` instead — see there for why.
   useEffect(() => {
     wanted.current = conversationIds;
     pushSubscription();
@@ -233,5 +255,33 @@ export function useRealtime({
     [],
   );
 
-  return { state, sendTyping };
+  const sendCallSignal = useCallback(
+    (
+      callId: string,
+      signal: "offer" | "answer" | "ice" | "hangup",
+      payload: unknown,
+    ) => {
+      const live = socket.current;
+      if (live?.readyState !== WebSocket.OPEN) return;
+      live.send(
+        JSON.stringify({
+          type: "call.signal",
+          call_id: callId,
+          signal,
+          payload,
+        }),
+      );
+    },
+    [],
+  );
+
+  const setCallIds = useCallback(
+    (ids: readonly string[]) => {
+      wantedCalls.current = ids;
+      pushSubscription();
+    },
+    [pushSubscription],
+  );
+
+  return { state, sendTyping, sendCallSignal, setCallIds };
 }

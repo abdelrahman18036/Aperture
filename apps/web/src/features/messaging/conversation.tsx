@@ -1,9 +1,15 @@
 "use client";
 
-import { SendHorizontal } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Phone, SendHorizontal } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Button, cn } from "@repo/ui";
+
+import { CallPanel } from "@/features/calls/call-panel";
+import { useEventBus } from "@/features/calls/event-bus";
+import { useCall } from "@/features/calls/use-call";
+import { usePeerCall } from "@/features/calls/use-peer-call";
+import { useSfuCall } from "@/features/calls/use-sfu-call";
 
 import { MessageRow, PendingRow } from "./message-row";
 import { TypingLine } from "./typing-dots";
@@ -33,6 +39,11 @@ export function Conversation({
   /** User id to username, for the people in this conversation. */
   names: ReadonlyMap<string, string>;
 }) {
+  // The bus breaks a genuine ordering problem: the conversation needs a call
+  // handler before the call hooks — which need its `sendCallSignal` — exist.
+  // Its identity never changes, so subscribers attach from effects later.
+  const bus = useEventBus();
+
   const {
     messages,
     pending,
@@ -44,7 +55,39 @@ export function Conversation({
     noteTyping,
     loadOlder,
     hasOlder,
-  } = useConversation(conversationId, viewerId);
+    sendCallSignal,
+    setCallIds,
+  } = useConversation(conversationId, viewerId, { onOtherEvent: bus.emit });
+
+  const session = useCall({ conversationId, sendSignal: sendCallSignal });
+
+  // Subscribing to the call's channel is what makes signalling reach us, and
+  // it must happen before the first offer does. Driven by the call's
+  // *existence* rather than its state, and by the invite as well as the call
+  // itself — a callee has to be listening while they decide whether to
+  // answer.
+  const activeCallId = session.call?.id ?? session.incoming?.call_id ?? null;
+  useEffect(() => {
+    setCallIds(activeCallId === null ? [] : [activeCallId]);
+  }, [activeCallId, setCallIds]);
+
+  const peerId = useMemo(
+    () =>
+      session.call?.participant_ids.find((id) => id !== viewerId) ?? null,
+    [session.call, viewerId],
+  );
+
+  const peer = usePeerCall({
+    call: session.call,
+    viewerId,
+    peerId,
+    sendSignal: sendCallSignal,
+  });
+
+  const sfu = useSfuCall(session.call);
+
+  useEffect(() => bus.subscribe(session.observe), [bus, session.observe]);
+  useEffect(() => bus.subscribe(peer.handleSignal), [bus, peer.handleSignal]);
 
   const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -80,8 +123,55 @@ export function Conversation({
     >
       <header className="flex items-center justify-between border-b border-line px-4 py-3">
         <h1 className="text-title text-ink">{title}</h1>
-        <ConnectionPip state={connection} />
+        <div className="flex items-center gap-4">
+          <ConnectionPip state={connection} />
+          {session.call === null && (
+            <Button
+              variant="ghost"
+              onClick={session.start}
+              disabled={session.starting}
+              aria-label={`Call ${title}`}
+            >
+              <Phone className="size-4" aria-hidden="true" />
+              Call
+            </Button>
+          )}
+        </div>
       </header>
+
+      {session.error !== null && (
+        <p className="px-4 py-2 text-body text-danger" role="alert">
+          {session.error}
+        </p>
+      )}
+
+      {session.incoming !== null && (
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <p className="text-body text-ink">
+            {/* Daylight: something happening now, per the palette rule. */}
+            <span className="text-daylight">
+              {session.incoming.caller.username}
+            </span>{" "}
+            is calling
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={session.answer}>Answer</Button>
+            <Button variant="ghost" onClick={session.decline}>
+              Decline
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {session.call !== null && (
+        <CallPanel
+          call={session.call}
+          peer={peer}
+          sfu={sfu}
+          peerName={title}
+          onHangUp={session.hangUp}
+        />
+      )}
 
       <div ref={scroller} className="flex-1 overflow-y-auto py-4">
         {hasOlder && messages.length > 0 && (
