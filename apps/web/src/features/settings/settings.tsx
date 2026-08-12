@@ -183,7 +183,7 @@ export function SettingsScreen() {
   }
 
   return (
-    <div className="flex flex-col py-10">
+    <div data-wide className="flex flex-col py-10">
       <header className="flex flex-col gap-2 pb-8">
         <h1 className="font-display text-display-l text-ink">Settings</h1>
         <p className="meta">signed in as {me.username}</p>

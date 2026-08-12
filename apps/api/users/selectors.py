@@ -16,7 +16,7 @@ No `.count()` and no `COUNT(*)` on anything a request can reach: use the
 
 from __future__ import annotations
 
-from django.db.models import Model, Q, QuerySet
+from django.db.models import Case, IntegerField, Model, Q, QuerySet, Value, When
 
 from users.models import Block, Follow, User
 
@@ -214,3 +214,52 @@ def can_view_posts(*, viewer: User | None, author: User) -> bool:
     return Follow.objects.filter(
         follower=viewer, followee=author, status=Follow.Status.ACCEPTED
     ).exists()
+
+
+#: One screenful of people to start a conversation with.
+CONNECTIONS_PAGE_SIZE = 50
+
+
+def connections(*, viewer: User, query: str = "") -> QuerySet[User]:
+    """Accounts the viewer follows, mutuals first.
+
+    **The people you would actually message.** The new-conversation form used
+    to be a text field you typed usernames into from memory, which is a
+    reasonable API and a poor way to start a conversation — you have to
+    already know how somebody spells themselves.
+
+    Mutuals first because a mutual follow is the closest thing this product
+    has to a friend, and it is the person you are most likely to be looking
+    for. Ordered in SQL rather than in Python so the slice below is taken from
+    the right end of the list.
+
+    Block-filtered through `live()`, like every other read of user content.
+    """
+    followee_ids = Follow.objects.filter(
+        follower=viewer, status=Follow.Status.ACCEPTED
+    ).values_list("followee_id", flat=True)
+
+    mutual_ids = set(
+        Follow.objects.filter(
+            follower_id__in=followee_ids,
+            followee=viewer,
+            status=Follow.Status.ACCEPTED,
+        ).values_list("follower_id", flat=True)
+    )
+
+    people = live().filter(pk__in=followee_ids)
+    people = exclude_blocked(people, viewer=viewer, author_field="id")
+
+    if query.strip():
+        people = people.filter(
+            Q(username__icontains=query.strip())
+            | Q(display_name__icontains=query.strip())
+        )
+
+    return people.annotate(
+        is_mutual=Case(
+            When(pk__in=mutual_ids, then=Value(1)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+    ).order_by("-is_mutual", "username")[:CONNECTIONS_PAGE_SIZE]

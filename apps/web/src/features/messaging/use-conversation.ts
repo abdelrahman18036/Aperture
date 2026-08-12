@@ -54,6 +54,10 @@ export interface ConversationState {
   seenUpToSeq: number;
   /** Seed the read positions from the inbox payload. */
   setOthersRead: (positions: Record<string, number> | undefined) => void;
+  /** Ids of the other members connected right now. */
+  online: ReadonlySet<string>;
+  /** Seed presence from the inbox payload. */
+  setOnline: (ids: string[] | undefined) => void;
   loading: boolean;
   send: (body: string, mediaId?: string | null) => void;
   retry: (clientId: string) => void;
@@ -94,6 +98,8 @@ export function useConversation(
   const [loading, setLoading] = useState(true);
   /** user id -> how far they have read. Seeded by the API, kept by the socket. */
   const [othersRead, setOthersRead] = useState<Map<string, number>>(new Map());
+  /** Who else is connected. Same shape: seeded by the API, kept by the socket. */
+  const [online, setOnline] = useState<Set<string>>(new Set());
   /** Set once a scrollback page comes back empty. See `hasOlder` below. */
   const [exhausted, setExhausted] = useState(false);
 
@@ -207,6 +213,19 @@ export function useConversation(
         return;
       }
 
+      if (event.type === "presence") {
+        // The gateway announces arrivals and departures to every
+        // conversation a socket is in. Your own is ignored — you know.
+        if (event.user_id === viewerId) return;
+        setOnline((current) => {
+          const next = new Set(current);
+          if (event.online) next.add(event.user_id);
+          else next.delete(event.user_id);
+          return next;
+        });
+        return;
+      }
+
       if (event.type === "message.read") {
         if (event.conversation_id !== conversationId) return;
         // Your own read receipt tells you nothing you did not do yourself.
@@ -231,6 +250,10 @@ export function useConversation(
     },
     [absorb, conversationId, drop, viewerId],
   );
+
+  const seedOnline = useCallback((ids: string[] | undefined) => {
+    setOnline(new Set(ids ?? []));
+  }, []);
 
   const seedOthersRead = useCallback(
     (positions: Record<string, number> | undefined) => {
@@ -422,6 +445,8 @@ export function useConversation(
     unsend,
     seenUpToSeq,
     setOthersRead: seedOthersRead,
+    online,
+    setOnline: seedOnline,
     noteTyping,
     loadOlder,
     hasOlder,

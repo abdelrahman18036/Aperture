@@ -61,6 +61,8 @@ export interface CallSession {
   answer: () => void;
   decline: () => void;
   hangUp: () => void;
+  /** Stop ringing and say why. The provider's ring timeout calls this. */
+  giveUp: (reason: string) => void;
   /** Dismiss a failure without ending anything. */
   clearError: () => void;
 }
@@ -87,7 +89,15 @@ export function useCallSession(): CallSession {
         .then((response) => {
           setStarting(false);
           if (response.data === undefined) {
-            setError("The call could not be placed.");
+            // The server's reason, when it gave one. "Nobody in this
+            // conversation is online to take a call" tells somebody what to
+            // do next; "the call could not be placed" tells them nothing and
+            // is the same sentence whether the callee is away, the account
+            // is blocked, or the rate limit bit.
+            const detail = (
+              response.error as { detail?: string } | undefined
+            )?.detail;
+            setError(detail ?? "The call could not be placed.");
             return;
           }
           setCall(response.data);
@@ -139,6 +149,34 @@ export function useCallSession(): CallSession {
 
   const clearError = useCallback(() => setError(null), []);
 
+  /**
+   * Stop ringing, with a reason.
+   *
+   * **This is what actually fixes "it just says Connecting forever".** An
+   * invite is published to a Redis channel; if nobody is subscribed — the
+   * callee is closed, asleep, or on a dead network — there is no failure
+   * anywhere to observe. Nothing errors and nothing times out, so the caller
+   * watches a spinner until they give up.
+   *
+   * Presence is not the answer to this on its own. It is a hint that can be
+   * briefly wrong, and refusing a call on it would mean a Redis hiccup blocks
+   * every call in the product — a hint must not become a gate. Ringing out is
+   * the honest mechanism: true whatever presence says, and what a telephone
+   * does. The provider owns the clock, because only it can see whether the
+   * connection came up.
+   */
+  const giveUp = useCallback(
+    (reason: string) => {
+      if (call !== null) {
+        sendCallSignal(call.id, "hangup", { reason: "no-answer" });
+      }
+      setCall(null);
+      setLabel(null);
+      setError(reason);
+    },
+    [call, sendCallSignal],
+  );
+
   const onEvent = useCallback(
     (event: AnyServerEvent) => {
       if (event.type === "call.incoming") {
@@ -189,6 +227,7 @@ export function useCallSession(): CallSession {
     answer,
     decline,
     hangUp,
+    giveUp,
     clearError,
   };
 }

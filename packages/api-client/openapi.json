@@ -1647,6 +1647,42 @@
                 }
             }
         },
+        "/api/users/connections": {
+            "get": {
+                "operationId": "users_connections",
+                "description": "Accounts you follow, mutuals first.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "q",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter by name"
+                    }
+                ],
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/users/me": {
             "get": {
                 "operationId": "users_me",
@@ -2222,6 +2258,13 @@
                             "type": "integer"
                         },
                         "readOnly": true
+                    },
+                    "online": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -2231,6 +2274,7 @@
                     "last_message_seq",
                     "last_read_seq",
                     "members",
+                    "online",
                     "others_read",
                     "title",
                     "unread_count"

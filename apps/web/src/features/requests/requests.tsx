@@ -88,7 +88,7 @@ export function Requests() {
   }, []);
 
   return (
-    <div className="py-6">
+    <div data-wide className="py-6">
       <header className="flex flex-col gap-2 px-4 pb-4">
         <h1 className="font-display text-display-l text-ink">Requests</h1>
         <p className="meta">people asking to follow you</p>

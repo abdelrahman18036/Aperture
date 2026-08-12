@@ -38,6 +38,25 @@ export class Hub {
   private readonly byUser = new Map<string, Set<Subscriber>>();
 
   /**
+   * Which conversations one socket is currently in.
+   *
+   * Derived from the channels it holds rather than tracked separately, so
+   * there is only one place that can be wrong. Needed at close, to announce
+   * a departure while the socket still knows where it was — after `remove`
+   * there is nothing left to say it to.
+   */
+  conversationsOf(subscriber: Subscriber): string[] {
+    const held = this.held.get(subscriber);
+    if (held === undefined) return [];
+    const ids: string[] = [];
+    for (const channel of held) {
+      const match = /^conv\.(.+)\.ephemeral$/.exec(channel);
+      if (match?.[1] !== undefined) ids.push(match[1]);
+    }
+    return ids;
+  }
+
+  /**
    * Two connections, not one. A Redis connection in subscriber mode cannot
    * issue any other command, so publishing ephemeral events needs its own.
    */

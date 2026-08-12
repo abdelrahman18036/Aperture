@@ -2,11 +2,16 @@
 
 import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button, Input, cn } from "@repo/ui";
 
+import type { Schemas } from "@repo/api-client";
+
+import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
+
+type Person = Schemas["User"];
 
 /**
  * Starting a conversation, with one person or several.
@@ -30,6 +35,28 @@ export function NewConversation() {
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [people, setPeople] = useState<Person[]>([]);
+
+  // Refetched as the field changes, so the list narrows rather than sitting
+  // there as a static fifty. The endpoint caps and orders; nothing here does.
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => {
+      void api
+        .GET("/api/users/connections", {
+          params: { query: draft.trim() ? { q: draft.trim() } : {} },
+        })
+        .then((response) => {
+          setPeople(response.data?.users ?? []);
+        });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [open, draft]);
+
+  // Already-picked names drop out of the list rather than appearing chosen.
+  const suggestions = people.filter(
+    (person) => !usernames.includes(person.username),
+  );
 
   function addName(): void {
     const name = draft.trim().replace(/^@/, "");
@@ -133,9 +160,46 @@ export function NewConversation() {
               addName();
             }
           }}
-          placeholder="Username, then Enter for each"
+          placeholder="Search the people you follow"
           autoComplete="off"
         />
+
+        {/* The people you follow, mutuals first, filtered as you type.
+            Typing a username from memory still works — but requiring it
+            meant knowing how somebody spells themselves before you could
+            message them. */}
+        {suggestions.length > 0 && (
+          <ul className="mt-2 flex max-h-56 flex-col overflow-y-auto no-scrollbar">
+            {suggestions.map((person) => (
+              <li key={person.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUsernames((current) =>
+                      current.includes(person.username)
+                        ? current
+                        : [...current, person.username],
+                    );
+                    setDraft("");
+                  }}
+                  className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left hover:bg-surface"
+                >
+                  <UserAvatar user={person} className="size-8 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-body text-ink">
+                      {person.username}
+                    </span>
+                    {person.display_name ? (
+                      <span className="block truncate meta">
+                        {person.display_name}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {usernames.length > 0 && (
           <>

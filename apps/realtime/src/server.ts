@@ -180,6 +180,13 @@ export function createGateway(): Gateway {
         // Ask before removing: `remove` is what forgets this socket, so
         // afterwards the hub can no longer tell whether it was the last one.
         const alone = !hub.hasOtherSocket(subscriber);
+        // Announced before `remove`, while the socket still knows which
+        // conversations it was in — afterwards there is nothing left to say
+        // it to. Only on the last socket: two tabs are one person, and
+        // closing one must not report them as gone.
+        if (alone) {
+          await announcePresence(subscriber, hub.conversationsOf(subscriber), false);
+        }
         await hub.remove(subscriber);
         // Only drop presence if this was the person's last socket. Two tabs
         // are one person, and closing one must not show them as offline.
@@ -236,6 +243,19 @@ export function createGateway(): Gateway {
         message.conversation_ids,
         message.call_ids,
       );
+
+      // Tell the room somebody arrived.
+      //
+      // Presence has been written to Redis since Phase 6 and *announced to
+      // nobody* — the only `PresenceEvent` ever sent went back to the
+      // sender, telling them what they already knew. The visible cost was a
+      // conversation header that read "Live" whenever your own socket was
+      // open, which is always, and a call to an absent person that sat on
+      // "Connecting" with nothing to explain it.
+      //
+      // This stays inside the gateway's remit: it publishes to the channels
+      // this socket just named, and knows nothing about who follows whom.
+      await announcePresence(subscriber, message.conversation_ids, true);
       return;
     }
 
@@ -280,6 +300,23 @@ export function createGateway(): Gateway {
       };
       subscriber.send(JSON.stringify(event));
     }
+  }
+
+  /** Publish one person's arrival or departure to the rooms they are in. */
+  async function announcePresence(
+    subscriber: Subscriber,
+    conversationIds: string[],
+    online: boolean,
+  ): Promise<void> {
+    const event: PresenceEvent = {
+      v: PROTOCOL_VERSION,
+      type: "presence",
+      user_id: subscriber.userId,
+      online,
+    };
+    await Promise.all(
+      conversationIds.map((id) => hub.publishEphemeral(id, event)),
+    );
   }
 
   async function close(): Promise<void> {

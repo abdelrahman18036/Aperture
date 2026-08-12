@@ -76,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <NavBar username={username} counts={counts} />
 
       <div className="sm:pl-nav-rail xl:pl-nav-rail-open">
-        <div className="mx-auto flex justify-center gap-10 px-4 pb-20 sm:pb-0">
+        <div className="app-columns mx-auto flex justify-center gap-10 px-4 pb-20 sm:pb-0">
           <main className="w-full min-w-0 sm:w-feed sm:shrink-0">{children}</main>
 
           <aside

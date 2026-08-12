@@ -34,6 +34,7 @@ export function Conversation({
   title,
   names,
   othersRead,
+  onlineNow,
 }: {
   conversationId: string;
   viewerId: string;
@@ -42,6 +43,8 @@ export function Conversation({
   names: ReadonlyMap<string, string>;
   /** Read positions as of the inbox fetch, keyed by user id. */
   othersRead: Record<string, number>;
+  /** Who was online as of the inbox fetch. The socket takes over from here. */
+  onlineNow: string[];
 }) {
   const {
     messages,
@@ -54,6 +57,8 @@ export function Conversation({
     unsend,
     seenUpToSeq,
     setOthersRead,
+    online,
+    setOnline,
     noteTyping,
     loadOlder,
     hasOlder,
@@ -62,6 +67,10 @@ export function Conversation({
   useEffect(() => {
     setOthersRead(othersRead);
   }, [othersRead, setOthersRead]);
+
+  useEffect(() => {
+    setOnline(onlineNow);
+  }, [onlineNow, setOnline]);
 
   // The call itself lives in the shell — this screen only starts one. That is
   // what lets a call keep running while you navigate away from the thread.
@@ -141,7 +150,11 @@ export function Conversation({
           <h1 className="truncate text-title text-ink">{title}</h1>
         </div>
         <div className="flex items-center gap-4">
-          <ConnectionPip state={connection} />
+          <PresencePip
+            state={connection}
+            othersOnline={online.size > 0}
+            group={names.size > 1}
+          />
           <Button
             variant="ghost"
             onClick={() => session.start(conversationId, title)}
@@ -312,9 +325,41 @@ export function Conversation({
  * rather than danger red: a dropped socket is not an error, it is a state
  * that resolves itself, and colouring it red teaches people to ignore red.
  */
-function ConnectionPip({ state }: { state: "connecting" | "open" | "offline" }) {
+function PresencePip({
+  state,
+  othersOnline,
+  group,
+}: {
+  state: "connecting" | "open" | "offline";
+  othersOnline: boolean;
+  group: boolean;
+}) {
+  /**
+   * Two facts, and only one of them was ever shown.
+   *
+   * This used to report the *socket* — so it read "Live" whenever your own
+   * connection was open, which is always, next to a person who might have
+   * been gone for a week. Presence has been in Redis since Phase 6 with
+   * nothing reading it.
+   *
+   * Your own connection still matters, but only when it is broken: a
+   * reconnecting socket cannot know who is there, so it says so instead of
+   * guessing. When it is fine, the pip is about the other person.
+   */
   const label =
-    state === "open" ? "Live" : state === "connecting" ? "Connecting" : "Offline";
+    state !== "open"
+      ? state === "connecting"
+        ? "Reconnecting"
+        : "Offline"
+      : othersOnline
+        ? group
+          ? "Someone here"
+          : "Online"
+        : "Away";
+
+  // Daylight is "happening now" — somebody actually being there qualifies,
+  // and your own socket being open does not.
+  const live = state === "open" && othersOnline;
 
   return (
     <span className="flex items-center gap-2 meta" aria-live="polite">
@@ -322,7 +367,7 @@ function ConnectionPip({ state }: { state: "connecting" | "open" | "offline" }) 
         aria-hidden="true"
         className={cn(
           "size-1.5 rounded-full",
-          state === "open" ? "bg-daylight" : "bg-ink-faint",
+          live ? "bg-daylight" : "bg-ink-faint",
         )}
       />
       {label}

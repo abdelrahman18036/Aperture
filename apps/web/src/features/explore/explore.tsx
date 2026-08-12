@@ -103,10 +103,12 @@ export function Explore() {
   }
 
   return (
-    <div className="py-6">
+    <div data-wide className="py-6">
       <h1 className="px-4 pb-4 font-display text-display-l text-ink">Explore</h1>
 
-      <ul className="grid grid-cols-3 gap-[2px]">
+      {/* Three on a phone, more once there is room — the cells stay square
+          and the grid stops being a 640px ribbon on a 1920px screen. */}
+      <ul className="grid grid-cols-3 gap-[2px] md:grid-cols-4 xl:grid-cols-5">
         {posts.map((post) => (
           <PostTile key={post.id} post={post} />
         ))}

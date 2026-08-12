@@ -4,6 +4,7 @@ from django.urls import URLPattern, URLResolver, path
 
 from users.views import (
     BlockView,
+    ConnectionsView,
     CurrentUserView,
     FollowRequestsView,
     FollowView,
@@ -25,6 +26,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("session", SessionView.as_view(), name="session"),
     path("me", CurrentUserView.as_view(), name="me"),
     path("search", SearchView.as_view(), name="search"),
+    path("connections", ConnectionsView.as_view(), name="connections"),
     path("password/reset", PasswordResetView.as_view(), name="password-reset"),
     path(
         "password/reset/confirm",

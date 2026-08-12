@@ -38,6 +38,7 @@ from messaging.serializers import (
     conversation_payload,
 )
 from moderation.throttling import MessageThrottle
+from users import presence
 from users.selectors import by_username
 
 
@@ -101,6 +102,16 @@ class ConversationListView(APIView):
             conversation_ids=conversation_ids, viewer=viewer
         )
 
+        # One Redis round trip for the whole inbox, for the same reason the
+        # member queries are batched.
+        connected = presence.online_ids(
+            [
+                user.pk
+                for entry in others_by_conversation.values()
+                for user in entry.users
+            ]
+        )
+
         rows: list[dict[str, Any]] = []
         for member in members:
             other = others_by_conversation[member.conversation_id]
@@ -112,6 +123,9 @@ class ConversationListView(APIView):
                     unread=unread.get(member.conversation_id, 0),
                     last_message=last,
                     others_read=other.read_positions,
+                    online=[
+                        str(user.pk) for user in other.users if user.pk in connected
+                    ],
                 )
             )
         return Response(rows)
@@ -159,6 +173,11 @@ class ConversationListView(APIView):
                 others_read=selectors.other_members_for(
                     conversation_ids=[conversation.pk], viewer=viewer
                 )[conversation.pk].read_positions,
+                online=[
+                    str(user.pk)
+                    for user in others
+                    if user.pk in presence.online_ids([u.pk for u in others])
+                ],
             ),
             status=status.HTTP_201_CREATED,
         )

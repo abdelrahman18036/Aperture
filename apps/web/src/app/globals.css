@@ -34,3 +34,33 @@ body::-webkit-scrollbar,
   width: 0;
   height: 0;
 }
+
+/* -----------------------------------------------------------------------
+ * Wide screens.
+ *
+ * `02-DESIGN-SYSTEM.md` fixes the feed column at 640px and calls it the most
+ * consequential layout decision in the product — and it is, *for the feed*.
+ * A photograph that changes size as you resize the window makes the whole
+ * page feel unstable, so the rails absorb the window instead.
+ *
+ * That reasoning does not carry to a discovery grid, a settings form or a
+ * queue of follow requests. None of them contains a photograph whose size is
+ * the point, and at 1920px all three were a 640px ribbon with a third of the
+ * screen empty either side. So a screen can mark itself `data-wide` and get
+ * the room; the feed and a single post never do.
+ *
+ * `:has()` rather than a prop, because the column belongs to the shell and
+ * the decision belongs to the page — and threading a flag from a page
+ * through a server-component layout is not possible.
+ * --------------------------------------------------------------------- */
+@media (min-width: 640px) {
+  main:has([data-wide]) {
+    width: 100%;
+    max-width: 72rem;
+  }
+
+  /* The suggestions rail is the thing being traded for the width. */
+  .app-columns:has([data-wide]) aside {
+    display: none;
+  }
+}

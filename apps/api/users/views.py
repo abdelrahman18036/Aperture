@@ -479,3 +479,32 @@ class PasswordResetConfirmView(APIView):
         except services.PasswordResetRejectedError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ConnectionsView(APIView):
+    """`GET /api/users/connections` — people you could message.
+
+    Accounts you follow, mutuals first, optionally filtered by `q`. It exists
+    because the new-conversation form was a text field you typed usernames
+    into from memory: a reasonable API and a poor way to start a
+    conversation, since it required already knowing how somebody spells
+    themselves.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="users_connections",
+        parameters=[
+            OpenApiParameter(
+                name="q", required=False, type=str, description="Filter by name"
+            )
+        ],
+        responses={200: UserListSerializer},
+        description="Accounts you follow, mutuals first.",
+    )
+    def get(self, request: Request) -> Response:
+        people = selectors.connections(
+            viewer=current_user(request), query=request.query_params.get("q", "")
+        )
+        return Response({"users": UserSerializer(people, many=True).data})

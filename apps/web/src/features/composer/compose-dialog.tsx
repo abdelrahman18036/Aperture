@@ -48,7 +48,10 @@ function ComposeDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] w-full max-w-feed overflow-y-auto no-scrollbar">
+      <DialogContent // Wider than the feed column. A crop stage and a preview are the two
+        // things in this product that genuinely want room, and neither is a
+        // photograph whose size is the point.
+        className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto no-scrollbar">
         <DialogHeader>
           <DialogTitle>{toStory ? "New story" : "New post"}</DialogTitle>
           <DialogDescription>

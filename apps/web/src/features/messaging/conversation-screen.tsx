@@ -78,6 +78,7 @@ export function ConversationScreen({
       // over from here; without this the first paint claims nothing has been
       // seen, and then corrects itself the moment somebody reads something.
       othersRead={summary.others_read}
+      onlineNow={summary.online}
     />
   );
 }

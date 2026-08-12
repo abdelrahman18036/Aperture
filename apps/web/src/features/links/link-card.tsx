@@ -34,9 +34,16 @@ export function LinkCard({ preview }: { preview: LinkPreview }) {
       className="flex overflow-hidden rounded-image border border-line transition-colors duration-[var(--duration-hover)] hover:border-ink-faint"
     >
       {preview.image_url ? (
-        // A plain `img`, not `DevelopImage`: the develop-in is for
-        // photographs somebody posted, and this is a thumbnail from a page.
-        // No blurhash exists for it either, because we never processed it.
+        /* A plain `img`, and deliberately not `next/image`.
+           `next/image` would proxy and re-encode a thumbnail from a host we
+           do not control and cannot allowlist ahead of time — every domain
+           anybody ever links to would need to be in `remotePatterns`, and an
+           open image proxy is a way to make our server fetch arbitrary URLs,
+           which is the same class of hole `core/links.py` exists to close.
+           `DevelopImage` is wrong for a different reason: the develop-in is
+           for photographs somebody posted here, and there is no blurhash for
+           this because we never processed it. */
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={preview.image_url}
           alt=""

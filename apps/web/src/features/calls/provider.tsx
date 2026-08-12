@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo } from "react";
 
 import {
   useRealtimeApi,
@@ -10,6 +10,9 @@ import {
 import { CallDock } from "./call-dock";
 import { useCallSession, type CallSession } from "./use-call";
 import { usePeerCall, type PeerCall } from "./use-peer-call";
+
+/** How long to ring before giving up. About what a phone does. */
+const RING_TIMEOUT_MS = 35_000;
 import { useSfuCall, type SfuCall } from "./use-sfu-call";
 
 /**
@@ -63,6 +66,26 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   useRealtimeEvents(peer.handleSignal);
 
   const sfu = useSfuCall(session.call);
+
+  /**
+   * Ring out after a while.
+   *
+   * Lives here because it needs both halves: the session holds the call, and
+   * only `peer`/`sfu` know whether anything ever connected. 35 seconds is
+   * about how long a phone rings before voicemail, which is the expectation
+   * people already have.
+   */
+  const connected = peer.state === "connected" || sfu.connected;
+  const { giveUp } = session;
+  useEffect(() => {
+    if (session.call === null || connected) return;
+    const timer = window.setTimeout(() => {
+      giveUp("No answer.");
+    }, RING_TIMEOUT_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [session.call, connected, giveUp]);
 
   const value = useMemo<CallControls>(
     () => ({
