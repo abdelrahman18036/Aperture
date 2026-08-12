@@ -6,6 +6,110 @@
         "description": "Aperture's HTTP API. This schema is the single source of truth for the frontend's types: it generates packages/api-client, which is never hand-edited."
     },
     "paths": {
+        "/api/calls/join": {
+            "post": {
+                "operationId": "calls_join",
+                "description": "Answer a call. Membership and blocks are re-checked here rather than trusted from the invite.",
+                "tags": [
+                    "calls"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JoinCallRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JoinCallRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JoinCallRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Call"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/calls/start": {
+            "post": {
+                "operationId": "calls_start",
+                "description": "Start a call in a conversation. Returns ICE servers for every call and a LiveKit room token for group calls, and rings the other participants over their socket.",
+                "tags": [
+                    "calls"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartCallRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartCallRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartCallRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Call"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/health": {
             "get": {
                 "operationId": "health",
@@ -1512,6 +1616,61 @@
     },
     "components": {
         "schemas": {
+            "Call": {
+                "type": "object",
+                "description": "Everything a client needs to join a call and nothing it does not.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "conversation_id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "mode": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "participant_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "readOnly": true
+                    },
+                    "ice_servers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/IceServer"
+                        },
+                        "readOnly": true
+                    },
+                    "livekit_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "livekit_token": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "conversation_id",
+                    "ice_servers",
+                    "id",
+                    "livekit_token",
+                    "livekit_url",
+                    "mode",
+                    "participant_ids"
+                ]
+            },
             "Comment": {
                 "type": "object",
                 "properties": {
@@ -1888,6 +2047,54 @@
                 "type": "string",
                 "description": "* `ok` - ok\n* `degraded` - degraded"
             },
+            "IceServer": {
+                "type": "object",
+                "description": "One `RTCIceServer`, handed to the browser verbatim.\n\n`credential` is a TURN password that expires — see `core/turn.py`. It is\nnot a secret worth protecting for long, which is exactly why it is safe to\nsend here at all.",
+                "properties": {
+                    "urls": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "readOnly": true
+                    },
+                    "username": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "credential": {
+                        "type": "string",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "credential",
+                    "urls",
+                    "username"
+                ]
+            },
+            "JoinCallRequest": {
+                "type": "object",
+                "description": "Answering an invite.\n\n`call_id` and `mode` come back from the invite the callee received over\nthe socket. Neither is trusted for authorization — `join_call` re-checks\nmembership and blocks against the conversation before minting anything.",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "call_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "mode": {
+                        "$ref": "#/components/schemas/ModeEnum"
+                    }
+                },
+                "required": [
+                    "call_id",
+                    "conversation_id",
+                    "mode"
+                ]
+            },
             "KindEnum": {
                 "enum": [
                     "image",
@@ -2164,6 +2371,14 @@
                     "messages",
                     "oldest_seq"
                 ]
+            },
+            "ModeEnum": {
+                "enum": [
+                    "p2p",
+                    "sfu"
+                ],
+                "type": "string",
+                "description": "* `p2p` - p2p\n* `sfu` - sfu"
             },
             "PatchedAltTextRequest": {
                 "type": "object",
@@ -2477,6 +2692,19 @@
                 "required": [
                     "created",
                     "message"
+                ]
+            },
+            "StartCallRequest": {
+                "type": "object",
+                "description": "Which conversation to ring.",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "conversation_id"
                 ]
             },
             "StartConversationRequest": {
