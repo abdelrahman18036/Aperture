@@ -154,7 +154,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Soft delete your own message. */
+        /** @description Delete a message, for everyone or just for yourself. */
         delete: operations["messaging_delete_message"];
         options?: never;
         head?: never;
@@ -189,6 +189,40 @@ export interface paths {
         put?: never;
         /** @description Report a post, comment, user or piece of media. Idempotent per reporter per subject: reporting twice returns the first report. */
         post: operations["moderation_report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Your notifications, newest first, cursor-paginated. */
+        get: operations["notifications_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mark every notification read. */
+        post: operations["notifications_mark_read"];
         delete?: never;
         options?: never;
         head?: never;
@@ -244,6 +278,24 @@ export interface paths {
         post: operations["posts_like"];
         /** @description Remove a like. Idempotent. */
         delete: operations["posts_unlike"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{post_id}/repost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Repost a post onto your own feed. Idempotent. */
+        post: operations["posts_repost"];
+        /** @description Take a repost back. Idempotent. */
+        delete: operations["posts_undo_repost"];
         options?: never;
         head?: never;
         patch?: never;
@@ -364,6 +416,41 @@ export interface paths {
         post: operations["stories_view"];
         /** @description Take down your own story. */
         delete: operations["stories_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stories/{story_id}/react": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description React to a story. Reacting again replaces the reaction. */
+        post: operations["stories_react"];
+        /** @description Take a reaction back. Idempotent. */
+        delete: operations["stories_unreact"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stories/{story_id}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Reply to a story. Lands in the direct conversation. */
+        post: operations["stories_reply"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -748,6 +835,16 @@ export interface components {
             /** Format: email */
             readonly email: string;
         };
+        /**
+         * @description * `❤️` - ❤️
+         *     * `🔥` - 🔥
+         *     * `😂` - 😂
+         *     * `😮` - 😮
+         *     * `😢` - 😢
+         *     * `👏` - 👏
+         * @enum {string}
+         */
+        EmojiEnum: "❤️" | "🔥" | "😂" | "😮" | "😢" | "👏";
         /** @description A pending request, from the perspective of the account being asked. */
         FollowRequest: {
             readonly follower: components["schemas"]["User"];
@@ -900,6 +997,8 @@ export interface components {
             /** Format: uuid */
             readonly client_id: string;
             readonly reply_to_seq: number | null;
+            readonly shared_post: components["schemas"]["Post"] | null;
+            readonly replied_story: components["schemas"]["Story"] | null;
             /** Format: date-time */
             readonly created_at: string;
         };
@@ -915,6 +1014,31 @@ export interface components {
          * @enum {string}
          */
         ModeEnum: "p2p" | "sfu";
+        /**
+         * @description One line of the list.
+         *
+         *     Carries where to go rather than the whole subject: a notification list
+         *     that embedded every post would be a feed with worse ergonomics, and the
+         *     thing somebody wants from a row is to arrive at what it is about.
+         */
+        Notification: {
+            readonly id: string;
+            readonly actor: components["schemas"]["User"];
+            readonly verb: components["schemas"]["VerbEnum"];
+            readonly detail: string;
+            readonly href: string;
+            /** Format: uri */
+            readonly thumbnail_url: string | null;
+            /** Format: date-time */
+            readonly read_at: string | null;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        NotificationPage: {
+            readonly notifications: components["schemas"]["Notification"][];
+            readonly next_cursor: string | null;
+            readonly unread_count: number;
+        };
         /**
          * @description Complete a reset.
          *
@@ -956,6 +1080,10 @@ export interface components {
             readonly like_count: number;
             readonly comment_count: number;
             readonly viewer_has_liked: boolean;
+            readonly repost_count: number;
+            readonly share_count: number;
+            readonly viewer_has_reposted: boolean;
+            readonly reposted_from: components["schemas"]["Post"] | null;
         };
         /**
          * @description A cursor-paginated page of posts.
@@ -986,6 +1114,9 @@ export interface components {
             readonly follow_state: components["schemas"]["FollowStateEnum"];
             readonly is_self: boolean;
             readonly can_view_posts: boolean;
+        };
+        ReactToStoryRequest: {
+            emoji: components["schemas"]["EmojiEnum"];
         };
         /** @description A short-lived credential for the socket gateway. */
         RealtimeTicket: {
@@ -1019,6 +1150,17 @@ export interface components {
             email: string;
             username: string;
             password: string;
+        };
+        /**
+         * @description A story reply, which is a direct message. See `services.reply`.
+         *
+         *     `client_id` is required for the same reason it is on `SendMessageSerializer`
+         *     — it is the only thing between a flaky network and a doubled message.
+         */
+        ReplyToStoryRequest: {
+            /** Format: uuid */
+            client_id: string;
+            body: string;
         };
         /**
          * @description A report, as the person who filed it may see it.
@@ -1055,6 +1197,7 @@ export interface components {
             body: string;
             media_id?: string | null;
             reply_to_seq?: number | null;
+            shared_post_id?: string | null;
         };
         SendMessageResponse: {
             readonly message: components["schemas"]["Message"];
@@ -1090,6 +1233,7 @@ export interface components {
             readonly created_at: string;
             /** Format: date-time */
             readonly expires_at: string;
+            readonly viewer_reaction: string;
         };
         /**
          * @description One author's worth of the tray.
@@ -1153,6 +1297,17 @@ export interface components {
         UserList: {
             readonly users: components["schemas"]["User"][];
         };
+        /**
+         * @description * `like` - Liked your post
+         *     * `comment` - Commented on your post
+         *     * `follow` - Started following you
+         *     * `follow_request` - Asked to follow you
+         *     * `repost` - Reposted your post
+         *     * `story_reaction` - Reacted to your story
+         *     * `mention` - Mentioned you
+         * @enum {string}
+         */
+        VerbEnum: "like" | "comment" | "follow" | "follow_request" | "repost" | "story_reaction" | "mention";
         /**
          * @description * `public` - Public
          *     * `followers` - Followers only
@@ -1550,7 +1705,10 @@ export interface operations {
     };
     messaging_delete_message: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `everyone` — the default — removes the message from the conversation and requires it to be yours. `me` hides it from you alone and works on anybody's message. */
+                scope?: "everyone" | "me";
+            };
             header?: never;
             path: {
                 conversation_id: string;
@@ -1641,6 +1799,45 @@ export interface operations {
             };
             /** @description No response body */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    notifications_list: {
+        parameters: {
+            query?: {
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+        };
+    };
+    notifications_mark_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1804,6 +2001,69 @@ export interface operations {
         };
     };
     posts_unlike: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_repost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            /** @description No response body */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    posts_undo_repost: {
         parameters: {
             query?: never;
             header?: never;
@@ -2024,6 +2284,114 @@ export interface operations {
         responses: {
             /** @description No response body */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_react: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                story_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReactToStoryRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["ReactToStoryRequest"];
+                "multipart/form-data": components["schemas"]["ReactToStoryRequest"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_unreact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                story_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_reply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                story_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyToStoryRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["ReplyToStoryRequest"];
+                "multipart/form-data": components["schemas"]["ReplyToStoryRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description No response body */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

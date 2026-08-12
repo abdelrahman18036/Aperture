@@ -41,6 +41,7 @@ export const durableEventTypeSchema = z.enum([
   // empty for them.
   "post.created",
   "story.created",
+  "notification.created",
 ]);
 
 export type DurableEventType = z.infer<typeof durableEventTypeSchema>;

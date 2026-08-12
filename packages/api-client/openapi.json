@@ -554,7 +554,7 @@
         "/api/messaging/conversations/{conversation_id}/messages/{seq}": {
             "delete": {
                 "operationId": "messaging_delete_message",
-                "description": "Soft delete your own message.",
+                "description": "Delete a message, for everyone or just for yourself.",
                 "parameters": [
                     {
                         "in": "path",
@@ -564,6 +564,18 @@
                             "pattern": "^[0-9]+$"
                         },
                         "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "scope",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "everyone",
+                                "me"
+                            ]
+                        },
+                        "description": "`everyone` — the default — removes the message from the conversation and requires it to be yours. `me` hides it from you alone and works on anybody's message."
                     },
                     {
                         "in": "path",
@@ -692,6 +704,60 @@
                         "description": "No response body"
                     },
                     "429": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/notifications/list": {
+            "get": {
+                "operationId": "notifications_list",
+                "description": "Your notifications, newest first, cursor-paginated.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NotificationPage"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/notifications/read": {
+            "post": {
+                "operationId": "notifications_mark_read",
+                "description": "Mark every notification read.",
+                "tags": [
+                    "notifications"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
                         "description": "No response body"
                     }
                 }
@@ -919,6 +985,87 @@
             "delete": {
                 "operationId": "posts_unlike",
                 "description": "Remove a like. Idempotent.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Post"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/posts/{post_id}/repost": {
+            "post": {
+                "operationId": "posts_repost",
+                "description": "Repost a post onto your own feed. Idempotent.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "post_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Post"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "posts_undo_repost",
+                "description": "Take a repost back. Idempotent.",
                 "parameters": [
                     {
                         "in": "path",
@@ -1239,6 +1386,156 @@
                 ],
                 "responses": {
                     "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/stories/{story_id}/react": {
+            "post": {
+                "operationId": "stories_react",
+                "description": "React to a story. Reacting again replaces the reaction.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "story_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "stories"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReactToStoryRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReactToStoryRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReactToStoryRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "stories_unreact",
+                "description": "Take a reaction back. Idempotent.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "story_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "stories"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/stories/{story_id}/reply": {
+            "post": {
+                "operationId": "stories_reply",
+                "description": "Reply to a story. Lands in the direct conversation.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "story_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "stories"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReplyToStoryRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReplyToStoryRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReplyToStoryRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Message"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
                         "description": "No response body"
                     },
                     "404": {
@@ -2463,6 +2760,18 @@
                     "username"
                 ]
             },
+            "EmojiEnum": {
+                "enum": [
+                    "❤️",
+                    "🔥",
+                    "😂",
+                    "😮",
+                    "😢",
+                    "👏"
+                ],
+                "type": "string",
+                "description": "* `❤️` - ❤️\n* `🔥` - 🔥\n* `😂` - 😂\n* `😮` - 😮\n* `😢` - 😢\n* `👏` - 👏"
+            },
             "FollowRequest": {
                 "type": "object",
                 "description": "A pending request, from the perspective of the account being asked.",
@@ -2916,6 +3225,36 @@
                         ],
                         "readOnly": true
                     },
+                    "shared_post": {
+                        "oneOf": [
+                            {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/components/schemas/Post"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "replied_story": {
+                        "oneOf": [
+                            {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/components/schemas/Story"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "readOnly": true
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -2929,9 +3268,11 @@
                     "created_at",
                     "id",
                     "media",
+                    "replied_story",
                     "reply_to_seq",
                     "sender",
-                    "seq"
+                    "seq",
+                    "shared_post"
                 ]
             },
             "MessagePage": {
@@ -2970,6 +3311,99 @@
                 ],
                 "type": "string",
                 "description": "* `p2p` - p2p\n* `sfu` - sfu"
+            },
+            "Notification": {
+                "type": "object",
+                "description": "One line of the list.\n\nCarries where to go rather than the whole subject: a notification list\nthat embedded every post would be a feed with worse ergonomics, and the\nthing somebody wants from a row is to arrive at what it is about.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "actor": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "verb": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/VerbEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "detail": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "href": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "thumbnail_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "readOnly": true
+                    },
+                    "read_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "actor",
+                    "created_at",
+                    "detail",
+                    "href",
+                    "id",
+                    "read_at",
+                    "thumbnail_url",
+                    "verb"
+                ]
+            },
+            "NotificationPage": {
+                "type": "object",
+                "properties": {
+                    "notifications": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Notification"
+                        },
+                        "readOnly": true
+                    },
+                    "next_cursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "unread_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "next_cursor",
+                    "notifications",
+                    "unread_count"
+                ]
             },
             "PasswordResetConfirmRequest": {
                 "type": "object",
@@ -3107,6 +3541,33 @@
                     "viewer_has_liked": {
                         "type": "boolean",
                         "readOnly": true
+                    },
+                    "repost_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "share_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "viewer_has_reposted": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "reposted_from": {
+                        "oneOf": [
+                            {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/components/schemas/Post"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -3119,7 +3580,11 @@
                     "link_preview",
                     "location",
                     "media",
+                    "repost_count",
+                    "reposted_from",
+                    "share_count",
                     "viewer_has_liked",
+                    "viewer_has_reposted",
                     "visibility"
                 ]
             },
@@ -3198,6 +3663,17 @@
                     "user"
                 ]
             },
+            "ReactToStoryRequest": {
+                "type": "object",
+                "properties": {
+                    "emoji": {
+                        "$ref": "#/components/schemas/EmojiEnum"
+                    }
+                },
+                "required": [
+                    "emoji"
+                ]
+            },
             "RealtimeTicket": {
                 "type": "object",
                 "description": "A short-lived credential for the socket gateway.",
@@ -3262,6 +3738,25 @@
                     "email",
                     "password",
                     "username"
+                ]
+            },
+            "ReplyToStoryRequest": {
+                "type": "object",
+                "description": "A story reply, which is a direct message. See `services.reply`.\n\n`client_id` is required for the same reason it is on `SendMessageSerializer`\n— it is the only thing between a flaky network and a doubled message.",
+                "properties": {
+                    "client_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "body": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4000
+                    }
+                },
+                "required": [
+                    "body",
+                    "client_id"
                 ]
             },
             "Report": {
@@ -3342,6 +3837,13 @@
                             "integer",
                             "null"
                         ]
+                    },
+                    "shared_post_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "minLength": 1
                     }
                 },
                 "required": [
@@ -3476,6 +3978,10 @@
                         "type": "string",
                         "format": "date-time",
                         "readOnly": true
+                    },
+                    "viewer_reaction": {
+                        "type": "string",
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -3488,7 +3994,8 @@
                     "id",
                     "link_preview",
                     "media",
-                    "text"
+                    "text",
+                    "viewer_reaction"
                 ]
             },
             "StoryTrayEntry": {
@@ -3690,6 +4197,19 @@
                 "required": [
                     "users"
                 ]
+            },
+            "VerbEnum": {
+                "enum": [
+                    "like",
+                    "comment",
+                    "follow",
+                    "follow_request",
+                    "repost",
+                    "story_reaction",
+                    "mention"
+                ],
+                "type": "string",
+                "description": "* `like` - Liked your post\n* `comment` - Commented on your post\n* `follow` - Started following you\n* `follow_request` - Asked to follow you\n* `repost` - Reposted your post\n* `story_reaction` - Reacted to your story\n* `mention` - Mentioned you"
             },
             "VisibilityEnum": {
                 "enum": [
