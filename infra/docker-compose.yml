@@ -123,12 +123,29 @@ services:
     # rule 12. It must match Django's TURN_STATIC_AUTH_SECRET or every
     # credential Django mints is rejected, and the symptom is not an error but
     # a call that works at home and fails behind a firewall.
+    #
+    # The last two flags are **development only**, and both are consequences of
+    # publishing ports instead of using host networking:
+    #
+    #   `--allow-loopback-peers` — two browsers on one machine both get relay
+    #   candidates on 127.0.0.1, so without this every permission between them
+    #   is refused and the relay allocates happily then carries nothing.
+    #
+    #   `--allowed-peer-ip` for the bridge range — traffic from Windows reaches
+    #   the container through Docker's NAT, so coturn sees the *bridge* address
+    #   as the peer and the anti-open-proxy rule in turnserver.conf denies it.
+    #   That rule is right in production, where peers are public addresses;
+    #   here it is denying an artifact of the workaround.
+    #
+    # Neither belongs in turnserver.conf, which stays production-shaped.
     command: >
       -c /etc/coturn/turnserver.conf
       --static-auth-secret=${TURN_STATIC_AUTH_SECRET:-dev-only-insecure-turn-secret-0123456789abcdef}
       --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
       --min-port=50200
       --max-port=50250
+      --allow-loopback-peers
+      --allowed-peer-ip=172.16.0.0-172.31.255.255
     volumes:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
       # Generated locally, never committed. See turnserver.conf for the
