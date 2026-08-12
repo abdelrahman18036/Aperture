@@ -698,6 +698,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/requests/respond-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Approve or decline every pending follow request. */
+        post: operations["users_respond_to_all_requests"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/search": {
         parameters: {
             query?: never;
@@ -1178,6 +1195,13 @@ export interface components {
             readonly reason: components["schemas"]["ReasonEnum"];
             /** Format: date-time */
             readonly created_at: string;
+        };
+        /** @description Answer every pending request at once. */
+        RespondToAllRequest: {
+            accept: boolean;
+        };
+        RespondToAllResponse: {
+            readonly answered: number;
         };
         RespondToRequestRequest: {
             accept: boolean;
@@ -2943,6 +2967,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FollowRequestPage"];
+                };
+            };
+        };
+    };
+    users_respond_to_all_requests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RespondToAllRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["RespondToAllRequest"];
+                "multipart/form-data": components["schemas"]["RespondToAllRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RespondToAllResponse"];
                 };
             };
         };

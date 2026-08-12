@@ -33,6 +33,8 @@ from users.serializers import (
     PasswordResetRequestSerializer,
     ProfileSerializer,
     RegisterSerializer,
+    RespondToAllResponseSerializer,
+    RespondToAllSerializer,
     RespondToRequestSerializer,
     UpdateProfileSerializer,
     UserListSerializer,
@@ -358,6 +360,37 @@ class RespondToRequestView(APIView):
         except services.NotAllowedError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RespondToAllRequestsView(APIView):
+    """`POST /api/users/requests/respond-all` — approve or decline everything.
+
+    A separate route rather than a flag on the singular one, because they take
+    different arguments: that one names an account, this one names none. A
+    `username` of `*` would be the alternative, and it is the kind of thing
+    that is fine until somebody registers a username that looks like it.
+    """
+
+    permission_classes = [IsAuthenticated]
+    # The same bucket a single response uses. Answering thirty requests is
+    # one action to a person and should not cost thirty tokens, which is part
+    # of why this is one call rather than thirty.
+    throttle_classes = [make_throttle("follow")]
+
+    @extend_schema(
+        operation_id="users_respond_to_all_requests",
+        request=RespondToAllSerializer,
+        responses={200: RespondToAllResponseSerializer},
+        description="Approve or decline every pending follow request.",
+    )
+    def post(self, request: Request) -> Response:
+        form = RespondToAllSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        answered = services.respond_to_all_requests(
+            followee=current_user(request),
+            accept=form.validated_data["accept"],
+        )
+        return Response({"answered": answered})
 
 
 class BlockView(APIView):

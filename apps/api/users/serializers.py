@@ -192,3 +192,15 @@ class PasswordResetConfirmSerializer(serializers.Serializer[dict[str, Any]]):
     uid = serializers.CharField()
     token = serializers.CharField()
     password = serializers.CharField(write_only=True)
+
+
+class RespondToAllSerializer(serializers.Serializer[dict[str, Any]]):
+    """Answer every pending request at once."""
+
+    accept = serializers.BooleanField()
+
+
+class RespondToAllResponseSerializer(serializers.Serializer[dict[str, Any]]):
+    #: How many were actually answered. Zero is a normal answer, not an error:
+    #: the queue may have emptied in another tab between render and press.
+    answered = serializers.IntegerField(read_only=True)

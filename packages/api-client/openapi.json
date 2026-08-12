@@ -2256,6 +2256,52 @@
                 }
             }
         },
+        "/api/users/requests/respond-all": {
+            "post": {
+                "operationId": "users_respond_to_all_requests",
+                "description": "Approve or decline every pending follow request.",
+                "tags": [
+                    "users"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RespondToAllRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RespondToAllRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RespondToAllRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RespondToAllResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/users/search": {
             "get": {
                 "operationId": "users_search",
@@ -3799,6 +3845,30 @@
                     "reason",
                     "subject_id",
                     "subject_type"
+                ]
+            },
+            "RespondToAllRequest": {
+                "type": "object",
+                "description": "Answer every pending request at once.",
+                "properties": {
+                    "accept": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "accept"
+                ]
+            },
+            "RespondToAllResponse": {
+                "type": "object",
+                "properties": {
+                    "answered": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "answered"
                 ]
             },
             "RespondToRequestRequest": {

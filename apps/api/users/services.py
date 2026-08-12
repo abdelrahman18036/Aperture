@@ -230,6 +230,7 @@ def respond_to_request(*, followee: User, follower: User, accept: bool) -> None:
 
     if not accept:
         edge.delete()
+        _withdraw_request_notifications(followee=followee, follower_ids=[follower.pk])
         return
 
     edge.status = Follow.Status.ACCEPTED
@@ -239,6 +240,78 @@ def respond_to_request(*, followee: User, follower: User, accept: bool) -> None:
     # Accepting is when the edge starts feeding a timeline, so it is the
     # moment the requester's cached feed becomes wrong.
     _forget_feed(follower)
+    _withdraw_request_notifications(followee=followee, follower_ids=[follower.pk])
+
+
+@transaction.atomic
+def respond_to_all_requests(*, followee: User, accept: bool) -> int:
+    """Answer every pending request at once. Returns how many were answered.
+
+    One transaction and a bounded number of statements, rather than the
+    client's alternative of N round trips — a private account coming back to
+    thirty requests should not mean thirty writes racing each other, each with
+    its own counter task.
+
+    **Not a loop over `respond_to_request`.** That would be N queries to find
+    N edges we have already loaded, and N separate counter increments where one
+    of each side does. The two functions agree on what they mean; they differ
+    on how many rows they are answering.
+
+    Declining is a delete, which is the same decision as the singular path:
+    a declined request leaves nothing behind, so asking again is possible.
+    """
+    pending = list(
+        Follow.objects.filter(followee=followee, status=Follow.Status.PENDING)
+    )
+    if not pending:
+        return 0
+
+    follower_ids = [edge.follower_id for edge in pending]
+
+    if not accept:
+        Follow.objects.filter(
+            followee=followee,
+            follower_id__in=follower_ids,
+            status=Follow.Status.PENDING,
+        ).delete()
+        # The notification asked something of them. Answering it — either way
+        # — is what makes the ask stale, so it goes with the request.
+        _withdraw_request_notifications(followee=followee, follower_ids=follower_ids)
+        return len(pending)
+
+    Follow.objects.filter(
+        followee=followee, follower_id__in=follower_ids, status=Follow.Status.PENDING
+    ).update(status=Follow.Status.ACCEPTED)
+
+    # One move on the followee's side, one per follower on theirs. The
+    # followee's is a single increment of N rather than N of one.
+    _bump(
+        Counter.EntityType.USER,
+        followee.pk,
+        Counter.Metric.FOLLOWERS,
+        len(pending),
+    )
+    for follower_id in follower_ids:
+        _bump(Counter.EntityType.USER, follower_id, Counter.Metric.FOLLOWING, 1)
+
+    # Accepting is when an edge starts feeding a timeline, so every requester's
+    # cached feed is now wrong.
+    for edge in pending:
+        _forget_feed(edge.follower)
+
+    _withdraw_request_notifications(followee=followee, follower_ids=follower_ids)
+    return len(pending)
+
+
+def _withdraw_request_notifications(*, followee: User, follower_ids: list[int]) -> None:
+    """Drop the "asked to follow you" rows for requests that are now answered."""
+    from notifications.models import Notification
+
+    Notification.objects.filter(
+        recipient=followee,
+        actor_id__in=follower_ids,
+        verb=Notification.Verb.FOLLOW_REQUEST,
+    ).delete()
 
 
 # ---------------------------------------------------------------------------
