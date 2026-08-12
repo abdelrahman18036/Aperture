@@ -35,21 +35,32 @@ Brings up Postgres (host port **5433**), Redis, MinIO with its two buckets,
 and Typesense. Wait for `docker compose ps` to show postgres, redis and minio
 as `healthy`.
 
-Calls need two more, behind a profile so the everyday case stays small:
+Calls need two more, behind a profile so the everyday case stays small.
+coturn needs a certificate first, and it must be one the **browser** trusts —
+`mkcert` handles both halves:
 
 ```bash
-openssl req -x509 -newkey rsa:2048 -nodes -keyout coturn/certs/privkey.pem -out coturn/certs/fullchain.pem -days 825 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+mkcert -install
 ```
 
 ```bash
-docker compose --profile calls up -d
+mkcert -cert-file infra/coturn/certs/fullchain.pem -key-file infra/coturn/certs/privkey.pem localhost 127.0.0.1 ::1
+```
+
+```bash
+cd infra && docker compose --profile calls up -d
 ```
 
 LiveKit runs the SFU for group calls; coturn relays 1:1 media when a network
 refuses a direct connection, with **TLS on 443** because that is the transport
-that survives a firewall dropping UDP. The certificate is generated locally
-and git-ignored — see `infra/coturn/turnserver.conf`, which also records what
-a browser will and will not accept from a self-signed one.
+that survives a firewall dropping UDP.
+
+`mkcert -install` writes a root CA into your trust store — worth understanding
+before running, and the only step here that touches the machine rather than
+the project. Skip it and everything works except `turns:`, which the browser
+will refuse. Run the two mkcert commands **in the same shell** and restart the
+browser afterwards; `infra/coturn/turnserver.conf` explains why both matter.
+The certificates themselves are git-ignored.
 
 ### 2. Install
 
