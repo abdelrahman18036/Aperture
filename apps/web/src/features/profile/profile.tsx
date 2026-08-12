@@ -1,9 +1,18 @@
 "use client";
 
+import { Flag } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { Avatar, AvatarFallback, Button, Skeleton } from "@repo/ui";
+import {
+  Avatar,
+  AvatarFallback,
+  Button,
+  DialogTrigger,
+  Skeleton,
+} from "@repo/ui";
+
+import { ReportDialog } from "@/features/moderation/report-dialog";
 
 import type { Post } from "@/features/feed/use-feed";
 import { api } from "@/lib/api";
@@ -13,7 +22,13 @@ import { ContactSheet } from "./contact-sheet";
 type FollowState = "none" | "pending" | "accepted";
 
 interface Profile {
-  user: { username: string; display_name: string; bio: string; is_private: boolean };
+  user: {
+    id: string;
+    username: string;
+    display_name: string;
+    bio: string;
+    is_private: boolean;
+  };
   post_count: number;
   follower_count: number;
   following_count: number;
@@ -34,6 +49,7 @@ export function ProfileScreen({ username }: { username: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [missing, setMissing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +94,27 @@ export function ProfileScreen({ username }: { username: string }) {
       });
     }
   }, [profile, username]);
+
+  const toggleBlock = useCallback(async () => {
+    setBusy(true);
+    const response = blocked
+      ? await api.DELETE("/api/users/{username}/block", {
+          params: { path: { username } },
+        })
+      : await api.POST("/api/users/{username}/block", {
+          params: { path: { username } },
+        });
+    setBusy(false);
+
+    if (response.response.status === 204) {
+      setBlocked(!blocked);
+      // Blocking severs any follow in either direction, so the button beside
+      // this one is now wrong unless it is reset too.
+      setProfile((current) =>
+        current === null ? current : { ...current, follow_state: "none" },
+      );
+    }
+  }, [blocked, username]);
 
   if (missing) {
     return (
@@ -145,6 +182,41 @@ export function ProfileScreen({ username }: { username: string }) {
             >
               {label}
             </Button>
+          )}
+
+          {!profile.is_self && (
+            <>
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  void toggleBlock();
+                }}
+              >
+                {blocked ? "Unblock" : "Block"}
+              </Button>
+
+              {/* Reporting an *account* rather than one of its posts is the
+                  case that matters when the problem is the person: the API
+                  has taken `user` since Phase 5 with nothing sending it. */}
+              <ReportDialog
+                subjectType="user"
+                subjectId={profile.user.id}
+                trigger={
+                  <DialogTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Report ${profile.user.username}`}
+                      />
+                    }
+                  >
+                    <Flag aria-hidden="true" />
+                  </DialogTrigger>
+                }
+              />
+            </>
           )}
         </div>
 

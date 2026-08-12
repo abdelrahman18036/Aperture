@@ -924,9 +924,10 @@ export interface components {
          *     * `comment` - Comment
          *     * `user` - User
          *     * `media` - Media
+         *     * `message` - Message
          * @enum {string}
          */
-        SubjectTypeEnum: "post" | "comment" | "user" | "media";
+        SubjectTypeEnum: "post" | "comment" | "user" | "media" | "message";
         /** @description What the client asks for before it uploads anything. */
         UploadIntentRequestRequest: {
             kind: components["schemas"]["KindEnum"];

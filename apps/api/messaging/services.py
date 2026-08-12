@@ -263,7 +263,19 @@ def soft_delete_message(*, actor: User, message: Message) -> Message:
     """
     if message.sender_id != actor.pk:
         raise MessagingRejectedError("You can only delete your own messages.")
+    return remove_message(message=message)
 
+
+@transaction.atomic
+def remove_message(*, message: Message) -> Message:
+    """Soft-delete a message with no sender check.
+
+    The moderation queue's entry point, and the reason the check above lives
+    in `soft_delete_message` rather than in here: resolving a report *is* one
+    person deleting another's message, and it is the one case where that is
+    the correct outcome. Keeping the two apart means the unchecked path has to
+    be reached deliberately rather than by passing the wrong `actor`.
+    """
     if message.deleted_at is not None:
         return message
 

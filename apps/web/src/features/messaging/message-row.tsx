@@ -1,6 +1,10 @@
 "use client";
 
-import { Avatar, AvatarFallback, cn } from "@repo/ui";
+import { Flag } from "lucide-react";
+
+import { Avatar, AvatarFallback, Button, DialogTrigger, cn } from "@repo/ui";
+
+import { ReportDialog } from "@/features/moderation/report-dialog";
 
 import type { Message } from "./use-conversation";
 import type { PendingMessage } from "./use-conversation";
@@ -38,7 +42,11 @@ export function MessageRow({
   return (
     <li
       className={cn(
-        "flex gap-3 px-4 animate-arrive",
+        // `group` so the report control can stay hidden until the row is
+        // hovered or something inside it is focused. A flag against every
+        // line of a conversation reads as an accusation waiting to happen;
+        // one that appears when you reach for it does not.
+        "group flex gap-3 px-4 animate-arrive",
         mine ? "flex-row-reverse" : "flex-row",
       )}
     >
@@ -78,6 +86,33 @@ export function MessageRow({
           <span className="ml-2 opacity-60">#{message.seq}</span>
         </p>
       </div>
+
+      {/* Only theirs. Reporting your own message is refused by the service
+          anyway, and offering the control would be a small cruelty.
+
+          §11's queue covered posts, comments, users and media but never a
+          message — and harassment arrives far more often in a thread nobody
+          else can see than under a public photograph. */}
+      {!mine && (
+        <ReportDialog
+          subjectType="message"
+          subjectId={message.id}
+          trigger={
+            <DialogTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="self-center opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+                  aria-label={`Report this message from ${message.sender.username}`}
+                />
+              }
+            >
+              <Flag aria-hidden="true" />
+            </DialogTrigger>
+          }
+        />
+      )}
     </li>
   );
 }

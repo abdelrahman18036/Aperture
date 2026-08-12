@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -82,11 +83,31 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     [listeners],
   );
 
+  /**
+   * Whether the socket is ready *now*, as opposed to the instant it became
+   * ready. Kept because hoisting this provider into the shell changed who
+   * outlives whom: the socket used to be created by the screen that needed
+   * it, so "ready" always arrived after that screen had subscribed. Now the
+   * socket connects once and screens mount and unmount underneath it, and a
+   * thread opened a minute later would wait forever for an event that had
+   * already happened — visible as a conversation stuck on "Loading" with a
+   * green LIVE dot above it, which is a particularly unhelpful pair of
+   * things to see together.
+   */
+  const readyNow = useRef(false);
+
   const ready = useCallback(() => {
+    readyNow.current = true;
     for (const listener of listeners.ready) listener();
   }, [listeners]);
 
   const realtime = useRealtime({ onEvent: emit, onReady: ready });
+
+  // A dropped connection is not ready, and the next `ready` is a genuinely
+  // new one that every listener should hear.
+  useEffect(() => {
+    if (realtime.state !== "open") readyNow.current = false;
+  }, [realtime.state]);
 
   const subscribe = useCallback(
     (listener: (event: AnyServerEvent) => void) => {
@@ -99,6 +120,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const onReady = useCallback(
     (listener: () => void) => {
       listeners.ready.add(listener);
+      // Late subscribers are told at once rather than waiting for a
+      // reconnection that may never come. Resyncing from `?after=` is cheap
+      // and idempotent, so an extra call costs one indexed query.
+      if (readyNow.current) listener();
       return () => listeners.ready.delete(listener);
     },
     [listeners],

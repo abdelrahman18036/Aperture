@@ -48,6 +48,12 @@ def _resolve_subject(subject_type: str, subject_id: int) -> tuple[Any, User | No
         media = Media.objects.filter(pk=subject_id).first()
         return media, (media.owner if media else None)
 
+    if subject_type == Report.Subject.MESSAGE:
+        from messaging.models import Message
+
+        message = Message.objects.filter(pk=subject_id).first()
+        return message, (message.sender if message else None)
+
     if subject_type == Report.Subject.USER:
         user = User.objects.filter(pk=subject_id).first()
         return user, user
@@ -180,6 +186,15 @@ def _remove_subject(report: Report) -> None:
         from media.services import soft_delete
 
         soft_delete(media=subject)
+    elif report.subject_type == Report.Subject.MESSAGE:
+        # Removed by the moderator, so the sender check in
+        # `soft_delete_message` does not apply — that check exists to stop one
+        # person deleting another's message, which is exactly what a
+        # moderator is for. Same soft delete, same socket event, so the
+        # message disappears from both open threads.
+        from messaging.services import remove_message
+
+        remove_message(message=subject)
     elif report.subject_type == Report.Subject.USER:
         suspend(user=subject)
 

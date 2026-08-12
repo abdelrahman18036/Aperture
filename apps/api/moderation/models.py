@@ -26,6 +26,11 @@ class Report(models.Model):
         COMMENT = "comment", "Comment"
         USER = "user", "User"
         MEDIA = "media", "Media"
+        #: A direct message. Reportable for the same reason a comment is —
+        #: harassment more often arrives in a thread nobody else can see than
+        #: under a photograph where it is public. A queue that covers only
+        #: public content covers the easy half.
+        MESSAGE = "message", "Message"
 
     class Reason(models.TextChoices):
         #: First, and not alphabetically. It routes differently from

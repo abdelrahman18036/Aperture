@@ -2988,10 +2988,11 @@
                     "post",
                     "comment",
                     "user",
-                    "media"
+                    "media",
+                    "message"
                 ],
                 "type": "string",
-                "description": "* `post` - Post\n* `comment` - Comment\n* `user` - User\n* `media` - Media"
+                "description": "* `post` - Post\n* `comment` - Comment\n* `user` - User\n* `media` - Media\n* `message` - Message"
             },
             "UploadIntentRequestRequest": {
                 "type": "object",

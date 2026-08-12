@@ -141,6 +141,7 @@ class TestConfiguredLimits:
             "message": 3600,
             "report": 900,
             "call": 120,
+            "password_reset": 60,
         }
 
     def test_every_burst_is_survivable_by_a_person(self) -> None:
@@ -163,6 +164,11 @@ class TestConfiguredLimits:
             # and this is the one limit whose cost lands on the person being
             # called rather than the caller.
             "call": 5,
+            # The lowest floor here, and it should be. Asking twice because
+            # the first mail was slow is normal; asking a fourth time in a
+            # burst is either a mistake or somebody using our mail server to
+            # fill a stranger's inbox.
+            "password_reset": 3,
         }
         assert set(floors) == set(LIMITS), "a new limit needs a burst rationale"
         for name, bucket in LIMITS.items():

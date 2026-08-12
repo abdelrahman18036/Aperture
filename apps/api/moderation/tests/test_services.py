@@ -12,6 +12,8 @@ import pytest
 from django.utils import timezone
 
 from media.models import Media
+from messaging import services as messaging_services
+from messaging.models import Message
 from moderation import selectors, services
 from moderation.models import Report
 from posts import selectors as post_selectors
@@ -161,6 +163,50 @@ class TestResolving:
         comment.refresh_from_db()
         assert comment.deleted_at is not None
         assert Comment.objects.filter(pk=comment.pk).exists()
+
+    def test_removing_a_message_soft_deletes_it(
+        self, user: User, other_user: User, moderator: User
+    ) -> None:
+        # Harassment in a thread nobody else can see is the case a queue
+        # covering only public content misses entirely.
+        conversation = messaging_services.start_dm(initiator=other_user, other=user)
+        message, _ = messaging_services.send_message(
+            sender=other_user,
+            conversation=conversation,
+            body="nasty",
+            client_id="00000000-0000-4000-8000-000000000001",
+        )
+        report = services.file_report(
+            reporter=user,
+            subject_type=Report.Subject.MESSAGE,
+            subject_id=message.pk,
+            reason=Report.Reason.HARASSMENT,
+        )
+        services.resolve(report=report, moderator=moderator, action="remove")
+
+        message.refresh_from_db()
+        assert message.deleted_at is not None
+        # A moderator removing it is not the sender withdrawing it, so this
+        # goes through `remove_message` rather than the actor-checked path.
+        assert Message.objects.filter(pk=message.pk).exists()
+
+    def test_you_cannot_report_your_own_message(
+        self, user: User, other_user: User
+    ) -> None:
+        conversation = messaging_services.start_dm(initiator=user, other=other_user)
+        message, _ = messaging_services.send_message(
+            sender=user,
+            conversation=conversation,
+            body="mine",
+            client_id="00000000-0000-4000-8000-000000000002",
+        )
+        with pytest.raises(services.ReportRejectedError):
+            services.file_report(
+                reporter=user,
+                subject_type=Report.Subject.MESSAGE,
+                subject_id=message.pk,
+                reason=Report.Reason.SPAM,
+            )
 
     def test_suspending_deactivates_the_account(
         self, user: User, other_user: User, moderator: User

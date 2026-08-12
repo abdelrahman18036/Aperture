@@ -1,12 +1,21 @@
 "use client";
 
+import { Flag } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { Avatar, AvatarFallback, Button, Skeleton, cn } from "@repo/ui";
+import {
+  Avatar,
+  AvatarFallback,
+  Button,
+  DialogTrigger,
+  Skeleton,
+  cn,
+} from "@repo/ui";
 
 import { FeedPost } from "@/features/feed/feed-post";
+import { ReportDialog } from "@/features/moderation/report-dialog";
 import { api } from "@/lib/api";
 
 type Post = Schemas["Post"];
@@ -129,7 +138,7 @@ export function PostDetail({ postId }: { postId: string }) {
 
         <ul className="mt-3 flex flex-col gap-3">
           {comments.map((comment) => (
-            <li key={comment.id} className="flex gap-3">
+            <li key={comment.id} className="group flex gap-3">
               <Avatar className="size-7 shrink-0">
                 <AvatarFallback>
                   {comment.author.username.slice(0, 2)}
@@ -144,6 +153,28 @@ export function PostDetail({ postId }: { postId: string }) {
                 </Link>{" "}
                 <span className="text-body text-ink-dim">{comment.body}</span>
               </div>
+
+              {/* The queue has accepted `comment` since Phase 5 and nothing
+                  ever sent one. Hidden until hover, for the same reason as in
+                  a thread: a flag beside every line reads as a suggestion. */}
+              <ReportDialog
+                subjectType="comment"
+                subjectId={comment.id}
+                trigger={
+                  <DialogTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="ml-auto opacity-0 transition-opacity duration-[var(--duration-hover)] group-hover:opacity-100 group-focus-within:opacity-100"
+                        aria-label={`Report this comment from ${comment.author.username}`}
+                      />
+                    }
+                  >
+                    <Flag aria-hidden="true" />
+                  </DialogTrigger>
+                }
+              />
             </li>
           ))}
         </ul>
