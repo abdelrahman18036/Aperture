@@ -58,6 +58,17 @@ interface Options {
   viewerId: string;
   /** The other party. */
   peerId: string | null;
+  /**
+   * The call we may receive signalling for, which is **not** the same as the
+   * call we are in.
+   *
+   * A callee holds an invite for several seconds before answering, and the
+   * caller starts offering the moment its own tracks are added. Without this,
+   * `call` is still null on the callee's side and those offers are dropped
+   * rather than queued — and dropping the first offer is what turns a call
+   * into a spinner. See the deadlock described on `handleSignal`.
+   */
+  expectedCallId?: string | null;
   sendSignal: (
     callId: string,
     signal: "offer" | "answer" | "ice" | "hangup",
@@ -79,6 +90,7 @@ export function usePeerCall({
   peerId,
   sendSignal,
   relayOnly = false,
+  expectedCallId = null,
 }: Options): PeerCall {
   /**
    * The connection's own state, and nothing invented on top of it.
@@ -192,22 +204,42 @@ export function usePeerCall({
     [call, polite, sendSignal],
   );
 
+  /**
+   * Anything for this call, whether or not we have joined it yet.
+   *
+   * **The deadlock this closes.** The caller adds tracks immediately, which
+   * fires `negotiationneeded` and sends an offer — while the callee is still
+   * deciding whether to answer. That offer used to be dropped, because the
+   * callee's `call` was null until the join returned. The caller was then
+   * parked in `have-local-offer` with an offer nobody had received.
+   *
+   * When the callee finally added its own tracks and offered, the caller saw a
+   * collision (its signalling state was not `stable`) and — if it happened to
+   * be the *impolite* peer — ignored it, per perfect negotiation. Neither side
+   * ever answered the other. Both sat on "Connecting" until the ring timeout,
+   * and which side was impolite came down to a string comparison of two user
+   * ids, so it failed for one ordering and worked for the other.
+   */
   const handleSignal = useCallback(
     (event: AnyServerEvent) => {
       if (event.type !== "call.signal") return;
       // Everyone on the channel receives their own frames back, including us.
       if (event.from === viewerId) return;
-      if (call === null || event.call_id !== call.id) return;
+
+      const mine = call?.id ?? expectedCallId;
+      if (mine === null || mine === undefined) return;
+      if (event.call_id !== mine) return;
 
       if (connection.current === null) {
-        // An offer can beat `getUserMedia` to the finish. Queue rather than
-        // drop: losing the first offer costs the whole call.
+        // Queued rather than dropped: an offer can arrive before we answered,
+        // and before `getUserMedia` has finished. Losing the first offer costs
+        // the whole call.
         queued.current.push(event);
         return;
       }
       void applySignal(event);
     },
-    [applySignal, call, viewerId],
+    [applySignal, call, expectedCallId, viewerId],
   );
 
   useEffect(() => {
@@ -277,14 +309,27 @@ export function usePeerCall({
         }
         setLocalStream(stream);
         setAudioOnly(withoutVideo);
-        // Adding tracks fires `negotiationneeded`, which is what actually
-        // sends the first offer. Both sides do it; politeness resolves the
-        // collision.
-        for (const track of stream.getTracks()) peer.addTrack(track, stream);
 
+        // **Before** adding our tracks, and awaited in order.
+        //
+        // Adding tracks fires `negotiationneeded`, which sends an offer. If a
+        // remote offer is sitting in the queue, answering it first means this
+        // side moves to `have-remote-offer` and replies — one negotiation,
+        // resolved. Doing it the other way round manufactures the collision
+        // that politeness then has to unpick, and the frames were fired
+        // unawaited so their order was not even guaranteed.
         const pending = queued.current;
         queued.current = [];
-        for (const event of pending) void applySignal(event);
+        for (const event of pending) {
+          if (cancelled) return;
+          await applySignal(event);
+        }
+        if (cancelled) {
+          for (const track of stream.getTracks()) track.stop();
+          return;
+        }
+
+        for (const track of stream.getTracks()) peer.addTrack(track, stream);
       } catch (cause) {
         setError(
           cause instanceof MediaUnavailableError
@@ -317,6 +362,13 @@ export function usePeerCall({
       setHungUp(false);
     };
   }, [call, peerId, relayOnly, sendSignal, readTransport, applySignal]);
+
+  // Nothing to hold once there is no call to hold it for. Without this a
+  // declined invite leaves its offers in the queue, and the next call
+  // built on this component would apply them.
+  useEffect(() => {
+    if (call === null && expectedCallId === null) queued.current = [];
+  }, [call, expectedCallId]);
 
   const state: CallState =
     call === null

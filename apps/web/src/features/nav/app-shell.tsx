@@ -12,9 +12,9 @@ import {
   useRealtimeApi,
   useRealtimeEvents,
 } from "@/features/realtime/provider";
-import { chime } from "./chime";
 import { api } from "@/lib/api";
 import { onCountsChanged } from "@/lib/counts";
+import { chime, ping } from "@/lib/sounds";
 
 import { NavBar, NavRail } from "./nav-rail";
 import type { NavCounts } from "./nav-rail";
@@ -171,8 +171,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   const onEvent = useCallback(
     (event: AnyServerEvent) => {
       if (event.type === "notification.created") {
-        // No chime. A like is not an interruption, and a sound for every one
-        // of them is how an app teaches somebody to turn sound off.
+        // A softer sound than a message, and none at all while the activity
+        // page is open — you are already looking at it. A like is the least
+        // urgent thing that happens here and it should not sound like a
+        // message that wants an answer.
+        if (pathname !== "/notifications") void ping();
         setCounts((current) =>
           pathname === "/notifications"
             ? current

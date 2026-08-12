@@ -7,6 +7,8 @@ import {
   useRealtimeEvents,
 } from "@/features/realtime/provider";
 
+import { ring, ringback } from "@/lib/sounds";
+
 import { CallDock } from "./call-dock";
 import { useCallSession, type CallSession } from "./use-call";
 import { usePeerCall, type PeerCall } from "./use-peer-call";
@@ -58,6 +60,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     peerId,
     sendSignal: sendCallSignal,
     relayOnly: session.relayOnly,
+    // While an invite is on screen we are already subscribed to the call's
+    // channel — see `useCallSession` — so offers arrive before we have
+    // joined. This is what lets them be kept rather than dropped.
+    expectedCallId: session.call?.id ?? session.incoming?.call_id ?? null,
   });
 
   // Offers, answers and candidates arrive on the call's channel. The hook
@@ -76,6 +82,31 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
    * people already have.
    */
   const connected = peer.state === "connected" || sfu.connected;
+
+  /**
+   * A phone that does not ring is a missed call.
+   *
+   * Two sounds rather than one, because they say different things: the
+   * incoming ring is asking you to act, and the ringback is telling you to
+   * wait. Hearing the same tone for both is genuinely confusing when two tabs
+   * of the same product are open side by side.
+   *
+   * Both stop through the effect's cleanup, so answering, declining, hanging
+   * up, the ring timeout and a component unmount are all one code path. That
+   * matters more than it looks: a ring that outlives the answer by half a
+   * second is the sound of a broken app.
+   */
+  const incomingId = session.incoming?.call_id ?? null;
+  useEffect(() => {
+    if (incomingId === null) return;
+    return ring();
+  }, [incomingId]);
+
+  const outgoingId = session.call?.id ?? null;
+  useEffect(() => {
+    if (outgoingId === null || connected) return;
+    return ringback();
+  }, [outgoingId, connected]);
   const { giveUp } = session;
   useEffect(() => {
     if (session.call === null || connected) return;
