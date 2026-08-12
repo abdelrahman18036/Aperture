@@ -312,3 +312,164 @@ describe("health", () => {
     ws.close();
   });
 });
+
+describe("call signalling", () => {
+  it("carries an offer between two sockets on the same call", async () => {
+    // The call id stands in for one Django minted and handed to both parties.
+    const callId = "80831119628435456";
+    const alice = await connect(await mint("101"));
+    const bob = await connect(await mint("202"));
+
+    for (const ws of [alice, bob]) {
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          conversation_ids: [],
+          call_ids: [callId],
+        }),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    alice.send(
+      JSON.stringify({
+        type: "call.signal",
+        call_id: callId,
+        signal: "offer",
+        payload: { sdp: "v=0 fake offer", type: "offer" },
+      }),
+    );
+
+    expect(await nextMessage(bob)).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "call.signal",
+      call_id: callId,
+      signal: "offer",
+      from: "101",
+      payload: { sdp: "v=0 fake offer", type: "offer" },
+    });
+
+    alice.close();
+    bob.close();
+  });
+
+  it("stamps `from` from the ticket, not from the message", async () => {
+    // A client that could name its own `from` could impersonate the other
+    // party mid-negotiation and substitute its own SDP.
+    const callId = "80831119628435457";
+    const alice = await connect(await mint("101"));
+    const bob = await connect(await mint("202"));
+
+    for (const ws of [alice, bob]) {
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          conversation_ids: [],
+          call_ids: [callId],
+        }),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    alice.send(
+      JSON.stringify({
+        type: "call.signal",
+        call_id: callId,
+        signal: "ice",
+        from: "999",
+        payload: { candidate: "candidate:1 1 udp" },
+      }),
+    );
+
+    expect(await nextMessage(bob)).toMatchObject({ from: "101" });
+
+    alice.close();
+    bob.close();
+  });
+
+  it("does not carry a signal to a socket on a different call", async () => {
+    const alice = await connect(await mint("101"));
+    const bob = await connect(await mint("202"));
+
+    alice.send(
+      JSON.stringify({
+        type: "subscribe",
+        conversation_ids: [],
+        call_ids: ["80831119628435458"],
+      }),
+    );
+    bob.send(
+      JSON.stringify({
+        type: "subscribe",
+        conversation_ids: [],
+        call_ids: ["80831119628435459"],
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    alice.send(
+      JSON.stringify({
+        type: "call.signal",
+        call_id: "80831119628435458",
+        signal: "offer",
+        payload: { sdp: "not for bob" },
+      }),
+    );
+    // Then something bob is entitled to, so this asserts ordering rather than
+    // a timeout that might merely be slow.
+    await publisher.publish(
+      userChannel("202"),
+      JSON.stringify({ mine: true }),
+    );
+
+    expect(await nextMessage(bob)).toMatchObject({ mine: true });
+
+    alice.close();
+    bob.close();
+  });
+
+  it("delivers the invite Django publishes to a callee's own channel", async () => {
+    // Ringing is the one call event that does not come from the socket:
+    // it needs authorization, so Django sends it. Exactly what
+    // `calls/events.py` publishes.
+    const bob = await connect(await mint("202"));
+
+    const invite = {
+      v: PROTOCOL_VERSION,
+      type: "call.incoming",
+      call_id: "80831119628435460",
+      conversation_id: "80778627226009600",
+      mode: "p2p",
+      caller: { id: "101", username: "alice" },
+    };
+    await publisher.publish(userChannel("202"), JSON.stringify(invite));
+
+    expect(await nextMessage(bob)).toEqual(invite);
+    bob.close();
+  });
+
+  it("frees the call channel when the client hangs up", async () => {
+    // Hanging up is a `subscribe` without that call in it — the same
+    // replace-rather-than-add rule the conversation list uses.
+    const callId = "80831119628435461";
+    const alice = await connect(await mint("101"));
+
+    alice.send(
+      JSON.stringify({
+        type: "subscribe",
+        conversation_ids: [],
+        call_ids: [callId],
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const during = gateway.hub.channelCount;
+
+    alice.send(
+      JSON.stringify({ type: "subscribe", conversation_ids: [], call_ids: [] }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(gateway.hub.channelCount).toBe(during - 1);
+    alice.close();
+  });
+});

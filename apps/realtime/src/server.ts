@@ -6,6 +6,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import {
   PROTOCOL_VERSION,
   clientMessageSchema,
+  type CallSignalEvent,
   type PresenceEvent,
   type TypingEvent,
 } from "@repo/realtime-events";
@@ -28,12 +29,19 @@ import { InvalidTicketError, verifyTicket } from "./ticket.js";
  * - **Persisted** — messages, read receipts. Up over HTTP to Django, which
  *   allocates `seq` in a transaction and publishes to Redis after commit;
  *   down over this socket. This service never writes them.
- * - **Ephemeral** — typing, presence. Up over this socket, out over Redis to
- *   the other replicas, and never into Postgres. Nothing here is worth a
- *   database write per keystroke.
+ * - **Ephemeral** — typing, presence, call signalling. Up over this socket,
+ *   out over Redis to the other replicas, and never into Postgres. Nothing
+ *   here is worth a database write per keystroke, and an SDP offer that
+ *   outlived the call it belonged to would be worse than useless.
  *
  * If it must survive a restart it goes through Django. If it does not, it
  * stays here.
+ *
+ * Calls sit exactly on that line and are worth spelling out. *Ringing*
+ * someone needs authorization, so Django does it and publishes the invite.
+ * Everything after — offers, answers, ICE candidates, hangups — rides this
+ * socket on a channel named by the call id Django handed out, and this
+ * service never learns what a call is.
  */
 
 /**
@@ -218,7 +226,33 @@ export function createGateway(): Gateway {
       // Ephemeral channels only. Messages arrive on the user's own channel,
       // which the client cannot name and cannot opt out of — so a forged
       // conversation id here buys typing indicators, never message content.
-      await hub.subscribeEphemeral(subscriber, message.conversation_ids);
+      //
+      // Call ids are different in kind: Django mints one per call and gives
+      // it only to participants it has authorized, so naming one *is* the
+      // proof. Guessing is not a threat — it is a 63-bit snowflake that
+      // exists for the length of one call.
+      await hub.subscribeEphemeral(
+        subscriber,
+        message.conversation_ids,
+        message.call_ids,
+      );
+      return;
+    }
+
+    if (message.type === "call.signal") {
+      const event: CallSignalEvent = {
+        v: PROTOCOL_VERSION,
+        type: "call.signal",
+        call_id: message.call_id,
+        signal: message.signal,
+        // Stamped from the verified ticket, never taken from the message.
+        // A client that could name its own `from` could impersonate the other
+        // party mid-negotiation and hand over its own SDP.
+        from: subscriber.userId,
+        to: message.to,
+        payload: message.payload,
+      };
+      await hub.publishCallSignal(message.call_id, event);
       return;
     }
 

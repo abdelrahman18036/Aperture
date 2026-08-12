@@ -1,6 +1,10 @@
 import Redis from "ioredis";
 
-import { ephemeralChannel, userChannel } from "@repo/realtime-events";
+import {
+  callChannel,
+  ephemeralChannel,
+  userChannel,
+} from "@repo/realtime-events";
 
 /**
  * The fanout. One Redis subscriber for the whole process, many sockets.
@@ -75,21 +79,25 @@ export class Hub {
   }
 
   /**
-   * Point a socket at some conversations' **ephemeral** channels.
+   * Point a socket at some conversations' and calls' **ephemeral** channels.
    *
    * Replacing rather than adding: a client that navigates sends its current
    * list, so a stale subscription cannot outlive the screen that wanted it.
+   * Hanging up is therefore just a `subscribe` without that call in it.
    *
    * The durable channel added by `add()` is preserved — losing it here would
-   * silently stop delivering messages the moment someone opened a thread.
+   * silently stop delivering messages the moment someone opened a thread, and
+   * stop the phone ringing the moment they joined a call.
    */
   async subscribeEphemeral(
     subscriber: Subscriber,
     conversationIds: readonly string[],
+    callIds: readonly string[] = [],
   ): Promise<void> {
     const durable = userChannel(subscriber.userId);
     const wanted = new Set<string>([durable]);
     for (const id of conversationIds) wanted.add(ephemeralChannel(id));
+    for (const id of callIds) wanted.add(callChannel(id));
 
     const current = this.held.get(subscriber) ?? new Set<string>();
 
@@ -117,6 +125,24 @@ export class Hub {
   ): Promise<void> {
     await this.publisher.publish(
       ephemeralChannel(conversationId),
+      JSON.stringify(payload),
+    );
+  }
+
+  /**
+   * Publish one step of a call negotiation.
+   *
+   * Through Redis for the same reason typing is: two people on a call may
+   * well have landed on different replicas, and an offer delivered only to
+   * the process that received it is a call that never connects.
+   *
+   * Deliberately unchecked. The channel is named by a call id Django minted
+   * and handed only to authorized participants, so the check has already
+   * happened somewhere with a database — see `calls/services.py`.
+   */
+  async publishCallSignal(callId: string, payload: unknown): Promise<void> {
+    await this.publisher.publish(
+      callChannel(callId),
       JSON.stringify(payload),
     );
   }

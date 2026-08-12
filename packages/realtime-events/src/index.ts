@@ -78,10 +78,19 @@ export type ConnectionReady = z.infer<typeof connectionReadySchema>;
 // §8. A typing indicator that outlives a restart is a bug, not a feature.
 // ---------------------------------------------------------------------------
 
-/** Client → gateway: which conversations this socket wants to hear about. */
+/**
+ * Client → gateway: which conversations and calls this socket wants.
+ *
+ * Two lists, because they are two different kinds of name. A conversation id
+ * is long-lived and shared; a call id is minted per call by Django and given
+ * only to people it has authorized — see `calls/services.py`. The gateway
+ * treats both the same way, which is the point: it subscribes a socket to a
+ * channel and knows nothing about what the channel means.
+ */
 export const subscribeSchema = z.object({
   type: z.literal("subscribe"),
   conversation_ids: z.array(z.string()).max(200),
+  call_ids: z.array(z.string()).max(8).default([]),
 });
 
 /** Client → gateway: I am typing / I stopped. */
@@ -94,10 +103,33 @@ export const typingSchema = z.object({
 /** Client → gateway: keep this socket alive and my presence fresh. */
 export const heartbeatSchema = z.object({ type: z.literal("heartbeat") });
 
+/**
+ * Client → gateway: one step of a WebRTC negotiation.
+ *
+ * The payload is opaque here on purpose. An SDP offer is a multi-kilobyte
+ * blob whose grammar belongs to the browser, and restating it in Zod would
+ * mean a schema that breaks every time a codec is added. What *is* validated
+ * is the envelope: which call, and which kind of step.
+ *
+ * None of this is persisted, and none of it passes through Django. It is
+ * ephemeral by §8's rule — if it does not need to survive a restart, it stays
+ * in Node.
+ */
+export const callSignalSchema = z.object({
+  type: z.literal("call.signal"),
+  call_id: z.string(),
+  signal: z.enum(["offer", "answer", "ice", "hangup", "ringing"]),
+  //: Recipient, for a mesh where more than one peer is on the channel. Absent
+  //: means everyone else on the call.
+  to: z.string().optional(),
+  payload: z.unknown(),
+});
+
 export const clientMessageSchema = z.discriminatedUnion("type", [
   subscribeSchema,
   typingSchema,
   heartbeatSchema,
+  callSignalSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -119,14 +151,53 @@ export const presenceEventSchema = z.object({
   online: z.boolean(),
 });
 
+/**
+ * Gateway → client: somebody's step of a negotiation.
+ *
+ * The gateway stamps `from` rather than taking it from the sender, so a
+ * client cannot claim to be someone else on a call it has joined.
+ */
+export const callSignalEventSchema = z.object({
+  v: z.literal(PROTOCOL_VERSION),
+  type: z.literal("call.signal"),
+  call_id: z.string(),
+  signal: z.enum(["offer", "answer", "ice", "hangup", "ringing"]),
+  from: z.string(),
+  to: z.string().optional(),
+  payload: z.unknown(),
+});
+
+/**
+ * Django → client: your phone is ringing.
+ *
+ * The one call event that does *not* come from the socket's own traffic.
+ * Ringing needs authorization, authorization needs a database, and the
+ * gateway has neither — so Django publishes this to the callee's own durable
+ * channel. The `call_id` it carries is the capability that lets everything
+ * after it stay in Node.
+ */
+export const callInviteSchema = z.object({
+  v: z.literal(PROTOCOL_VERSION),
+  type: z.literal("call.incoming"),
+  call_id: z.string(),
+  conversation_id: z.string(),
+  mode: z.enum(["p2p", "sfu"]),
+  caller: z.object({ id: z.string(), username: z.string() }),
+});
+
 export type TypingEvent = z.infer<typeof typingEventSchema>;
 export type PresenceEvent = z.infer<typeof presenceEventSchema>;
+export type CallSignalEvent = z.infer<typeof callSignalEventSchema>;
+export type CallInvite = z.infer<typeof callInviteSchema>;
+export type CallSignalKind = CallSignalEvent["signal"];
 
 /** Anything the gateway may send. */
 export const anyServerEventSchema = z.union([
   connectionReadySchema,
   typingEventSchema,
   presenceEventSchema,
+  callSignalEventSchema,
+  callInviteSchema,
   serverEventSchema,
 ]);
 
@@ -159,4 +230,17 @@ export function userChannel(userId: string): string {
 
 export function ephemeralChannel(conversationId: string): string {
   return `conv.${conversationId}.ephemeral`;
+}
+
+/**
+ * The signalling channel for one call.
+ *
+ * Named by a snowflake Django minted for this call and handed only to the
+ * people it authorized, which is what makes it safe for the gateway to fan
+ * out offers and answers here without checking anything. It is per *call*
+ * rather than per conversation deliberately: a conversation-derived name
+ * would let anyone who was ever in a call listen to the next one.
+ */
+export function callChannel(callId: string): string {
+  return `call.${callId}.signal`;
 }
