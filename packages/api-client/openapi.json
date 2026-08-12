@@ -1084,6 +1084,43 @@
                 }
             }
         },
+        "/api/posts/explore": {
+            "get": {
+                "operationId": "posts_explore",
+                "description": "Recent public posts from accounts you do not follow.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'."
+                    }
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PostPage"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/posts/feed": {
             "get": {
                 "operationId": "posts_feed",
@@ -1474,6 +1511,56 @@
                         "description": "No response body"
                     },
                     "403": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/users/register": {
+            "post": {
+                "operationId": "users_register",
+                "description": "Create an account. Signs the new account in.",
+                "tags": [
+                    "users"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUser"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
                         "description": "No response body"
                     }
                 }
@@ -2588,6 +2675,34 @@
                 ],
                 "type": "string",
                 "description": "* `csam` - Child sexual abuse material\n* `violence` - Violence or threats\n* `harassment` - Harassment or bullying\n* `hate` - Hate speech\n* `nudity` - Adult nudity or sexual activity\n* `spam` - Spam or scam\n* `self_harm` - Self-harm or suicide\n* `copyright` - Copyright or trademark\n* `other` - Something else"
+            },
+            "RegisterRequest": {
+                "type": "object",
+                "description": "What it takes to open an account.\n\n`username` is constrained here rather than only at the database, because\nthe model's uniqueness will not tell you that a space is not allowed. The\npattern matches what a profile URL can carry — `/u/<username>` — so a name\nthat cannot be linked to cannot be chosen.",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1
+                    },
+                    "username": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 30,
+                        "pattern": "^[A-Za-z0-9_.]+$"
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 8,
+                        "maxLength": 128
+                    }
+                },
+                "required": [
+                    "email",
+                    "password",
+                    "username"
+                ]
             },
             "Report": {
                 "type": "object",

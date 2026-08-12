@@ -300,6 +300,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/posts/explore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Recent public posts from accounts you do not follow. */
+        get: operations["posts_explore"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/posts/feed": {
         parameters: {
             query?: never;
@@ -421,6 +438,23 @@ export interface paths {
         head?: never;
         /** @description Update your own profile. */
         patch: operations["users_update_me"];
+        trace?: never;
+    };
+    "/api/users/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Create an account. Signs the new account in. */
+        post: operations["users_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/users/requests": {
@@ -764,6 +798,20 @@ export interface components {
          * @enum {string}
          */
         ReasonEnum: "csam" | "violence" | "harassment" | "hate" | "nudity" | "spam" | "self_harm" | "copyright" | "other";
+        /**
+         * @description What it takes to open an account.
+         *
+         *     `username` is constrained here rather than only at the database, because
+         *     the model's uniqueness will not tell you that a space is not allowed. The
+         *     pattern matches what a profile URL can carry — `/u/<username>` — so a name
+         *     that cannot be linked to cannot be chosen.
+         */
+        RegisterRequest: {
+            /** Format: email */
+            email: string;
+            username: string;
+            password: string;
+        };
         /**
          * @description A report, as the person who filed it may see it.
          *
@@ -1625,6 +1673,28 @@ export interface operations {
             };
         };
     };
+    posts_explore: {
+        parameters: {
+            query?: {
+                /** @description Snowflake id of the last item on the previous page. Ids are time-ordered, so this is simply 'older than that one'. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostPage"];
+                };
+            };
+        };
+    };
     posts_feed: {
         parameters: {
             query?: {
@@ -1934,6 +2004,38 @@ export interface operations {
             };
             /** @description No response body */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["RegisterRequest"];
+                "multipart/form-data": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            /** @description No response body */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
