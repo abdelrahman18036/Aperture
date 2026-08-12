@@ -236,6 +236,29 @@ further, widen the range and re-run:
 netsh int ipv4 set dynamicport tcp start=10000 num=55000
 ```
 
+### Calls
+
+The media path is verified with **synthetic tracks** rather than a webcam — a
+canvas `captureStream` and an oscillator produce real `MediaStreamTrack`s with
+no hardware, which is what makes this runnable on a machine with no camera or
+in a browser that will not grant one. Paste into the console on any page:
+
+```bash
+cat docs/verify-call-media.js
+```
+
+Measured on the development machine, two `RTCPeerConnection`s and the ICE
+servers from a live `POST /api/calls/start`:
+
+| | selected pair | video | audio |
+|---|---|---|---|
+| default policy | `host` / udp | 590 frames, 239 KB | 79 KB, 985 packets |
+| `iceTransportPolicy: "relay"` | `relay` / udp | 356 frames, 45 KB | 48 KB |
+
+The second row is the one worth keeping: under `relay` nothing connects unless
+coturn allocates and forwards, so frames arriving proves the relay path end to
+end with a credential Django minted.
+
 ---
 
 ## The type boundary
