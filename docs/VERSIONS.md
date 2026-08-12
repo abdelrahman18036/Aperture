@@ -223,6 +223,31 @@ Record as a Deviation in the Phase 1 handoff.
 
 Ports verified free: 6379, 9000, 9001, 7880, 8108, 3000, 8000, 3478, 443.
 
+### `network_mode: host` does not do what the spec assumes — ruled
+
+`01-ARCHITECTURE.md` §4 gives coturn `network_mode: host`. That is correct on Linux, where the
+container shares the host's network namespace and a relay can hand out addresses the browser can
+dial.
+
+**On Docker Desktop for Windows, "host" is the Linux VM's namespace, not Windows'.** The symptom is
+quiet: coturn starts, logs its TLS listeners, discovers seven relay addresses, and reports no error
+at all — while `127.0.0.1:443` on Windows refuses every connection. Nothing in the container's logs
+says anything is wrong, because from inside the VM nothing is.
+
+**Ruled: publish ports explicitly on this machine**, which then forces two settings a host-networked
+relay gets for free:
+
+- `--external-ip=127.0.0.1`, so relayed candidates carry an address the browser can dial rather than
+  the container's bridge IP.
+- `--min-port=50200 --max-port=50250`, because every relay allocation port has to be published and
+  the default range is sixteen thousand of them.
+
+Verified after the change: TLS 1.3 handshake completes on `127.0.0.1:443` from Windows. Record as a
+Deviation in the Phase 7 handoff.
+
+TLS material lives in `infra/coturn/certs/` and is **git-ignored** — the generating command is in
+`infra/coturn/turnserver.conf`.
+
 ---
 
 ## Docs to fetch before Phase 1

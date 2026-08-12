@@ -94,8 +94,46 @@ services:
   coturn:
     image: coturn/coturn:4.17.2
     profiles: ["calls"]
-    network_mode: host
-    volumes: [./coturn/turnserver.conf:/etc/coturn/turnserver.conf]
+    # 01-ARCHITECTURE.md §4 uses `network_mode: host`, which is right on Linux
+    # and does nothing useful here: on Docker Desktop for Windows "host" is the
+    # Linux VM's network namespace, not Windows'. coturn came up happily and
+    # was unreachable from the browser — nothing listening on 127.0.0.1:443.
+    #
+    # Published ports instead, which forces two things a host-networked relay
+    # gets for free:
+    #
+    #   `--external-ip` — a relay hands out the address it expects to be dialled
+    #   on. Behind a NAT it would otherwise advertise its bridge IP, and every
+    #   relayed candidate would be dead on arrival.
+    #
+    #   a narrow relay port range — allocations come from `min-port..max-port`,
+    #   and every one of those has to be published. The default range is 16k
+    #   ports; 50 is plenty for development and the rest is not worth the
+    #   startup cost.
+    ports:
+      # STUN/TURN, both transports.
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      # The one that matters: TLS on 443, indistinguishable from HTTPS to a
+      # firewall that drops UDP. §9 calls this non-negotiable.
+      - "443:443/tcp"
+      # Relay allocations.
+      - "50200-50250:50200-50250/udp"
+    # The secret is passed here rather than written into turnserver.conf —
+    # rule 12. It must match Django's TURN_STATIC_AUTH_SECRET or every
+    # credential Django mints is rejected, and the symptom is not an error but
+    # a call that works at home and fails behind a firewall.
+    command: >
+      -c /etc/coturn/turnserver.conf
+      --static-auth-secret=${TURN_STATIC_AUTH_SECRET:-dev-only-insecure-turn-secret-0123456789abcdef}
+      --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
+      --min-port=50200
+      --max-port=50250
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      # Generated locally, never committed. See turnserver.conf for the
+      # one-line openssl command that makes them.
+      - ./coturn/certs:/etc/coturn/certs:ro
 
 # 01-ARCHITECTURE.md §4 writes this as `{ pgdata:, redisdata:, ... }`, which
 # YAML flow syntax rejects — a flow mapping needs a space after each colon, so
