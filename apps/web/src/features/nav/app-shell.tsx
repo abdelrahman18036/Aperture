@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { CallProvider } from "@/features/calls/provider";
+import { ComposeProvider } from "@/features/composer/compose-dialog";
 import { RealtimeProvider } from "@/features/realtime/provider";
 import { api } from "@/lib/api";
 
@@ -58,6 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // when you are already looking at the right thread is not a call.
     <RealtimeProvider>
       <CallProvider>
+        <ComposeProvider>
         <div className="min-h-dvh">
       <NavRail username={username} counts={counts} />
       <NavBar username={username} counts={counts} />
@@ -78,6 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
         </div>
+        </ComposeProvider>
       </CallProvider>
     </RealtimeProvider>
   );

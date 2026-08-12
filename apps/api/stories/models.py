@@ -30,20 +30,58 @@ def default_expiry() -> datetime:
     return timezone.now() + STORY_TTL
 
 
+#: The backgrounds a text story may use.
+#:
+#: Deliberately **not** the accent colours. `02-DESIGN-SYSTEM.md` caps the
+#: accent at "rings, icon fills, 1px underlines" and rules out anything
+#: accent-filled above 40px tall — a full-bleed safelight rectangle is the
+#: most literal violation of that available. These are content colours in
+#: the sense a photograph is: desaturated, dark enough for `--color-ink` to
+#: sit on at 4.5:1, and none of them warm-accent or cool-accent.
+STORY_BACKGROUNDS: dict[str, str] = {
+    "slate": "linear-gradient(160deg, #1B1E28, #0B0B0E)",
+    "moss": "linear-gradient(160deg, #16241C, #0B0F0C)",
+    "plum": "linear-gradient(160deg, #241823, #100B10)",
+    "clay": "linear-gradient(160deg, #2A1E17, #120C09)",
+    "ink": "linear-gradient(160deg, #14141A, #000000)",
+}
+
+DEFAULT_BACKGROUND = "slate"
+
+
 class Story(models.Model):
-    """One frame of someone's day."""
+    """One frame of someone's day — a photograph, a clip, or just words."""
 
     id = models.BigIntegerField(primary_key=True, default=snowflake, editable=False)
     author = models.ForeignKey(
         "users.User", on_delete=models.CASCADE, related_name="stories"
     )
-    #: `PROTECT` rather than `CASCADE`: media is soft-deleted everywhere else
-    #: in this codebase, and a story losing its picture out from under it
-    #: would render an empty frame rather than disappear.
+    #: Null for a text story. `PROTECT` rather than `CASCADE` when it is set:
+    #: media is soft-deleted everywhere else in this codebase, and a story
+    #: losing its picture out from under it would render an empty frame
+    #: rather than disappear.
     media = models.ForeignKey(
-        "media.Media", on_delete=models.PROTECT, related_name="stories"
+        "media.Media",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="stories",
     )
+    #: The whole content of a text story, and unused by a media one — where
+    #: `caption` is the line under the picture. Two fields rather than one
+    #: because they are different things: 200 characters under a photograph
+    #: is a caption, and 700 on a coloured ground is the post.
+    text = models.TextField(max_length=700, blank=True)
+    background = models.CharField(max_length=16, default=DEFAULT_BACKGROUND, blank=True)
     caption = models.CharField(max_length=200, blank=True)
+    #: The first link in the text or caption. A cache, so `SET_NULL`.
+    link_preview = models.ForeignKey(
+        "links.LinkPreview",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stories",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(default=default_expiry)
@@ -53,6 +91,16 @@ class Story(models.Model):
 
     class Meta:
         db_table = "stories"
+        constraints = [
+            # A story is a picture or it is words. One with neither is an
+            # empty frame somebody would have to scroll past, and the check
+            # lives here rather than only in the service so no future code
+            # path can write one.
+            models.CheckConstraint(
+                condition=models.Q(media__isnull=False) | ~models.Q(text=""),
+                name="stories_have_content",
+            ),
+        ]
         indexes = [
             # The tray query: live stories by a set of authors, newest last.
             models.Index(fields=["author", "expires_at"], name="stories_author_expiry"),

@@ -16,6 +16,8 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@repo/ui";
 
+import { useCompose } from "@/features/composer/compose-dialog";
+
 /**
  * The nav rail — 72px collapsed, 240px expanded.
  *
@@ -40,8 +42,14 @@ const DESTINATIONS: Destination[] = [
   { href: "/explore", label: "Explore", icon: Compass },
   { href: "/search", label: "Search", icon: Search },
   { href: "/messages", label: "Messages", icon: MessageCircle },
-  { href: "/compose", label: "New post", icon: Camera },
 ];
+
+/** Not a destination. Composing happens over the page, not instead of it. */
+const COMPOSE: Destination = {
+  href: "/compose",
+  label: "New post",
+  icon: Camera,
+};
 
 /**
  * Places that only exist when they have something in them.
@@ -88,6 +96,7 @@ export function NavRail({
   username: string | null;
   counts: NavCounts;
 }) {
+  const { start: onCompose } = useCompose();
   const pathname = usePathname();
 
   const items: Destination[] = [
@@ -122,6 +131,25 @@ export function NavRail({
         />
         <span className="hidden font-display text-title xl:inline">Aperture</span>
       </Link>
+
+      <button
+        type="button"
+        onClick={() => {
+          onCompose("post");
+        }}
+        aria-label={COMPOSE.label}
+        title={COMPOSE.label}
+        className={cn(
+          "flex h-10 w-full items-center gap-3 rounded-control px-2",
+          "text-label text-ink-dim transition-colors duration-[var(--duration-hover)]",
+          "hover:text-ink",
+        )}
+      >
+        <COMPOSE.icon className="size-5 shrink-0" aria-hidden="true" />
+        <span aria-hidden="true" className="hidden xl:inline">
+          {COMPOSE.label}
+        </span>
+      </button>
 
       {items.map(({ href, label, icon: Icon, count }) => {
         const active = pathname === href;
@@ -191,6 +219,7 @@ export function NavBar({
   username: string | null;
   counts: NavCounts;
 }) {
+  const { start: onCompose } = useCompose();
   const pathname = usePathname();
   // No queue entries here. The bar is six wide at 375px already, and a
   // seventh target would be under the 24px floor — the pip on Messages

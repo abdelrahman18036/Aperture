@@ -3,7 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
-import { Button, DevelopImage, Input, Skeleton, cn } from "@repo/ui";
+import { Button, DevelopImage, Input, Skeleton, TabBar, cn } from "@repo/ui";
+import type { TabDefinition } from "@repo/ui";
 
 import { api } from "@/lib/api";
 
@@ -14,6 +15,7 @@ import {
   type CropRect,
   cropToBlob,
 } from "./crop-stage";
+import { TextStory } from "./text-story";
 import { useUpload } from "./use-upload";
 
 /**
@@ -32,6 +34,14 @@ const ACCEPT = "image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quick
 
 type Visibility = "public" | "followers" | "private";
 
+type StoryMode = "photo" | "text";
+
+/** Only ever shown in story mode; a post is a photograph by definition. */
+const STORY_MODES: readonly TabDefinition<StoryMode>[] = [
+  { id: "photo", label: "Photo or clip" },
+  { id: "text", label: "Just words" },
+];
+
 /** Mirrors `Post.Visibility`, worded for a person rather than a database. */
 const VISIBILITIES: { value: Visibility; label: string }[] = [
   { value: "public", label: "Everyone" },
@@ -45,11 +55,33 @@ interface Picked {
   kind: "image" | "video";
 }
 
-export function Composer() {
+export function Composer({
+  toStory: toStoryProp,
+  onDone,
+}: {
+  /** Omitted on the standalone route, where the query string decides. */
+  toStory?: boolean;
+  /** Called instead of navigating, so a dialog can close itself. */
+  onDone?: () => void;
+} = {}) {
   // `?to=story` — the tray's plus button is the only way in, and a mode is
   // not a route: the pick-crop-upload flow is identical and only the last
   // step differs.
-  const toStory = useSearchParams().get("to") === "story";
+  // The prop wins; the query is the fallback for a direct visit to
+  // `/compose?to=story`, which stays a real route.
+  const fromQuery = useSearchParams().get("to") === "story";
+  const toStory = toStoryProp ?? fromQuery;
+  const [storyMode, setStoryMode] = useState<StoryMode>("photo");
+  const router = useRouter();
+
+  /** Where to go when something is published, unless the caller says else. */
+  const finish = useCallback(
+    (href: string) => {
+      if (onDone) onDone();
+      else router.push(href);
+    },
+    [onDone, router],
+  );
   const [picked, setPicked] = useState<Picked | null>(null);
   const [aspect, setAspect] = useState<AspectName>("4:5");
   const [altText, setAltText] = useState("");
@@ -121,7 +153,24 @@ export function Composer() {
 
   return (
     <div className="flex w-full max-w-feed flex-col gap-8">
-      {picked === null ? (
+      {/* Words or a picture. Only for a story: a post is a photograph by
+          definition — this is a photo platform — while a story is a day, and
+          a day is often just a sentence. */}
+      {toStory && picked === null && status.phase === "idle" ? (
+        <TabBar
+          tabs={STORY_MODES}
+          active={storyMode}
+          onSelect={setStoryMode}
+        />
+      ) : null}
+
+      {toStory && storyMode === "text" && picked === null ? (
+        <TextStory
+          onPosted={() => {
+            finish("/");
+          }}
+        />
+      ) : picked === null ? (
         <div
           onDragOver={(event) => {
             event.preventDefault();
@@ -271,6 +320,7 @@ export function Composer() {
           onSaveAltText={saveAltText}
           onDiscard={clear}
           toStory={toStory}
+          onFinish={finish}
         />
       ) : null}
     </div>
@@ -296,8 +346,11 @@ function PublishForm({
   onSaveAltText,
   onDiscard,
   toStory,
+  onFinish,
 }: {
   toStory: boolean;
+  /** Navigate, or close a dialog — the caller decides which. */
+  onFinish: (href: string) => void;
   media: {
     id: string;
     blurhash: string;
@@ -313,7 +366,6 @@ function PublishForm({
   onSaveAltText: (mediaId: string) => Promise<void>;
   onDiscard: () => void;
 }) {
-  const router = useRouter();
   const [caption, setCaption] = useState("");
   const [location, setLocation] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("public");
@@ -334,7 +386,7 @@ function PublishForm({
 
     if (toStory) {
       const story = await api.POST("/api/stories/create", {
-        body: { media_id: media.id, caption },
+        body: { media_id: media.id, caption, text: "", background: "slate" },
       });
       setBusy(false);
       if (story.data === undefined) {
@@ -342,9 +394,9 @@ function PublishForm({
         setError(detail ?? "That did not post. Try again.");
         return;
       }
-      // Back to the feed, where the tray is — a story has no page of its own
-      // to land on, and the ring going warm is the confirmation.
-      router.push("/");
+      // Back to the feed, where the tray is — a story has no page of its
+      // own to land on, and the ring going warm is the confirmation.
+      onFinish("/");
       return;
     }
 
@@ -365,8 +417,8 @@ function PublishForm({
     }
     // Straight to the post. Landing back on an empty composer gives no
     // evidence that anything happened.
-    router.push(`/p/${response.data.id}`);
-  }, [caption, location, visibility, media.id, onSaveAltText, router, toStory]);
+    onFinish(`/p/${response.data.id}`);
+  }, [caption, location, visibility, media.id, onSaveAltText, onFinish, toStory]);
 
   return (
     <div className="flex flex-col gap-6">

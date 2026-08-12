@@ -443,9 +443,44 @@ report control for a viewer count and a delete — reporting your own content
 is refused by the service, so offering it would be offering a control that
 cannot work.
 
+**A story can be words instead of a picture** — text on one of five
+backgrounds, with no upload and nothing to wait for. The backgrounds are
+deliberately not the accent colours: `02-DESIGN-SYSTEM.md` caps the accent at
+"rings, icon fills, 1px underlines" and rules out anything accent-filled above
+40px tall, and a full-bleed safelight rectangle is the loudest possible
+version of that. They are content colours in the sense a photograph is.
+
+A model check constraint refuses a story with neither a picture nor words, so
+no future call site can write an empty frame.
+
 The tray shows your own stories and those of accounts you follow, never
 strangers'. A story is a day rather than a portfolio, and a discovery surface
 full of other people's days is a different product.
+
+---
+
+## Links
+
+A URL in a caption or a story gets an Open Graph card, fetched once per URL
+and cached — ten people sharing an article is one row and one request, not ten
+requests to somebody else's server for the same page.
+
+**Fetching a URL a stranger supplied is an SSRF primitive**, and `core/links.py`
+is the guard rather than a convenience. Somebody posts
+`http://169.254.169.254/latest/meta-data/` and a naive fetcher renders the
+cloud instance's credentials on a card. So: a scheme allowlist, DNS resolved
+*before* the request with every returned address checked, and the same check
+again on each redirect, because a public host is free to answer 302 with
+`127.0.0.1`. A name that resolves to several addresses must have all of them
+public — accepting on the first public answer leaves a round-robin with one
+loopback entry as a way in.
+
+`http://127.0.0.1.nip.io/` is the case that matters: an ordinary-looking
+hostname that resolves to loopback, which is why the check is on the resolved
+address and never on the text of the URL. 20 tests, no network.
+
+The fetch itself is bounded: 512KB, six seconds, three redirects, HTML only.
+It runs on the queue, so publishing never waits on somebody else's server.
 
 ---
 

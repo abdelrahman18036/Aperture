@@ -11,6 +11,8 @@ import {
   DialogTrigger,
 } from "@repo/ui";
 
+import { LinkCard } from "@/features/links/link-card";
+import { Linkify } from "@/features/links/linkify";
 import { ReportDialog } from "@/features/moderation/report-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
@@ -293,9 +295,13 @@ export function FeedPost({ post }: { post: Post }) {
           >
             {post.author.username}
           </Link>
-          {post.caption}
+          <Linkify text={post.caption} />
         </p>
       ) : null}
+
+      {/* The card sits under the caption, not over the photograph — the
+          photograph is the post, and a link is information attached to it. */}
+      {post.link_preview ? <LinkCard preview={post.link_preview} /> : null}
 
       {/* Was a `<button>` with no handler — the third dead control on this
           component. The comments live on the post page, so it goes there,

@@ -9,8 +9,9 @@ from __future__ import annotations
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from links import services as link_services
 from media.models import Media
-from stories.models import Story, StoryView
+from stories.models import DEFAULT_BACKGROUND, STORY_BACKGROUNDS, Story, StoryView
 from users.models import User
 
 
@@ -19,23 +20,54 @@ class StoryRejectedError(Exception):
 
 
 @transaction.atomic
-def create_story(*, author: User, media_id: int, caption: str = "") -> Story:
-    """Post a story from media that has finished processing.
+def create_story(
+    *,
+    author: User,
+    media_id: int | None = None,
+    caption: str = "",
+    text: str = "",
+    background: str = DEFAULT_BACKGROUND,
+) -> Story:
+    """Post a story: a picture, a clip, or words on a coloured ground.
 
-    The same two checks `posts.create_post` makes, for the same two reasons:
-    ownership stops someone attaching a stranger's photograph by guessing an
-    id, and `ready` stops a story existing whose derivative the worker has
-    not written yet.
+    Media is checked the same two ways `posts.create_post` checks it, for the
+    same two reasons: ownership stops someone attaching a stranger's
+    photograph by guessing an id, and `ready` stops a story existing whose
+    derivative the worker has not written yet.
+
+    A text story needs neither, which is the point — the barrier to posting
+    one should be having something to say, not having a photograph of it.
     """
-    media = Media.objects.filter(
-        pk=media_id, owner=author, deleted_at__isnull=True
-    ).first()
-    if media is None:
-        raise StoryRejectedError("That image is not yours.")
-    if media.state != Media.State.READY:
-        raise StoryRejectedError("That image is still being processed.")
+    media: Media | None = None
+    if media_id is not None:
+        media = Media.objects.filter(
+            pk=media_id, owner=author, deleted_at__isnull=True
+        ).first()
+        if media is None:
+            raise StoryRejectedError("That image is not yours.")
+        if media.state != Media.State.READY:
+            raise StoryRejectedError("That image is still being processed.")
 
-    return Story.objects.create(author=author, media=media, caption=caption[:200])
+    body = text.strip()[:700]
+    if media is None and not body:
+        raise StoryRejectedError("A story needs a picture or something to say.")
+
+    if background not in STORY_BACKGROUNDS:
+        # Falling back rather than refusing: an unknown background is a
+        # client that is out of date, and losing somebody's words over a
+        # colour name would be the wrong trade.
+        background = DEFAULT_BACKGROUND
+
+    return Story.objects.create(
+        author=author,
+        media=media,
+        text=body,
+        background=background,
+        caption=caption[:200],
+        # A text story is where a link is most likely to be the whole point,
+        # so both fields are searched — text first.
+        link_preview=link_services.preview_for(f"{body} {caption}"),
+    )
 
 
 def mark_viewed(*, story: Story, viewer: User) -> None:

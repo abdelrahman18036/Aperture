@@ -20,6 +20,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from config.fields import SnowflakeField
+from links.serializers import LinkPreviewSerializer
 from media.serializers import MediaSerializer
 from posts.models import Comment, Post
 from users.serializers import UserSerializer
@@ -31,6 +32,10 @@ class PostSerializer(serializers.ModelSerializer[Post]):
     id = SnowflakeField(read_only=True)
     author = UserSerializer(read_only=True)
     media = serializers.SerializerMethodField()
+    #: Declared, or `ModelSerializer` emits the foreign key as a bare integer
+    #: — which is both useless to a client and a snowflake crossing the wire
+    #: as a JSON number.
+    link_preview = LinkPreviewSerializer(read_only=True, allow_null=True)
     like_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
     viewer_has_liked = serializers.SerializerMethodField()
@@ -45,6 +50,7 @@ class PostSerializer(serializers.ModelSerializer[Post]):
             "visibility",
             "created_at",
             "media",
+            "link_preview",
             "like_count",
             "comment_count",
             "viewer_has_liked",

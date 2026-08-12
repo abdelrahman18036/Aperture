@@ -226,3 +226,58 @@ class TestTheApi:
     ) -> None:
         story = a_story(other_user, expires_at=timezone.now() - timedelta(seconds=1))
         assert signed_in.post(f"/api/stories/{story.pk}").status_code == 404
+
+
+class TestTextStories:
+    """Words on a coloured ground, with no photograph at all.
+
+    The barrier to posting a story should be having something to say, not
+    having a picture of it — so media is optional and the model's check
+    constraint is what stops the empty case rather than a service that a
+    future call site could route around.
+    """
+
+    def test_words_alone_are_a_story(self, user: User) -> None:
+        story = services.create_story(
+            author=user, text="Just got the enlarger working.", background="moss"
+        )
+
+        assert story.media_id is None
+        assert story.background == "moss"
+        assert story.is_live
+
+    def test_neither_is_refused(self, user: User) -> None:
+        with pytest.raises(services.StoryRejectedError):
+            services.create_story(author=user, text="   ")
+
+    def test_an_unknown_background_falls_back(self, user: User) -> None:
+        # Losing somebody's words over a colour name would be the wrong
+        # trade: an unrecognised background is an out-of-date client.
+        story = services.create_story(
+            author=user, text="Hello", background="chartreuse"
+        )
+        assert story.background == "slate"
+
+    def test_the_database_refuses_an_empty_story(self, user: User) -> None:
+        from django.db import IntegrityError, transaction
+
+        # Straight past the service, which is the point of the constraint.
+        with pytest.raises(IntegrityError), transaction.atomic():
+            Story.objects.create(author=user, media=None, text="")
+
+    def test_the_api_takes_text_and_gives_back_css(
+        self, signed_in: APIClient, user: User
+    ) -> None:
+        response = signed_in.post(
+            "/api/stories/create",
+            {"text": "Fixed the leak in the tank.", "background": "clay"},
+            format="json",
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["media"] is None
+        assert body["text"] == "Fixed the leak in the tank."
+        # Resolved server-side, so adding a background later is a server
+        # change alone.
+        assert body["background_css"].startswith("linear-gradient")

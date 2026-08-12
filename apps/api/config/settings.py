@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     "media",
     "posts",
     "stories",
+    "links",
     "counters",
     "messaging",
     "calls",

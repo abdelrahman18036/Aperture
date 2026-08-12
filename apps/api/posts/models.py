@@ -23,6 +23,16 @@ class Post(models.Model):
         PRIVATE = "private", "Private"
 
     id = models.BigIntegerField(primary_key=True, default=snowflake, editable=False)
+    #: The first link in the caption, if there was one and it was fetchable.
+    #: `SET_NULL` rather than `CASCADE`: a preview row is a cache, and losing
+    #: one must never take the post with it.
+    link_preview = models.ForeignKey(
+        "links.LinkPreview",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="posts",
+    )
     author = models.ForeignKey(
         "users.User", on_delete=models.CASCADE, related_name="posts"
     )

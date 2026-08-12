@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from counters.models import Counter
 from counters.tasks import adjust
+from links import services as link_services
 from media.models import Media
 from posts import cache
 from posts.models import Comment, Like, Post, PostMedia
@@ -69,6 +70,10 @@ def create_post(
 
     post = Post.objects.create(
         author=author,
+        # The first link in the caption, if any. Resolving it costs one query
+        # against a cache keyed on the URL; fetching it happens on the queue
+        # after commit, so publishing never waits on somebody else's server.
+        link_preview=link_services.preview_for(caption),
         caption=caption,
         location=location,
         visibility=visibility,

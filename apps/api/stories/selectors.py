@@ -33,7 +33,7 @@ def live(viewer: User | None) -> QuerySet[Story]:
             author__deleted_at__isnull=True,
             author__is_active=True,
         )
-        .select_related("author", "author__avatar_media", "media")
+        .select_related("author", "author__avatar_media", "media", "link_preview")
         .order_by("id")
     )
     if viewer is None:

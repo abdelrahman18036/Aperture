@@ -1356,8 +1356,7 @@
                                 "$ref": "#/components/schemas/CreateStoryRequest"
                             }
                         }
-                    },
-                    "required": true
+                    }
                 },
                 "security": [
                     {
@@ -2032,6 +2031,17 @@
     },
     "components": {
         "schemas": {
+            "BackgroundEnum": {
+                "enum": [
+                    "clay",
+                    "ink",
+                    "moss",
+                    "plum",
+                    "slate"
+                ],
+                "type": "string",
+                "description": "* `clay` - clay\n* `ink` - ink\n* `moss` - moss\n* `plum` - plum\n* `slate` - slate"
+            },
             "Call": {
                 "type": "object",
                 "description": "Everything a client needs to join a call and nothing it does not.",
@@ -2311,18 +2321,30 @@
                 "type": "object",
                 "properties": {
                     "media_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "text": {
                         "type": "string",
-                        "minLength": 1
+                        "default": "",
+                        "maxLength": 700
+                    },
+                    "background": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/BackgroundEnum"
+                            }
+                        ],
+                        "default": "slate"
                     },
                     "caption": {
                         "type": "string",
                         "default": "",
                         "maxLength": 200
                     }
-                },
-                "required": [
-                    "media_id"
-                ]
+                }
             },
             "CurrentUser": {
                 "type": "object",
@@ -2576,6 +2598,48 @@
                 ],
                 "type": "string",
                 "description": "* `image` - Image\n* `video` - Video"
+            },
+            "LinkPreview": {
+                "type": "object",
+                "description": "A link card.\n\nEvery field is somebody else's HTML, so the client escapes all of it and\ntreats `title` as a string found in a `<meta>` tag rather than as a fact.",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "state": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/StateEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "title": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "description": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "image_url": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "site_name": {
+                        "type": "string",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "description",
+                    "image_url",
+                    "site_name",
+                    "state",
+                    "title",
+                    "url"
+                ]
             },
             "LoginRequest": {
                 "type": "object",
@@ -2968,6 +3032,17 @@
                         },
                         "readOnly": true
                     },
+                    "link_preview": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/LinkPreview"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "readOnly": true
+                    },
                     "like_count": {
                         "type": "integer",
                         "readOnly": true
@@ -2988,6 +3063,7 @@
                     "created_at",
                     "id",
                     "like_count",
+                    "link_preview",
                     "location",
                     "media",
                     "viewer_has_liked",
@@ -3301,15 +3377,41 @@
                         "readOnly": true
                     },
                     "media": {
-                        "allOf": [
+                        "oneOf": [
                             {
                                 "$ref": "#/components/schemas/Media"
+                            },
+                            {
+                                "type": "null"
                             }
                         ],
                         "readOnly": true
                     },
+                    "text": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "background": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "background_css": {
+                        "type": "string",
+                        "readOnly": true
+                    },
                     "caption": {
                         "type": "string",
+                        "readOnly": true
+                    },
+                    "link_preview": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/LinkPreview"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
                         "readOnly": true
                     },
                     "created_at": {
@@ -3325,11 +3427,15 @@
                 },
                 "required": [
                     "author",
+                    "background",
+                    "background_css",
                     "caption",
                     "created_at",
                     "expires_at",
                     "id",
-                    "media"
+                    "link_preview",
+                    "media",
+                    "text"
                 ]
             },
             "StoryTrayEntry": {

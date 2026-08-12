@@ -50,7 +50,9 @@ def _with_media(queryset: QuerySet[Post]) -> QuerySet[Post]:
     hides that from you, which is exactly why rule 10 says to read the SQL it
     generates.
     """
-    return queryset.select_related("author", "author__avatar_media").prefetch_related(
+    return queryset.select_related(
+        "author", "author__avatar_media", "link_preview"
+    ).prefetch_related(
         Prefetch(
             "attachments",
             queryset=PostMedia.objects.select_related("media").order_by("position"),

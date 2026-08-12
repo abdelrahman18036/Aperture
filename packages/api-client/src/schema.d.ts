@@ -633,6 +633,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description * `clay` - clay
+         *     * `ink` - ink
+         *     * `moss` - moss
+         *     * `plum` - plum
+         *     * `slate` - slate
+         * @enum {string}
+         */
+        BackgroundEnum: "clay" | "ink" | "moss" | "plum" | "slate";
         /** @description Everything a client needs to join a call and nothing it does not. */
         Call: {
             readonly id: string;
@@ -693,7 +702,11 @@ export interface components {
             note: string;
         };
         CreateStoryRequest: {
-            media_id: string;
+            media_id?: string | null;
+            /** @default  */
+            text: string;
+            /** @default slate */
+            background: components["schemas"]["BackgroundEnum"];
             /** @default  */
             caption: string;
         };
@@ -797,6 +810,20 @@ export interface components {
          * @enum {string}
          */
         KindEnum: "image" | "video";
+        /**
+         * @description A link card.
+         *
+         *     Every field is somebody else's HTML, so the client escapes all of it and
+         *     treats `title` as a string found in a `<meta>` tag rather than as a fact.
+         */
+        LinkPreview: {
+            readonly url: string;
+            readonly state: components["schemas"]["StateEnum"];
+            readonly title: string;
+            readonly description: string;
+            readonly image_url: string;
+            readonly site_name: string;
+        };
         /** @description Credentials. Email is the login identifier here, not username. */
         LoginRequest: {
             /** Format: email */
@@ -904,6 +931,7 @@ export interface components {
             /** Format: date-time */
             readonly created_at: string;
             readonly media: components["schemas"]["Media"][];
+            readonly link_preview: components["schemas"]["LinkPreview"] | null;
             readonly like_count: number;
             readonly comment_count: number;
             readonly viewer_has_liked: boolean;
@@ -1031,8 +1059,12 @@ export interface components {
         Story: {
             readonly id: string;
             readonly author: components["schemas"]["User"];
-            readonly media: components["schemas"]["Media"];
+            readonly media: components["schemas"]["Media"] | null;
+            readonly text: string;
+            readonly background: string;
+            readonly background_css: string;
             readonly caption: string;
+            readonly link_preview: components["schemas"]["LinkPreview"] | null;
             /** Format: date-time */
             readonly created_at: string;
             /** Format: date-time */
@@ -2047,7 +2079,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "application/json": components["schemas"]["CreateStoryRequest"];
                 "application/x-www-form-urlencoded": components["schemas"]["CreateStoryRequest"];

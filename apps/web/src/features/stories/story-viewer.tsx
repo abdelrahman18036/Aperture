@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Schemas } from "@repo/api-client";
 import { Button, DevelopImage, DialogTrigger, cn } from "@repo/ui";
 
+import { LinkCard } from "@/features/links/link-card";
+import { Linkify } from "@/features/links/linkify";
 import { ReportDialog } from "@/features/moderation/report-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
@@ -287,8 +289,33 @@ export function StoryViewer({
         </div>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-        {media.width && media.height ? (
+      <div
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+        // A text story is words on a ground, so the ground is the frame.
+        // The CSS comes from the server resolved, which is what lets a new
+        // background ship without touching this file.
+        style={media === null ? { background: story.background_css } : undefined}
+      >
+        {/* Words, centred, with room to breathe — the whole content rather
+            than a caption under something else. It scales down as it gets
+            longer, which is the one thing every text-status feature does and
+            the reason a 700-character limit is livable. */}
+        {media === null ? (
+          <p
+            className={cn(
+              "max-w-prose px-8 text-center text-ink [text-wrap:balance]",
+              story.text.length > 280
+                ? "text-body"
+                : story.text.length > 90
+                  ? "text-title"
+                  : "font-display text-display-l",
+            )}
+          >
+            <Linkify text={story.text} />
+          </p>
+        ) : null}
+
+        {media?.width && media.height ? (
           /* Fills the frame and crops, which is what a story is — and
              also the only sizing that resolves here. `max-h-full` alone
              gives a ratio-sized box nothing to compute from, so the wrapper
@@ -358,9 +385,15 @@ export function StoryViewer({
         </span>
       </div>
 
+      {story.link_preview ? (
+        <div className="px-4 pt-3">
+          <LinkCard preview={story.link_preview} />
+        </div>
+      ) : null}
+
       {story.caption ? (
         <p className="px-4 pb-6 pt-3 text-center text-body text-ink">
-          {story.caption}
+          <Linkify text={story.caption} />
         </p>
       ) : (
         <div className="pb-6" />

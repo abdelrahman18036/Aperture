@@ -1,12 +1,12 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
 import { Skeleton, cn } from "@repo/ui";
 
+import { useCompose } from "@/features/composer/compose-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
 import { useRealtimeApi } from "@/features/realtime/provider";
 import { api } from "@/lib/api";
@@ -34,6 +34,7 @@ type TrayEntry = Schemas["StoryTrayEntry"];
  * ordinary avatar rather than a dimmed special case.
  */
 export function StoryTray() {
+  const { start: compose, posted } = useCompose();
   const [entries, setEntries] = useState<TrayEntry[] | null>(null);
   const [openAt, setOpenAt] = useState<number | null>(null);
   const started = useRef(false);
@@ -46,12 +47,14 @@ export function StoryTray() {
   }, []);
 
   // Loaded because the page opened, not because something was scrolled into
-  // view — the mistake the feed and explore both made.
+  // view — the mistake the feed and explore both made. Reloaded whenever
+  // something is published, so a story you just posted is in the tray
+  // rather than one reload away.
   useEffect(() => {
-    if (started.current) return;
+    if (started.current && posted === 0) return;
     started.current = true;
     load();
-  }, [load]);
+  }, [load, posted]);
 
   if (entries === null) {
     return (
@@ -69,13 +72,16 @@ export function StoryTray() {
   return (
     <>
       <div className="border-b border-line">
-        <ul className="flex gap-4 overflow-x-auto px-4 py-4">
+        <ul className="flex gap-4 overflow-x-auto px-4 py-4 no-scrollbar">
           {/* Yours first and always present, because "add one" is the only
               way into the composer's story mode and a tray that hides it
               until you have already posted is a door with no handle. */}
           <li className="shrink-0">
-            <Link
-              href="/compose?to=story"
+            <button
+              type="button"
+              onClick={() => {
+                compose("story");
+              }}
               className="flex w-16 flex-col items-center gap-2"
               aria-label="Add to your story"
             >
@@ -83,7 +89,7 @@ export function StoryTray() {
                 <Plus className="size-5 text-ink-dim" aria-hidden="true" />
               </span>
               <span className="w-full truncate text-center meta">yours</span>
-            </Link>
+            </button>
           </li>
 
           {entries.map((entry, index) => (

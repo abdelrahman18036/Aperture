@@ -100,10 +100,13 @@ class CreateStoryView(APIView):
         form.is_valid(raise_exception=True)
 
         try:
+            raw_media = form.validated_data["media_id"]
             story = services.create_story(
                 author=current_user(request),
-                media_id=int(form.validated_data["media_id"]),
+                media_id=int(raw_media) if raw_media else None,
                 caption=form.validated_data["caption"],
+                text=form.validated_data["text"],
+                background=form.validated_data["background"],
             )
         except (services.StoryRejectedError, ValueError) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
