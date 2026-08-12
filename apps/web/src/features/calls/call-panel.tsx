@@ -72,6 +72,7 @@ export function CallPanel({
   const group = call.mode === "sfu";
   const localStream = group ? sfu.localStream : peer.localStream;
   const error = group ? sfu.error : peer.error;
+  const audioOnly = group ? sfu.audioOnly : peer.audioOnly;
 
   const status = group
     ? sfu.connected
@@ -108,6 +109,9 @@ export function CallPanel({
             </span>
           )}
           {call.mode === "sfu" && <span className="text-daylight">· SFU</span>}
+          {/* Said plainly rather than left as a black rectangle. Someone
+              wondering why they cannot be seen deserves the reason. */}
+          {audioOnly && <span>· Audio only</span>}
         </span>
       </header>
 

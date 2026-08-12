@@ -39,6 +39,8 @@ export interface SfuCall {
   connected: boolean;
   localStream: MediaStream | null;
   remotes: RemoteMedia[];
+  /** True when the camera could not be opened and the call went ahead anyway. */
+  audioOnly: boolean;
   error: string | null;
 }
 
@@ -47,6 +49,7 @@ export function useSfuCall(call: CallPayload | null): SfuCall {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remotes, setRemotes] = useState<RemoteMedia[]>([]);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [withoutCamera, setWithoutCamera] = useState(false);
 
   const url = call?.livekit_url ?? null;
   const token = call?.livekit_token ?? null;
@@ -110,7 +113,18 @@ export function useSfuCall(call: CallPayload | null): SfuCall {
         await room.connect(url, token);
         if (cancelled) return;
 
-        await room.localParticipant.enableCameraAndMicrophone();
+        // Microphone first, and separately. `enableCameraAndMicrophone`
+        // fails as a unit, so on a machine with no webcam it takes the
+        // microphone down with it and there is no call at all — the same bug
+        // the peer-to-peer path had. Audio is the call; video is an
+        // enhancement.
+        await room.localParticipant.setMicrophoneEnabled(true);
+        try {
+          await room.localParticipant.setCameraEnabled(true);
+        } catch {
+          if (!cancelled) setWithoutCamera(true);
+        }
+
         const tracks = room.localParticipant
           .getTrackPublications()
           .map((publication) => publication.track?.mediaStreamTrack)
@@ -131,10 +145,11 @@ export function useSfuCall(call: CallPayload | null): SfuCall {
       setLocalStream(null);
       setConnected(false);
       setJoinError(null);
+      setWithoutCamera(false);
     };
   }, [call, url, token]);
 
   const error = missingRoom ? "This call has no room to join." : joinError;
 
-  return { connected, localStream, remotes, error };
+  return { connected, localStream, remotes, audioOnly: withoutCamera, error };
 }

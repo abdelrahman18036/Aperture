@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Schemas } from "@repo/api-client";
 import type { AnyServerEvent, CallSignalEvent } from "@repo/realtime-events";
 
+import { MediaUnavailableError, openLocalMedia } from "./local-media";
+
 export type CallPayload = Schemas["Call"];
 
 /**
@@ -40,6 +42,8 @@ export interface PeerCall {
   remoteStream: MediaStream | null;
   /** Which kind of candidate pair the connection settled on. */
   transport: "direct" | "relay" | null;
+  /** True when there was no camera and the call went ahead on audio. */
+  audioOnly: boolean;
   error: string | null;
   /**
    * Feed socket traffic in. Anything that is not a call signal for this call
@@ -90,6 +94,7 @@ export function usePeerCall({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [transport, setTransport] = useState<"direct" | "relay" | null>(null);
+  const [audioOnly, setAudioOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const connection = useRef<RTCPeerConnection | null>(null);
@@ -263,25 +268,29 @@ export function usePeerCall({
 
     void (async () => {
       try {
-        const media = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
+        // Audio is the call; video is an enhancement. A machine with no
+        // webcam still gets a call — see `local-media.ts`.
+        const { stream, audioOnly: withoutVideo } = await openLocalMedia();
         if (cancelled) {
-          for (const track of media.getTracks()) track.stop();
+          for (const track of stream.getTracks()) track.stop();
           return;
         }
-        setLocalStream(media);
+        setLocalStream(stream);
+        setAudioOnly(withoutVideo);
         // Adding tracks fires `negotiationneeded`, which is what actually
         // sends the first offer. Both sides do it; politeness resolves the
         // collision.
-        for (const track of media.getTracks()) peer.addTrack(track, media);
+        for (const track of stream.getTracks()) peer.addTrack(track, stream);
 
         const pending = queued.current;
         queued.current = [];
         for (const event of pending) void applySignal(event);
-      } catch {
-        setError("Microphone and camera access is required for a call.");
+      } catch (cause) {
+        setError(
+          cause instanceof MediaUnavailableError
+            ? cause.message
+            : "The microphone could not be opened.",
+        );
       }
     })();
 
@@ -303,6 +312,7 @@ export function usePeerCall({
       setRemoteStream(null);
       setConnectionState(null);
       setTransport(null);
+      setAudioOnly(false);
       setError(null);
       setHungUp(false);
     };
@@ -319,5 +329,13 @@ export function usePeerCall({
             ? "failed"
             : "connecting";
 
-  return { state, localStream, remoteStream, transport, error, handleSignal };
+  return {
+    state,
+    localStream,
+    remoteStream,
+    transport,
+    audioOnly,
+    error,
+    handleSignal,
+  };
 }
