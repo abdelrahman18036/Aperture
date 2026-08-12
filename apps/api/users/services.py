@@ -180,6 +180,22 @@ def follow(*, follower: User, followee: User) -> Follow:
         _bump(Counter.EntityType.USER, follower.pk, Counter.Metric.FOLLOWING, 1)
         _forget_feed(follower)
 
+    # A request and a follow are different news: one asks something of the
+    # recipient and the other does not, and collapsing them would put an
+    # actionable row and a courtesy row in the same shape.
+    from notifications.models import Notification
+    from notifications.services import notify
+
+    notify(
+        recipient=followee,
+        actor=follower,
+        verb=(
+            Notification.Verb.FOLLOW
+            if status == Follow.Status.ACCEPTED
+            else Notification.Verb.FOLLOW_REQUEST
+        ),
+    )
+
     return edge
 
 

@@ -15,6 +15,8 @@ from counters.models import Counter
 from counters.tasks import adjust
 from links import services as link_services
 from media.models import Media
+from notifications.models import Notification
+from notifications.services import notify, withdraw
 from posts import cache
 from posts.models import Comment, Like, Post, PostMedia
 from users.models import Follow, User
@@ -153,6 +155,84 @@ def _fan_out_to_feeds(post: Post) -> None:
 
 
 @transaction.atomic
+def repost(*, user: User, post: Post, caption: str = "") -> Post:
+    """Put somebody else's post on your own feed, under your name.
+
+    A repost is a real `Post` pointing at the original, so it fans out, is
+    cursor-paginated and can be deleted through every path that already exists.
+    It carries no media of its own — the original's is rendered through it.
+
+    **The chain is flattened.** Reposting a repost points at the root, so
+    nothing ever has to walk a list to find the photograph, and the count on
+    the original is the true one rather than the top of a chain.
+
+    Idempotent: reposting twice returns the repost you already have.
+    """
+    original = post.reposted_from or post
+
+    if original.author_id == user.pk:
+        raise PostRejectedError("That is already yours.")
+    if not can_view_posts(viewer=user, author=original.author):
+        raise NotAllowedError("That post is unavailable.")
+
+    existing = Post.objects.filter(
+        author=user, reposted_from=original, deleted_at__isnull=True
+    ).first()
+    if existing is not None:
+        return existing
+
+    made = Post.objects.create(
+        author=user,
+        reposted_from=original,
+        caption=caption,
+        visibility=original.visibility,
+    )
+
+    _bump(Counter.EntityType.POST, original.pk, Counter.Metric.REPOSTS, 1)
+    _bump(Counter.EntityType.USER, user.pk, Counter.Metric.POSTS, 1)
+
+    transaction.on_commit(lambda: _fan_out_to_feeds(made))
+    audience = _follower_ids(user)
+    made_id = str(made.pk)
+    transaction.on_commit(
+        lambda: broadcast.publish_to_users(
+            user_ids=audience,
+            event_type="post.created",
+            payload={"post_id": made_id, "author_id": str(user.pk)},
+        )
+    )
+
+    notify(
+        recipient=original.author,
+        actor=user,
+        verb=Notification.Verb.REPOST,
+        post=original,
+    )
+    return made
+
+
+@transaction.atomic
+def undo_repost(*, user: User, post: Post) -> bool:
+    """Take your repost back. Returns False if there was nothing to take back."""
+    original = post.reposted_from or post
+    mine = Post.objects.filter(
+        author=user, reposted_from=original, deleted_at__isnull=True
+    ).first()
+    if mine is None:
+        return False
+
+    soft_delete_post(post=mine)
+    _bump(Counter.EntityType.POST, original.pk, Counter.Metric.REPOSTS, -1)
+    withdraw(
+        recipient=original.author,
+        actor=user,
+        verb=Notification.Verb.REPOST,
+        post=original,
+    )
+    return True
+
+
+@transaction.atomic
 def soft_delete_post(*, post: Post) -> Post:
     """Soft delete, plus a scheduled hard delete. See §11."""
     if post.deleted_at is not None:
@@ -185,6 +265,12 @@ def like(*, user: User, post: Post) -> bool:
         return False
 
     _bump(Counter.EntityType.POST, post.pk, Counter.Metric.LIKES, 1)
+    notify(
+        recipient=post.author,
+        actor=user,
+        verb=Notification.Verb.LIKE,
+        post=post,
+    )
     return True
 
 
@@ -195,6 +281,14 @@ def unlike(*, user: User, post: Post) -> bool:
     if not deleted:
         return False
     _bump(Counter.EntityType.POST, post.pk, Counter.Metric.LIKES, -1)
+    # The notification goes with the like. "Ada liked your post" surviving
+    # Ada changing her mind is a small lie with no reason to exist.
+    withdraw(
+        recipient=post.author,
+        actor=user,
+        verb=Notification.Verb.LIKE,
+        post=post,
+    )
     return True
 
 
@@ -219,6 +313,25 @@ def add_comment(
         parent = parent.parent
 
     comment = Comment.objects.create(post=post, author=author, parent=parent, body=body)
+
+    # The post's author, and — for a reply — the person being replied to.
+    # `notify` drops anything aimed at yourself, so a self-reply on your own
+    # post produces nothing rather than two rows.
+    notify(
+        recipient=post.author,
+        actor=author,
+        verb=Notification.Verb.COMMENT,
+        post=post,
+        comment=comment,
+    )
+    if parent is not None:
+        notify(
+            recipient=parent.author,
+            actor=author,
+            verb=Notification.Verb.COMMENT,
+            post=post,
+            comment=comment,
+        )
 
     _bump(Counter.EntityType.POST, post.pk, Counter.Metric.COMMENTS, 1)
     if parent is not None:

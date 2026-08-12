@@ -39,6 +39,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/media/", include("media.urls")),
     path("api/posts/", include("posts.urls")),
     path("api/stories/", include("stories.urls")),
+    path("api/notifications/", include("notifications.urls")),
     path("api/counters/", include("counters.urls")),
     path("api/messaging/", include("messaging.urls")),
     # The socket ticket. Lives outside /api/messaging/ because the gateway
