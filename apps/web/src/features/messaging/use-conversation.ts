@@ -323,7 +323,7 @@ export function useConversation(
     sendTyping,
     sendCallSignal,
     setCallIds,
-    setConversationIds,
+    setFocusedConversationId,
   } = useRealtimeApi();
 
   useRealtimeEvents(onEvent);
@@ -334,9 +334,13 @@ export function useConversation(
   // Point the shared socket at this thread's ephemeral channel while it is on
   // screen, and let it go when it is not.
   useEffect(() => {
-    setConversationIds([conversationId]);
-    return () => setConversationIds([]);
-  }, [conversationId, setConversationIds]);
+    // Only the thread on screen. The full set is the shell's — see
+    // `setConversationIds` in `use-realtime.ts` for why they are separate.
+    // This exists for the conversation that was created a second ago and is
+    // not in the inbox the shell last fetched.
+    setFocusedConversationId(conversationId);
+    return () => setFocusedConversationId(null);
+  }, [conversationId, setFocusedConversationId]);
 
   // Typing indicators expire on their own. A client that closed its laptop
   // mid-word must not leave "ada is typing" on screen forever.

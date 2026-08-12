@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CallProvider } from "@/features/calls/provider";
 import { ComposeProvider } from "@/features/composer/compose-dialog";
@@ -14,9 +14,13 @@ import {
 } from "@/features/realtime/provider";
 import { chime } from "./chime";
 import { api } from "@/lib/api";
+import { onCountsChanged } from "@/lib/counts";
 
 import { NavBar, NavRail } from "./nav-rail";
 import type { NavCounts } from "./nav-rail";
+
+/** How long to let a burst of socket traffic settle before asking again. */
+const REFRESH_DEBOUNCE_MS = 250;
 
 /**
  * The three-column shell.
@@ -53,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { viewerId } = useRealtimeApi();
+  const { viewerId, setConversationIds } = useRealtimeApi();
   const [username, setUsername] = useState<string | null>(null);
   const [counts, setCounts] = useState<NavCounts>({
     requests: 0,
@@ -76,26 +80,68 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, [router, pathname]);
 
   /**
-   * What the rail's pips read from.
+   * What the rail's pips read from, and what the socket subscribes to.
    *
-   * Three requests on mount, and no polling — the socket carries the changes.
+   * **Read back from the server rather than kept by arithmetic.** The unread
+   * total was a local counter that only ever went up: it incremented on every
+   * message that arrived somewhere else and nothing decremented it when you
+   * read one, so the badge stayed lit until a refresh. Any fix by arithmetic
+   * needs the shell to know how many were unread in the conversation you just
+   * opened, which is precisely the thing the inbox already computes.
+   *
+   * The inbox costs the same number of queries whatever it holds, so asking
+   * again is cheap — and it is the only answer that cannot drift.
    */
-  useEffect(() => {
+  const refresh = useCallback(() => {
     void Promise.all([
       api.GET("/api/users/requests"),
       api.GET("/api/messaging/conversations"),
       api.GET("/api/notifications/list"),
     ]).then(([requests, conversations, activity]) => {
+      const rows = conversations.data ?? [];
       setCounts({
         requests: requests.data?.requests.length ?? 0,
-        unread: (conversations.data ?? []).reduce(
-          (total, row) => total + row.unread_count,
-          0,
-        ),
+        unread: rows.reduce((total, row) => total + row.unread_count, 0),
         activity: activity.data?.unread_count ?? 0,
       });
+      // Every conversation, not just the open one. This is what makes
+      // presence live: the gateway announces an arrival to the channels a
+      // socket named, so a socket that named only the thread on screen
+      // learned about somebody coming online only if they happened to open
+      // the same thread. See `setConversationIds` in `use-realtime.ts`.
+      setConversationIds(rows.map((row) => row.id));
     });
-  }, []);
+  }, [setConversationIds]);
+
+  useEffect(refresh, [refresh]);
+
+  // Answering your own queue produces no socket event — nothing happened
+  // that anybody else needed telling about — so the screen says so.
+  useEffect(() => onCountsChanged(refresh), [refresh]);
+
+  /**
+   * Ask again, once, after a burst.
+   *
+   * A read receipt and the message that provoked it arrive within a few
+   * milliseconds of each other, and a room of four people talking is a burst
+   * rather than an event. One trailing call per burst keeps the badge honest
+   * without turning the socket into a polling loop.
+   */
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A plain callback, not `useEffectEvent`: this is called from an event
+  // handler, and an effect event may only be called from an effect or another
+  // effect event. The ref is written inside the handler rather than during
+  // render, which is the rule that actually matters here.
+  const refreshSoon = useCallback(() => {
+    if (pending.current !== null) clearTimeout(pending.current);
+    pending.current = setTimeout(refresh, REFRESH_DEBOUNCE_MS);
+  }, [refresh]);
+  useEffect(
+    () => () => {
+      if (pending.current !== null) clearTimeout(pending.current);
+    },
+    [],
+  );
 
   /**
    * Opening the activity page is what marks it read.
@@ -134,15 +180,24 @@ function Shell({ children }: { children: React.ReactNode }) {
         );
         return;
       }
+      // A read receipt is the other half of the count and the half that was
+      // missing. Your own tells you what you just did — and is exactly when
+      // the badge should come down.
+      if (event.type === "message.read") {
+        refreshSoon();
+        return;
+      }
+
       if (event.type !== "message.created") return;
+      refreshSoon();
+
       const message = event.payload as { sender?: { id?: string } };
       if (message.sender?.id === viewerId) return;
       if (pathname === `/messages/${event.conversation_id}`) return;
 
-      setCounts((current) => ({ ...current, unread: current.unread + 1 }));
       void chime();
     },
-    [pathname, viewerId],
+    [pathname, refreshSoon, viewerId],
   );
   useRealtimeEvents(onEvent);
 

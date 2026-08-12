@@ -51,6 +51,7 @@ export interface RealtimeApi {
   ) => void;
   setCallIds: (callIds: readonly string[]) => void;
   setConversationIds: (conversationIds: readonly string[]) => void;
+  setFocusedConversationId: (conversationId: string | null) => void;
   /** Every validated frame. Returns an unsubscribe function. */
   subscribe: (listener: (event: AnyServerEvent) => void) => () => void;
   /** Fires on every new connection, including the first. The resync hook. */

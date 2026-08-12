@@ -88,7 +88,26 @@ export interface Realtime {
    * request back up through a render before it takes effect loses events in
    * the gap.
    */
+  /**
+   * Every conversation this person is in.
+   *
+   * Owned by the shell, because presence is not a property of the thread you
+   * happen to have open. The gateway announces an arrival to the channels a
+   * socket named, so subscribing only to the open conversation meant you
+   * learned somebody was online **only if they opened the same thread at the
+   * same moment** — every other case needed a refresh, which is exactly what
+   * it looked like from outside.
+   */
   setConversationIds: (conversationIds: readonly string[]) => void;
+  /**
+   * The thread on screen, unioned with the set above.
+   *
+   * Two slots rather than one setter, because there are genuinely two sources
+   * and neither can see the other: the shell knows the inbox, and only the
+   * screen knows a conversation created a second ago that the inbox has not
+   * been refetched for. One setter meant whichever ran last erased the other.
+   */
+  setFocusedConversationId: (conversationId: string | null) => void;
 }
 
 export function useRealtime({ onEvent, onReady }: RealtimeOptions): Realtime {
@@ -97,6 +116,8 @@ export function useRealtime({ onEvent, onReady }: RealtimeOptions): Realtime {
   const socket = useRef<WebSocket | null>(null);
   const wanted = useRef<readonly string[]>([]);
   const wantedCalls = useRef<readonly string[]>([]);
+  /** The thread on screen. Unioned with `wanted`; see the interface. */
+  const focused = useRef<string | null>(null);
 
   // Effect events, so the effect below can call the latest handler without
   // listing it as a dependency. Without this, a parent re-render that changes
@@ -107,17 +128,24 @@ export function useRealtime({ onEvent, onReady }: RealtimeOptions): Realtime {
   const ready = useEffectEvent(() => {
     onReady();
   });
+  /** The union of the two slots, deduped. What the gateway is told. */
+  const subscribedConversations = useCallback((): string[] => {
+    const ids = new Set(wanted.current);
+    if (focused.current !== null) ids.add(focused.current);
+    return [...ids];
+  }, []);
+
   const pushSubscription = useCallback(() => {
     const live = socket.current;
     if (live?.readyState !== WebSocket.OPEN) return;
     live.send(
       JSON.stringify({
         type: "subscribe",
-        conversation_ids: [...wanted.current],
+        conversation_ids: [...subscribedConversations()],
         call_ids: [...wantedCalls.current],
       }),
     );
-  }, []);
+  }, [subscribedConversations]);
 
   useEffect(() => {
     let stopped = false;
@@ -290,11 +318,20 @@ export function useRealtime({ onEvent, onReady }: RealtimeOptions): Realtime {
     [pushSubscription],
   );
 
+  const setFocusedConversationId = useCallback(
+    (conversationId: string | null) => {
+      focused.current = conversationId;
+      pushSubscription();
+    },
+    [pushSubscription],
+  );
+
   return {
     state,
     sendTyping,
     sendCallSignal,
     setCallIds,
     setConversationIds,
+    setFocusedConversationId,
   };
 }

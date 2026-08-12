@@ -5,7 +5,6 @@ import {
   Camera,
   Compass,
   House,
-  MailOpen,
   MessageCircle,
   Search,
   Settings,
@@ -57,9 +56,15 @@ const COMPOSE: Destination = {
  * Places that only exist when they have something in them.
  *
  * A permanent "Requests" entry reading zero on an account that is not
- * private is a door to an empty room. They appear with a count and go away
+ * private is a door to an empty room. It appears with a count and goes away
  * when the queue is empty — which also makes the pip mean something, because
  * it is never showing a nought.
+ *
+ * **Unread was in here and should never have been.** It was a second entry
+ * labelled "Unread" pointing at `/messages` — the same href as Messages
+ * directly above it, so the rail offered two doors into one room and the
+ * count sat on the one nobody would have looked for. A count belongs on the
+ * thing it counts.
  */
 function queues(counts: NavCounts): Destination[] {
   return [
@@ -70,16 +75,6 @@ function queues(counts: NavCounts): Destination[] {
             label: "Requests",
             icon: UserPlus,
             count: counts.requests,
-          },
-        ]
-      : []),
-    ...(counts.unread > 0
-      ? [
-          {
-            href: "/messages",
-            label: "Unread",
-            icon: MailOpen,
-            count: counts.unread,
           },
         ]
       : []),
@@ -95,16 +90,19 @@ export interface NavCounts {
 /**
  * The counts that belong to a permanent destination rather than to a queue.
  *
- * Activity is always there — unlike Requests, which only exists when it has
- * something in it — so its number rides on the entry instead of conjuring a
- * second one.
+ * Activity and Messages are always there — unlike Requests, which only exists
+ * when it has something in it — so their numbers ride on the entry instead of
+ * conjuring a second one beside it.
  */
 function withCounts(items: Destination[], counts: NavCounts): Destination[] {
-  return items.map((item) =>
-    item.href === "/notifications" && counts.activity > 0
-      ? { ...item, count: counts.activity }
-      : item,
-  );
+  const on: Record<string, number> = {
+    "/notifications": counts.activity,
+    "/messages": counts.unread,
+  };
+  return items.map((item) => {
+    const count = on[item.href] ?? 0;
+    return count > 0 ? { ...item, count } : item;
+  });
 }
 
 export function NavRail({

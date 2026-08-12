@@ -8,6 +8,7 @@ import { Button, Skeleton, Spinner } from "@repo/ui";
 import { UserAvatar } from "@/features/profile/user-avatar";
 import { useInfiniteScroll } from "@/features/shared/use-infinite-scroll";
 import { api } from "@/lib/api";
+import { countsChanged } from "@/lib/counts";
 
 type PendingRequest = Schemas["FollowRequest"];
 
@@ -30,6 +31,8 @@ export function Requests() {
   const [hasMore, setHasMore] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** "Decline all" has been pressed once and is waiting to be meant. */
+  const [confirming, setConfirming] = useState(false);
 
   const inFlight = useRef(false);
   const started = useRef(false);
@@ -72,6 +75,38 @@ export function Requests() {
 
   const { sentinel } = useInfiniteScroll(loadMore);
 
+  /**
+   * Answer the whole queue.
+   *
+   * One request rather than one per row: thirty responses is one decision to
+   * a person, and thirty round trips racing each other is thirty counter
+   * tasks and a rate limiter that would rightly stop them halfway.
+   *
+   * Declining everybody is destructive and not obviously undoable — the edges
+   * are deleted — so it asks first. Approving is not: the worst case is
+   * unfollowing somebody afterwards.
+   */
+  const respondToAll = useCallback(
+    (accept: boolean) => {
+      if (accept) setConfirming(false);
+      setBusy(true);
+      void api
+        .POST("/api/users/requests/respond-all", { body: { accept } })
+        .then((response) => {
+          setBusy(false);
+          setConfirming(false);
+          if (response.data === undefined) return;
+          // Emptied locally rather than refetched. Every row is answered, so
+          // the next page is the empty state either way.
+          setRequests([]);
+          setCursor(null);
+          setHasMore(false);
+          countsChanged();
+        });
+    },
+    [],
+  );
+
   const respond = useCallback(async (username: string, accept: boolean) => {
     const response = await api.POST("/api/users/{username}/respond", {
       params: { path: { username } },
@@ -84,6 +119,7 @@ export function Requests() {
       setRequests((current) =>
         current.filter((item) => item.follower.username !== username),
       );
+      countsChanged();
     }
   }, []);
 
@@ -92,6 +128,55 @@ export function Requests() {
       <header className="flex flex-col gap-2 px-4 pb-4">
         <h1 className="font-display text-display-l text-ink">Requests</h1>
         <p className="meta">people asking to follow you</p>
+
+        {requests.length > 0 ? (
+          <div className="mt-2 flex items-center gap-2">
+            <Button
+              disabled={busy}
+              onClick={() => {
+                respondToAll(true);
+              }}
+            >
+              Approve all
+            </Button>
+
+            {/* Two presses, and the second one says what it will do. A
+                control that empties a queue irreversibly on one click, next
+                to the one that fills it, is a control people hit by
+                accident. */}
+            {confirming ? (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    respondToAll(false);
+                  }}
+                >
+                  Decline everyone?
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setConfirming(false);
+                  }}
+                >
+                  Keep them
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setConfirming(true);
+                }}
+              >
+                Decline all
+              </Button>
+            )}
+          </div>
+        ) : null}
       </header>
 
       {!loaded ? (
