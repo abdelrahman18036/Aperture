@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 
 import { Button, Input } from "@repo/ui";
@@ -20,6 +20,7 @@ import { api } from "@/lib/api";
  */
 export function SignInForm() {
   const router = useRouter();
+  const next = useSearchParams().get("next") ?? "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +45,13 @@ export function SignInForm() {
         setError("Email or password is incorrect.");
         return;
       }
-      router.push("/compose");
+      // Back where they were headed before the wall, or the feed. Only a
+      // path is accepted — `next` comes from the query string, and honouring
+      // a full URL there would make this an open redirect: a crafted link
+      // that signs somebody in and bounces them somewhere else entirely.
+      router.push(next.startsWith("/") && !next.startsWith("//") ? next : "/");
     },
-    [email, password, router],
+    [email, password, router, next],
   );
 
   return (

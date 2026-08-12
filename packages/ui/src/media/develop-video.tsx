@@ -1,8 +1,21 @@
 "use client";
 
 import { decode } from "blurhash";
-import { Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Maximize2,
+  Minimize2,
+  Pause,
+  Play,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { cn } from "../lib/cn";
 
@@ -40,6 +53,14 @@ const IDLE_MS = 2200;
 
 /** Arrow-key seek distance, in seconds. */
 const SEEK_STEP = 5;
+
+/** Shared by both fullscreen snapshots; `fullscreenEnabled` never changes. */
+function subscribeToFullscreen(onChange: () => void): () => void {
+  document.addEventListener("fullscreenchange", onChange);
+  return () => {
+    document.removeEventListener("fullscreenchange", onChange);
+  };
+}
 
 export interface DevelopVideoProps {
   src: string;
@@ -90,6 +111,32 @@ export function DevelopVideo({
   const [duration, setDuration] = useState((durationMs ?? 0) / 1000);
   const [buffered, setBuffered] = useState(0);
   const [idle, setIdle] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  /**
+   * Fullscreen state, read from the document rather than mirrored into it.
+   *
+   * `useSyncExternalStore` instead of an effect: the browser owns both of
+   * these facts, and copying them into state means a `setState` in an effect
+   * body — which the compiler rejects, correctly, as a cascading render.
+   * The server snapshot is `false` on both, so nothing mismatches on
+   * hydration.
+   *
+   * `fullscreenEnabled` is false when a Permissions-Policy forbids it: an
+   * embedded webview, an `<iframe>` without `allow="fullscreen"`. The request
+   * then rejects with "Permissions check failed", and before this the button
+   * did nothing and said nothing. A control that cannot work should not be
+   * offered — the same rule that took the report button off your own posts.
+   */
+  const fullscreen = useSyncExternalStore(
+    subscribeToFullscreen,
+    () => document.fullscreenElement !== null,
+    () => false,
+  );
+  const canFullscreen = useSyncExternalStore(
+    subscribeToFullscreen,
+    () => document.fullscreenEnabled,
+    () => false,
+  );
 
   // Paint the blurhash immediately. Same approach as `DevelopImage`: it is
   // synchronous, cheap, and means the space is never empty.
@@ -127,6 +174,22 @@ export function DevelopVideo({
     return () => {
       if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
     };
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement !== null) {
+      void document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    void frame.current?.requestFullscreen().catch(() => {
+      // iOS Safari has no element fullscreen and only ever fullscreens the
+      // video itself, through its own prefixed method. Trying it here means
+      // the button works there too rather than being hidden.
+      const node = video.current as
+        | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
+        | null;
+      node?.webkitEnterFullscreen?.();
+    });
   }, []);
 
   const toggle = useCallback(() => {
@@ -173,28 +236,44 @@ export function DevelopVideo({
           node.muted = !node.muted;
           setMuted(node.muted);
         }
-      } else if (event.key.toLowerCase() === "f" && !compact) {
-        void frame.current?.requestFullscreen().catch(() => undefined);
+      } else if (event.key.toLowerCase() === "f" && !compact && canFullscreen) {
+        toggleFullscreen();
       } else if (event.key === "ArrowRight") {
         seekBy(SEEK_STEP);
       } else if (event.key === "ArrowLeft") {
         seekBy(-SEEK_STEP);
       }
     },
-    [toggle, seekBy, compact],
+    [toggle, seekBy, compact, canFullscreen, toggleFullscreen],
   );
 
   const progress = duration > 0 ? (current / duration) * 100 : 0;
   const bufferedPercent = duration > 0 ? (buffered / duration) * 100 : 0;
-  // Controls stay while paused: a paused video with hidden controls is a
-  // still image with no way to restart it.
-  const showControls = started && (!playing || !idle);
+  /**
+   * Controls stay while paused — a paused video with hidden controls is a
+   * still image with no way to restart it — and while the pointer is inside
+   * the player.
+   *
+   * `hovering` is tracked separately from the idle timer because of a bug
+   * this had: the bar is `pointer-events-none` while faded, so a click on a
+   * control that *looks* present passes straight through to the video and
+   * toggles playback instead. Reaching for Fullscreen and getting a pause is
+   * exactly the "nothing happens" that was reported. Revealing on
+   * `pointerenter` rather than only on `pointermove` means the bar is live
+   * by the time a pointer arrives at it.
+   */
+  const showControls = started && (!playing || hovering || !idle);
 
   return (
     <div
       ref={frame}
+      onPointerEnter={() => {
+        setHovering(true);
+        wake();
+      }}
       onPointerMove={wake}
       onPointerLeave={() => {
+        setHovering(false);
         if (playing) setIdle(true);
       }}
       onKeyDown={onKeyDown}
@@ -373,16 +452,20 @@ export function DevelopVideo({
             )}
           </button>
 
-          {!compact && (
+          {/* Absent, not disabled, where the platform forbids it. A greyed
+              control still invites a click and still answers with nothing. */}
+          {!compact && canFullscreen && (
             <button
               type="button"
-              onClick={() => {
-                void frame.current?.requestFullscreen().catch(() => undefined);
-              }}
-              aria-label="Fullscreen"
+              onClick={toggleFullscreen}
+              aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
               className="text-ink-dim hover:text-ink"
             >
-              <Maximize2 className="size-4" aria-hidden="true" />
+              {fullscreen ? (
+                <Minimize2 className="size-4" aria-hidden="true" />
+              ) : (
+                <Maximize2 className="size-4" aria-hidden="true" />
+              )}
             </button>
           )}
         </div>

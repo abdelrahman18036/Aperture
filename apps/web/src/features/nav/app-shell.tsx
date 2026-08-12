@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { CallProvider } from "@/features/calls/provider";
@@ -21,14 +22,24 @@ import type { NavCounts } from "./nav-rail";
  * you resize the window makes the whole page feel unstable.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [username, setUsername] = useState<string | null>(null);
   const [counts, setCounts] = useState<NavCounts>({ requests: 0, unread: 0 });
 
   useEffect(() => {
     void api.GET("/api/users/me").then((response) => {
+      // A 403 here means the cookie outlived its session — expired, rotated
+      // by a password reset, or signed out in another tab. Middleware cannot
+      // see that, because it only knows whether a cookie is *present*; this
+      // is the half that catches it.
+      if (response.response.status === 403 || response.response.status === 401) {
+        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        return;
+      }
       setUsername(response.data?.username ?? null);
     });
-  }, []);
+  }, [router, pathname]);
 
   /**
    * What the rail's pips read from.

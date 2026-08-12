@@ -367,6 +367,31 @@ Two things worth knowing before deploying this anywhere:
 
 ---
 
+## Signing in
+
+`apps/web/src/proxy.ts` keeps signed-out visitors out of the authenticated
+shell. It is `proxy.ts` rather than `middleware.ts` because this Next
+deprecated and renamed that convention — see `apps/web/AGENTS.md`.
+
+**It is not the security boundary and must not be read as one.** Django is:
+every endpoint sits behind `IsAuthenticated`, and that is what protects the
+data. The proxy only checks whether a session cookie is *present*, because
+only Django can say whether it is valid and asking would put a round trip in
+front of every navigation.
+
+What it buys is the thing that was broken: without it a signed-out visitor got
+the full three-column shell — nav rail, story tray, "add to your story" — with
+a red "Could not load the feed" where the feed should be. Every authenticated
+route rendered its chrome and then failed, which reads as a broken product
+rather than as a sign-in wall.
+
+A cookie that exists but no longer works is the other half, and the proxy
+cannot see it. `AppShell` catches that: a 403 from `/api/users/me` sends you to
+sign in. Both paths carry `?next=`, and only a path is honoured — a full URL
+there would make it an open redirect.
+
+---
+
 ## The type boundary
 
 Django's serializers are the single source of truth for the frontend's types.
