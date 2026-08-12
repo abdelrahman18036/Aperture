@@ -1891,7 +1891,17 @@
         "/api/users/requests": {
             "get": {
                 "operationId": "users_follow_requests",
-                "description": "Pending follow requests for your account.",
+                "description": "Pending follow requests, newest first, cursor-paginated.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Follow id of the last request on the previous page. Ids are time-ordered, so this is simply 'older than that one'."
+                    }
+                ],
                 "tags": [
                     "users"
                 ],
@@ -1905,10 +1915,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/FollowRequest"
-                                    }
+                                    "$ref": "#/components/schemas/FollowRequestPage"
                                 }
                             }
                         },
@@ -2402,6 +2409,30 @@
                 "required": [
                     "created_at",
                     "follower"
+                ]
+            },
+            "FollowRequestPage": {
+                "type": "object",
+                "description": "A cursor-paginated page of pending requests.\n\nNo total. Producing one means a `COUNT(*)` over every pending row on a\nrequest path, which rule 9 rules out — and the screen shows \"some are\nwaiting\", never a number it has to be right about.",
+                "properties": {
+                    "requests": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/FollowRequest"
+                        },
+                        "readOnly": true
+                    },
+                    "next_cursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "next_cursor",
+                    "requests"
                 ]
             },
             "FollowState": {

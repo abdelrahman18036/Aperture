@@ -317,6 +317,30 @@
   animation: sheen 1.6s linear infinite;
 }
 
+/* ---- Scrollbars --------------------------------------------------------
+ *
+ * Hidden, everywhere, while the scrolling itself stays exactly as it was.
+ *
+ * This is a photography product on a near-black ground, and a platform
+ * scrollbar is a light grey rectangle drawn over the print. It is also the
+ * one piece of chrome that differs between every operating system, so a
+ * layout that looks composed on one machine has a gutter of somebody else's
+ * grey on another.
+ *
+ * **The keyboard and the wheel are untouched.** Only the drawing is removed,
+ * never `overflow`, so every scroller stays scrollable and stays reachable —
+ * which is the difference between hiding a scrollbar and hiding content.
+ */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
 /* The pagination spinner: a ring with a gap, at safelight. Rotation is the
  * one honest way to say "still working" without claiming progress we cannot
  * measure — a bar that fills to 90% and waits is a lie. */

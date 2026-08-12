@@ -4,9 +4,11 @@ import {
   Camera,
   Compass,
   House,
+  MailOpen,
   MessageCircle,
   Search,
   Settings,
+  UserPlus,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +31,8 @@ interface Destination {
   href: string;
   label: string;
   icon: typeof House;
+  /** Shown as a daylight pip when non-zero. A queue waiting on you. */
+  count?: number;
 }
 
 const DESTINATIONS: Destination[] = [
@@ -39,11 +43,56 @@ const DESTINATIONS: Destination[] = [
   { href: "/compose", label: "New post", icon: Camera },
 ];
 
-export function NavRail({ username }: { username: string | null }) {
+/**
+ * Places that only exist when they have something in them.
+ *
+ * A permanent "Requests" entry reading zero on an account that is not
+ * private is a door to an empty room. They appear with a count and go away
+ * when the queue is empty — which also makes the pip mean something, because
+ * it is never showing a nought.
+ */
+function queues(counts: NavCounts): Destination[] {
+  return [
+    ...(counts.requests > 0
+      ? [
+          {
+            href: "/requests",
+            label: "Requests",
+            icon: UserPlus,
+            count: counts.requests,
+          },
+        ]
+      : []),
+    ...(counts.unread > 0
+      ? [
+          {
+            href: "/messages",
+            label: "Unread",
+            icon: MailOpen,
+            count: counts.unread,
+          },
+        ]
+      : []),
+  ];
+}
+
+export interface NavCounts {
+  requests: number;
+  unread: number;
+}
+
+export function NavRail({
+  username,
+  counts,
+}: {
+  username: string | null;
+  counts: NavCounts;
+}) {
   const pathname = usePathname();
 
   const items: Destination[] = [
     ...DESTINATIONS,
+    ...queues(counts),
     ...(username
       ? [
           { href: `/u/${username}`, label: "Profile", icon: UserRound },
@@ -74,11 +123,11 @@ export function NavRail({ username }: { username: string | null }) {
         <span className="hidden font-display text-title xl:inline">Aperture</span>
       </Link>
 
-      {items.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon, count }) => {
         const active = pathname === href;
         return (
           <Link
-            key={href}
+            key={label}
             href={href}
             aria-current={active ? "page" : undefined}
             // The label below is `hidden` under 1280px, and `display: none`
@@ -88,7 +137,7 @@ export function NavRail({ username }: { username: string | null }) {
             // is unconditional for that reason. `title` gives a sighted
             // person the same word on hover, which is the whole difference
             // between a rail of icons and a rail of guesses.
-            aria-label={label}
+            aria-label={count ? `${label}, ${String(count)}` : label}
             title={label}
             className={cn(
               "flex h-10 items-center gap-3 rounded-control px-2",
@@ -96,13 +145,32 @@ export function NavRail({ username }: { username: string | null }) {
               active ? "text-ink" : "text-ink-dim hover:text-ink",
             )}
           >
-            <Icon
-              className={cn("size-5 shrink-0", active && "text-safelight")}
-              aria-hidden="true"
-            />
+            <span className="relative shrink-0">
+              <Icon
+                className={cn("size-5", active && "text-safelight")}
+                aria-hidden="true"
+              />
+              {/* Daylight, and a dot rather than a number at this width —
+                  the count is in the accessible name and spelled out beside
+                  the label once the rail expands. */}
+              {count ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1 -top-0.5 size-2 rounded-full bg-daylight ring-2 ring-base xl:hidden"
+                />
+              ) : null}
+            </span>
             <span aria-hidden="true" className="hidden xl:inline">
               {label}
             </span>
+            {count ? (
+              <span
+                aria-hidden="true"
+                className="ml-auto hidden rounded-full px-1.5 meta text-daylight ring-1 ring-daylight-dim tabular-nums xl:inline"
+              >
+                {count > 99 ? "99+" : count}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -116,14 +184,24 @@ export function NavRail({ username }: { username: string | null }) {
  * Quality floor: responsive to 375px. The rails collapse; the feed becomes
  * fluid. Nothing here reflows a photograph mid-scroll.
  */
-export function NavBar({ username }: { username: string | null }) {
+export function NavBar({
+  username,
+  counts,
+}: {
+  username: string | null;
+  counts: NavCounts;
+}) {
   const pathname = usePathname();
+  // No queue entries here. The bar is six wide at 375px already, and a
+  // seventh target would be under the 24px floor — the pip on Messages
+  // carries the same information in the room that exists.
   const items: Destination[] = [
     ...DESTINATIONS,
     ...(username
       ? [{ href: `/u/${username}`, label: "Profile", icon: UserRound }]
       : []),
   ];
+  const waiting = counts.requests + counts.unread;
 
   return (
     <nav
@@ -132,21 +210,33 @@ export function NavBar({ username }: { username: string | null }) {
     >
       {items.map(({ href, label, icon: Icon }) => {
         const active = pathname === href;
+        // The pip rides on Messages rather than adding a seventh target: the
+        // bar is already six wide at 375px, and a seventh would land under
+        // the 24px floor. Both queues are one tap away through it.
+        const pip = href === "/messages" && waiting > 0;
         return (
           <Link
-            key={href}
+            key={label}
             href={href}
             aria-current={active ? "page" : undefined}
-            aria-label={label}
+            aria-label={pip ? `${label}, ${String(waiting)} waiting` : label}
             className="flex h-14 flex-1 items-center justify-center"
           >
-            <Icon
-              className={cn(
-                "size-5 transition-colors duration-[var(--duration-hover)]",
-                active ? "text-safelight" : "text-ink-dim",
-              )}
-              aria-hidden="true"
-            />
+            <span className="relative">
+              <Icon
+                className={cn(
+                  "size-5 transition-colors duration-[var(--duration-hover)]",
+                  active ? "text-safelight" : "text-ink-dim",
+                )}
+                aria-hidden="true"
+              />
+              {pip ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1 -top-0.5 size-2 rounded-full bg-daylight ring-2 ring-base"
+                />
+              ) : null}
+            </span>
           </Link>
         );
       })}

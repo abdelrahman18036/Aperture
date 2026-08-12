@@ -162,3 +162,43 @@ def test_a_username_that_cannot_be_a_url_is_refused(api: APIClient) -> None:
             format="json",
         )
         assert response.status_code == 400, bad
+
+
+def test_follow_requests_paginate_by_cursor(signed_in: APIClient, user: User) -> None:
+    """One screenful at a time, walked by cursor rather than by offset.
+
+    An offset would skip rows: requests are answered while the list is open,
+    everything below slides up, and page two starts past whatever moved.
+    """
+    from users.models import Follow
+    from users.selectors import REQUEST_PAGE_SIZE
+
+    user.is_private = True
+    user.save(update_fields=["is_private"])
+
+    total = REQUEST_PAGE_SIZE + 5
+    for index in range(total):
+        follower = User.objects.create_user(
+            email=f"asker{index}@example.com",
+            username=f"asker{index}",
+            password="correct-horse-staple",
+        )
+        Follow.objects.create(
+            follower=follower, followee=user, status=Follow.Status.PENDING
+        )
+
+    first = signed_in.get("/api/users/requests").json()
+    assert len(first["requests"]) == REQUEST_PAGE_SIZE
+    assert first["next_cursor"] is not None
+
+    second = signed_in.get(f"/api/users/requests?cursor={first['next_cursor']}").json()
+    assert len(second["requests"]) == 5
+    # The end of the list says so, rather than handing back a cursor that
+    # returns nothing.
+    assert second["next_cursor"] is None
+
+    # And no row appears on both pages.
+    names = [
+        row["follower"]["username"] for row in first["requests"] + second["requests"]
+    ]
+    assert len(names) == len(set(names)) == total

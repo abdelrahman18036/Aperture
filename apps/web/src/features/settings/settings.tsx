@@ -12,14 +12,14 @@ import { useMediaUpload } from "@/features/media/use-media-upload";
 import { api } from "@/lib/api";
 
 /**
- * Settings: your profile, the requests waiting on you, and leaving.
+ * Settings: your profile and leaving.
  *
  * Everything here was already built on the API and simply had nowhere to be
  * clicked — `PATCH /api/users/me`, `DELETE /api/users/me`,
- * `GET /api/users/requests` and `POST /api/users/{username}/respond`. A
- * private account in particular was a dead end: you could switch it on
- * nowhere, and had you managed to, nothing in the UI could approve the
- * requests that piled up behind it.
+ * and `PATCH /api/users/me`. A private account in particular was a dead
+ * end: you could switch it on nowhere, and had you managed to, nothing in
+ * the UI could approve the requests that piled up behind it. Those now have
+ * a place of their own in the sidebar — see `features/requests`.
  *
  * One column, sections separated by hairlines. No cards — the same rule the
  * feed follows, and for the same reason.
@@ -33,12 +33,8 @@ import { api } from "@/lib/api";
  * what the account had set.
  */
 type CurrentUser = Schemas["CurrentUser"];
-type PendingRequest = Schemas["FollowRequest"];
 
-/** Matches `users.selectors.pending_requests_for`'s own limit. */
-const REQUEST_PAGE = 50;
-
-type Tab = "profile" | "requests" | "account";
+type Tab = "profile" | "account";
 
 /**
  * Three panels rather than one long scroll.
@@ -49,7 +45,6 @@ type Tab = "profile" | "requests" | "account";
  */
 const TABS: readonly TabDefinition<Tab>[] = [
   { id: "profile", label: "Profile" },
-  { id: "requests", label: "Requests" },
   { id: "account", label: "Account" },
 ];
 
@@ -81,7 +76,6 @@ export function SettingsScreen() {
   const [isPrivate, setIsPrivate] = useState(false);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [tab, setTab] = useState<Tab>("profile");
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -93,10 +87,7 @@ export function SettingsScreen() {
     let cancelled = false;
 
     void (async () => {
-      const [meResponse, requestsResponse] = await Promise.all([
-        api.GET("/api/users/me"),
-        api.GET("/api/users/requests"),
-      ]);
+      const meResponse = await api.GET("/api/users/me");
       if (cancelled) return;
 
       if (meResponse.data === undefined) {
@@ -108,7 +99,6 @@ export function SettingsScreen() {
       setDisplayName(user.display_name);
       setBio(user.bio);
       setIsPrivate(user.is_private);
-      setRequests(requestsResponse.data ?? []);
     })();
 
     return () => {
@@ -132,20 +122,6 @@ export function SettingsScreen() {
     },
     [displayName, bio, isPrivate],
   );
-
-  const respond = useCallback(async (username: string, accept: boolean) => {
-    const response = await api.POST("/api/users/{username}/respond", {
-      params: { path: { username } },
-      body: { accept },
-    });
-    if (response.response.status === 204) {
-      // Dropped locally rather than refetched: the row is gone either way,
-      // and a round trip to learn that is a round trip.
-      setRequests((current) =>
-        current.filter((item) => item.follower.username !== username),
-      );
-    }
-  }, []);
 
   const setAvatar = useCallback(async (mediaId: string) => {
     const response = await api.PATCH("/api/users/me", {
@@ -213,12 +189,10 @@ export function SettingsScreen() {
         <p className="meta">signed in as {me.username}</p>
       </header>
 
-      <TabBar
-        tabs={TABS}
-        active={tab}
-        onSelect={setTab}
-        badges={{ requests: requests.length }}
-      />
+      {/* Requests used to be the third tab here, capped at fifty and
+          apologising for it. It is a queue, so it is a place now — see
+          `features/requests`. */}
+      <TabBar tabs={TABS} active={tab} onSelect={setTab} />
 
       {tab === "profile" ? (
         <>
@@ -333,58 +307,6 @@ export function SettingsScreen() {
         </form>
       </Section>
         </>
-      ) : null}
-
-      {tab === "requests" ? (
-      <Section
-        title="Follow requests"
-        // The API caps this at fifty, so past that the count is a floor
-        // rather than a total and the copy says so instead of stating a
-        // number that is wrong.
-        note={
-          requests.length === 0
-            ? "nobody is waiting"
-            : requests.length < REQUEST_PAGE
-              ? `${String(requests.length)} waiting on you`
-              : "the fifty most recent — answer these and more appear"
-        }
-      >
-        <ul className="flex flex-col">
-          {requests.map((request) => (
-            <li
-              key={request.follower.username}
-              className="flex items-center gap-4 border-b border-line py-3 last:border-b-0"
-            >
-              <UserAvatar user={request.follower} />
-              <div className="flex min-w-0 flex-col">
-                <span className="text-body text-ink">
-                  {request.follower.username}
-                </span>
-                {request.follower.display_name ? (
-                  <span className="meta">{request.follower.display_name}</span>
-                ) : null}
-              </div>
-              <div className="ml-auto flex gap-2">
-                <Button
-                  onClick={() => {
-                    void respond(request.follower.username, true);
-                  }}
-                >
-                  Approve
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    void respond(request.follower.username, false);
-                  }}
-                >
-                  Decline
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Section>
       ) : null}
 
       {tab === "account" ? (

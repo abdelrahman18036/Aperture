@@ -157,4 +157,4 @@ class TestProfileAndRequestPayloads:
         response = signed_in.get("/api/users/requests")
 
         assert response.status_code == 200
-        assert response.json()[0]["follower"]["avatar_url"] is not None
+        assert response.json()["requests"][0]["follower"]["avatar_url"] is not None

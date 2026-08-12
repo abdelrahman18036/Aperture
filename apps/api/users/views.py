@@ -26,7 +26,7 @@ from users import selectors, services
 from users.models import User
 from users.serializers import (
     CurrentUserSerializer,
-    FollowRequestSerializer,
+    FollowRequestPageSerializer,
     FollowStateSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
@@ -286,11 +286,31 @@ class FollowRequestsView(APIView):
 
     @extend_schema(
         operation_id="users_follow_requests",
-        responses={200: FollowRequestSerializer(many=True)},
-        description="Pending follow requests for your account.",
+        parameters=[
+            OpenApiParameter(
+                name="cursor",
+                description=(
+                    "Follow id of the last request on the previous page. Ids "
+                    "are time-ordered, so this is simply 'older than that "
+                    "one'."
+                ),
+                required=False,
+                type=str,
+            )
+        ],
+        responses={200: FollowRequestPageSerializer},
+        description="Pending follow requests, newest first, cursor-paginated.",
     )
     def get(self, request: Request) -> Response:
-        pending = selectors.pending_requests_for(current_user(request))
+        raw_cursor = request.query_params.get("cursor")
+        try:
+            before_id = int(raw_cursor) if raw_cursor else None
+        except ValueError:
+            before_id = None
+
+        pending = list(
+            selectors.pending_requests_for(current_user(request), before_id=before_id)
+        )
         payload: list[dict[str, Any]] = [
             {
                 # The instance, for the same reason as in ProfileView.
@@ -299,11 +319,14 @@ class FollowRequestsView(APIView):
             }
             for edge in pending
         ]
-        # `many=True` swaps in a ListSerializer at runtime, which the stubs
-        # cannot express for a plain Serializer — they still expect the single
-        # instance type here.
+        # A full page means there is probably another; a short one is the end.
+        next_cursor = (
+            str(pending[-1].pk) if len(pending) == selectors.REQUEST_PAGE_SIZE else None
+        )
         return Response(
-            FollowRequestSerializer(payload, many=True).data  # type: ignore[arg-type]
+            FollowRequestPageSerializer(
+                {"requests": payload, "next_cursor": next_cursor}
+            ).data
         )
 
 

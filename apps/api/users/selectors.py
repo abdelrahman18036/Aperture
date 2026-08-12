@@ -168,20 +168,33 @@ def accepted_followee_ids(user: User) -> QuerySet[Follow, int]:
     ).values_list("followee_id", flat=True)
 
 
-def pending_requests_for(user: User, *, limit: int = 50) -> QuerySet[Follow]:
+#: One screenful. The rest arrive by scrolling rather than by answering,
+#: now that this is a page of its own with a cursor.
+REQUEST_PAGE_SIZE = 30
+
+
+def pending_requests_for(
+    user: User, *, before_id: int | None = None, limit: int = REQUEST_PAGE_SIZE
+) -> QuerySet[Follow]:
     """Follow requests awaiting this user's approval. Private accounts only.
 
-    Bounded, because this list has no natural ceiling. A seeded account here
-    already had 315 pending — a real private account that gets linked
-    somewhere has orders of magnitude more, and an unbounded query means the
-    response, the serialisation and the DOM all grow with it. Fifty is a
-    screenful; the rest arrive as these are answered.
+    Cursor-paginated on the `Follow` id, which is a snowflake and therefore
+    time-ordered — so "older than that one" is the whole cursor, the same way
+    the feed and explore do it. No offset: rows disappear from under an offset
+    as requests are answered, and the page after would skip whatever slid up.
+
+    Bounded because this list has no natural ceiling. A seeded account here
+    already had 315 pending, and a real private account that gets linked
+    somewhere has orders of magnitude more.
     """
-    return (
-        Follow.objects.filter(followee=user, status=Follow.Status.PENDING)
-        .select_related("follower", "follower__avatar_media")
-        .order_by("-id")[:limit]
-    )
+    rows = Follow.objects.filter(
+        followee=user, status=Follow.Status.PENDING
+    ).select_related("follower", "follower__avatar_media")
+
+    if before_id is not None:
+        rows = rows.filter(id__lt=before_id)
+
+    return rows.order_by("-id")[:limit]
 
 
 def can_view_posts(*, viewer: User | None, author: User) -> bool:

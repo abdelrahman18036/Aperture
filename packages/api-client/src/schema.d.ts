@@ -584,7 +584,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Pending follow requests for your account. */
+        /** @description Pending follow requests, newest first, cursor-paginated. */
         get: operations["users_follow_requests"];
         put?: never;
         post?: never;
@@ -719,6 +719,17 @@ export interface components {
             readonly follower: components["schemas"]["User"];
             /** Format: date-time */
             readonly created_at: string;
+        };
+        /**
+         * @description A cursor-paginated page of pending requests.
+         *
+         *     No total. Producing one means a `COUNT(*)` over every pending row on a
+         *     request path, which rule 9 rules out — and the screen shows "some are
+         *     waiting", never a number it has to be right about.
+         */
+        FollowRequestPage: {
+            readonly requests: components["schemas"]["FollowRequest"][];
+            readonly next_cursor: string | null;
         };
         /** @description What the follow button should read after acting. */
         FollowState: {
@@ -2472,7 +2483,10 @@ export interface operations {
     };
     users_follow_requests: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Follow id of the last request on the previous page. Ids are time-ordered, so this is simply 'older than that one'. */
+                cursor?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2484,7 +2498,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FollowRequest"][];
+                    "application/json": components["schemas"]["FollowRequestPage"];
                 };
             };
         };

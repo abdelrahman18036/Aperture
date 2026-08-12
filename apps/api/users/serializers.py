@@ -147,6 +147,18 @@ class FollowRequestSerializer(serializers.Serializer[dict[str, Any]]):
     created_at = serializers.DateTimeField(read_only=True)
 
 
+class FollowRequestPageSerializer(serializers.Serializer[dict[str, Any]]):
+    """A cursor-paginated page of pending requests.
+
+    No total. Producing one means a `COUNT(*)` over every pending row on a
+    request path, which rule 9 rules out — and the screen shows "some are
+    waiting", never a number it has to be right about.
+    """
+
+    requests = FollowRequestSerializer(many=True, read_only=True)
+    next_cursor = serializers.CharField(read_only=True, allow_null=True)
+
+
 class RespondToRequestSerializer(serializers.Serializer[dict[str, Any]]):
     accept = serializers.BooleanField()
 

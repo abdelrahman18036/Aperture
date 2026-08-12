@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { Skeleton, Spinner, cn } from "@repo/ui";
+import { Button, Skeleton, Spinner, cn } from "@repo/ui";
 
+import { useInfiniteScroll } from "@/features/shared/use-infinite-scroll";
 import { api } from "@/lib/api";
 
 import { PostTile } from "./post-tile";
@@ -31,15 +32,16 @@ export function Explore() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const inFlight = useRef(false);
   /** Guards the mount fetch against a second run in development. */
   const started = useRef(false);
-  const sentinel = useRef<HTMLDivElement | null>(null);
 
   const loadMore = useCallback(() => {
     if (inFlight.current || !hasMore) return;
     inFlight.current = true;
+    setBusy(true);
 
     const from = cursor;
     void api
@@ -48,6 +50,7 @@ export function Explore() {
       })
       .then((response) => {
         inFlight.current = false;
+        setBusy(false);
         setLoaded(true);
         if (response.data === undefined) {
           setHasMore(false);
@@ -80,24 +83,13 @@ export function Explore() {
   }, [loadMore]);
 
   /**
-   * Subsequent pages come from the sentinel.
+   * Subsequent pages arrive 600px before the end, so a page is there before
+   * anyone reaches the bottom — the difference between an infinite scroll and
+   * a "load more" button that clicks itself late.
    *
-   * `rootMargin` fires it 600px early, so a page arrives before someone
-   * reaches the bottom — which is the difference between an infinite scroll
-   * and a "load more" button that clicks itself late.
+   * Observer *and* scroll listener; see the hook for why one is not enough.
    */
-  useEffect(() => {
-    const node = sentinel.current;
-    if (node === null) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadMore();
-      },
-      { rootMargin: "600px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [loadMore]);
+  const { sentinel } = useInfiniteScroll(loadMore, { rootMargin: 600 });
 
   if (loaded && posts.length === 0) {
     return (
@@ -130,9 +122,15 @@ export function Explore() {
           ))}
       </ul>
 
+      {/* A button, not just a spinner — see `features/requests` for why.
+          Infinite scroll stays the primary path; this is what makes the rest
+          of the grid reachable by keyboard, and in the contexts where an
+          observer never fires and no scroll event is ever dispatched. */}
       {loaded && hasMore ? (
         <div className="flex justify-center py-10">
-          <Spinner label="Loading more posts" />
+          <Button variant="secondary" disabled={busy} onClick={loadMore}>
+            {busy ? <Spinner label="Loading more posts" /> : "Load more"}
+          </Button>
         </div>
       ) : null}
 

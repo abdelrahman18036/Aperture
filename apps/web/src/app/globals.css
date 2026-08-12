@@ -14,3 +14,23 @@
 /* Declared because shadcn's stylesheet references the variant. Aperture has
    no light mode — a darkroom does not have one — so nothing toggles it. */
 @custom-variant dark (&:is(.dark *));
+
+/* -----------------------------------------------------------------------
+ * Scrollbars, hidden document-wide.
+ *
+ * The utility in `packages/ui` covers a component that asks for it; this
+ * covers the page itself and anything that scrolls without knowing it needs
+ * to. Scrolling is untouched — only the drawing is removed, and every
+ * scroller keeps its keyboard behaviour.
+ * --------------------------------------------------------------------- */
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
