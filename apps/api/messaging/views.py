@@ -38,8 +38,10 @@ from messaging.serializers import (
     conversation_payload,
 )
 from moderation.throttling import MessageThrottle
+from posts import selectors as post_selectors
+from posts.models import Post
 from users import presence
-from users.selectors import by_username
+from users.selectors import by_username, can_view_posts
 
 
 class RealtimeTicketView(APIView):
@@ -298,6 +300,23 @@ class MessageListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        shared_post: Post | None = None
+        raw_post = form.validated_data["shared_post_id"]
+        if raw_post:
+            # Through the post selectors, not a bare `Post.objects` — sharing
+            # is a read of somebody's content and rule 8 applies to it exactly
+            # as it does to the feed.
+            shared_post = post_selectors.visible_post(
+                viewer=current_user(request), post_id=int(raw_post)
+            )
+            if shared_post is None or not can_view_posts(
+                viewer=current_user(request), author=shared_post.author
+            ):
+                return Response(
+                    {"detail": "That post is unavailable."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         try:
             message, created = services.send_message(
                 sender=current_user(request),
@@ -306,6 +325,7 @@ class MessageListView(APIView):
                 body=form.validated_data["body"],
                 media=media,
                 reply_to_seq=form.validated_data["reply_to_seq"],
+                shared_post=shared_post,
             )
         except services.MessagingRejectedError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -340,14 +360,32 @@ class MessageDetailView(APIView):
 
     @extend_schema(
         operation_id="messaging_delete_message",
+        parameters=[
+            OpenApiParameter(
+                name="scope",
+                description=(
+                    "`everyone` — the default — removes the message from the "
+                    "conversation and requires it to be yours. `me` hides it "
+                    "from you alone and works on anybody's message."
+                ),
+                required=False,
+                type=str,
+                enum=["everyone", "me"],
+            )
+        ],
         responses={204: None, 404: None},
-        description="Soft delete your own message.",
+        description="Delete a message, for everyone or just for yourself.",
     )
     def delete(self, request: Request, conversation_id: str, seq: int) -> Response:
         member = _member_or_404(request, conversation_id)
         message = selectors.message_by_seq(conversation=member.conversation, seq=seq)
         if message is None:
             raise NotFound("No such message.")
+
+        if request.query_params.get("scope") == "me":
+            services.hide_message(user=current_user(request), message=message)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
         try:
             services.soft_delete_message(actor=current_user(request), message=message)
         except services.MessagingRejectedError as error:

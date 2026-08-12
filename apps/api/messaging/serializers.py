@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from config.fields import SnowflakeField
@@ -27,6 +28,12 @@ class MessageSerializer(serializers.ModelSerializer[Message]):
     conversation_id = SnowflakeField(read_only=True)
     sender = UserSerializer(read_only=True)
     media = MediaSerializer(read_only=True, allow_null=True)
+    #: A post sent into the conversation. Rendered by the same component the
+    #: feed uses, so the reference is enough — see `Message.shared_post`.
+    shared_post = serializers.SerializerMethodField()
+    #: The story this replies to, if any — enough to draw a thumbnail chip
+    #: above the bubble, and null once the story has expired.
+    replied_story = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -39,9 +46,49 @@ class MessageSerializer(serializers.ModelSerializer[Message]):
             "media",
             "client_id",
             "reply_to_seq",
+            "shared_post",
+            "replied_story",
             "created_at",
         )
         read_only_fields = fields
+
+    @extend_schema_field(
+        {"allOf": [{"$ref": "#/components/schemas/Post"}], "nullable": True}
+    )
+    def get_shared_post(self, message: Message) -> dict[str, Any] | None:
+        """The shared post, or null once it is gone.
+
+        Imported inside the method: `posts.serializers` imports nothing from
+        messaging today, but a module-level import here would make the two
+        apps a cycle waiting to happen, and this runs on a prefetched row.
+
+        Deliberately serialised without a viewer context, so counts read zero
+        and `viewer_has_liked` reads false. The card in a thread is a pointer
+        to a post, and the post page is where its numbers live — fetching
+        counters for every shared post in a scrollback would be a query per
+        message.
+        """
+        if message.shared_post_id is None or message.shared_post is None:
+            return None
+        if message.shared_post.deleted_at is not None:
+            return None
+
+        from posts.serializers import PostSerializer
+
+        return dict(PostSerializer(message.shared_post).data)
+
+    @extend_schema_field(
+        {"allOf": [{"$ref": "#/components/schemas/Story"}], "nullable": True}
+    )
+    def get_replied_story(self, message: Message) -> dict[str, Any] | None:
+        if message.replied_story_id is None or message.replied_story is None:
+            return None
+        if message.replied_story.deleted_at is not None:
+            return None
+
+        from stories.serializers import StorySerializer
+
+        return dict(StorySerializer(message.replied_story).data)
 
 
 class ConversationSerializer(serializers.Serializer[dict[str, Any]]):
@@ -92,6 +139,11 @@ class SendMessageSerializer(serializers.Serializer[dict[str, Any]]):
     )
     media_id = serializers.CharField(required=False, allow_null=True, default=None)
     reply_to_seq = serializers.IntegerField(
+        required=False, allow_null=True, default=None
+    )
+    #: A post to share into the conversation, by id. A string, because it is a
+    #: snowflake and a JSON number would round it.
+    shared_post_id = serializers.CharField(
         required=False, allow_null=True, default=None
     )
 

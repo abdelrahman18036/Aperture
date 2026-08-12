@@ -117,6 +117,35 @@ class Message(models.Model):
         related_name="messages",
     )
 
+    #: A post sent into the conversation — "reshare".
+    #:
+    #: A reference rather than a copy, so the message shows the post as it is
+    #: now: an edited caption or a deleted post is reflected here rather than
+    #: preserved as a snapshot of a moment. `SET_NULL` because a hard-deleted
+    #: post must not take the conversation around it with it; the client
+    #: renders "this post is no longer available".
+    shared_post = models.ForeignKey(
+        "posts.Post",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="shared_in_messages",
+    )
+
+    #: The story this message is a reply to.
+    #:
+    #: A story reply *is* a direct message — that is the whole feature — but a
+    #: message with no context reaching an author who posted four frames today
+    #: is a question they cannot answer. This is the context. `SET_NULL`
+    #: because stories expire and the reply outlives them.
+    replied_story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="replies",
+    )
+
     #: Idempotency key minted by the browser. The unique constraint below is
     #: the entire duplicate-message story: catch IntegrityError on insert and
     #: return the message that already exists.
@@ -149,3 +178,38 @@ class Message(models.Model):
     @property
     def is_deleted(self) -> bool:
         return self.deleted_at is not None
+
+
+class MessageHidden(models.Model):
+    """One person's decision to stop seeing one message.
+
+    **"Delete for me" and "delete for everyone" are different operations and
+    this is what makes them different.** Deleting for everyone sets
+    `Message.deleted_at` and the message is gone for the room; deleting for
+    yourself writes a row here and changes nothing anybody else sees.
+
+    A row rather than a flag on the message, because the message is shared and
+    the decision is not — and rather than actually deleting, because the
+    sequence has to stay dense: `seq` is what reconnect sync walks, and a hole
+    in it is a client that thinks it missed something forever.
+    """
+
+    id = models.BigIntegerField(primary_key=True, default=snowflake, editable=False)
+    message = models.ForeignKey(
+        Message, on_delete=models.CASCADE, related_name="hidden_for"
+    )
+    user = models.ForeignKey(
+        "users.User", on_delete=models.CASCADE, related_name="hidden_messages"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "message_hidden"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["message", "user"], name="message_hidden_unique"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user.pk} hid {self.message.pk}"

@@ -20,9 +20,18 @@ from __future__ import annotations
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from counters import services as counter_services
+from counters.models import Counter
 from media.models import Media
 from messaging import events, selectors
-from messaging.models import Conversation, ConversationMember, Message
+from messaging.models import (
+    Conversation,
+    ConversationMember,
+    Message,
+    MessageHidden,
+)
+from posts.models import Post
+from stories.models import Story
 from users.models import Block, User
 
 MAX_GROUP_MEMBERS = 32
@@ -109,6 +118,8 @@ def send_message(
     body: str = "",
     media: Media | None = None,
     reply_to_seq: int | None = None,
+    shared_post: Post | None = None,
+    replied_story: Story | None = None,
 ) -> tuple[Message, bool]:
     """Write a message. Returns it and whether this call created it.
 
@@ -130,7 +141,7 @@ def send_message(
     lands here as an `IntegrityError` we can answer by returning the message
     that already exists. **That is the whole duplicate-message story.**
     """
-    if not body.strip() and media is None:
+    if not body.strip() and media is None and shared_post is None:
         raise MessagingRejectedError("A message needs something in it.")
 
     # Membership is the access control; the caller has already checked it, but
@@ -168,6 +179,8 @@ def send_message(
                 media=media,
                 client_id=client_id,
                 reply_to_seq=reply_to_seq,
+                shared_post=shared_post,
+                replied_story=replied_story,
             )
     except IntegrityError:
         # Either the same client_id twice, or — impossible under the row lock,
@@ -186,6 +199,17 @@ def send_message(
     ConversationMember.objects.filter(
         conversation=locked, user=sender, last_read_seq__lt=next_seq
     ).update(last_read_seq=next_seq)
+
+    if shared_post is not None:
+        # Counted once per message rather than once per recipient: "shared 3
+        # times" should mean three acts of sharing, not the size of the rooms
+        # they landed in.
+        counter_services.increment(
+            entity_type=Counter.EntityType.POST,
+            entity_id=shared_post.pk,
+            metric=Counter.Metric.SHARES,
+            delta=1,
+        )
 
     _publish_after_commit(message, _recipient_ids(locked))
     return message, True
@@ -297,3 +321,16 @@ def remove_message(*, message: Message) -> Message:
 
     transaction.on_commit(announce)
     return message
+
+
+def hide_message(*, user: User, message: Message) -> None:
+    """Delete a message for one person only.
+
+    No socket event: nothing about the conversation changed for anybody else,
+    and telling the room that somebody hid something would leak a private
+    decision. The person who did it already knows, and their other sessions
+    pick it up on their next read.
+
+    Idempotent — hiding twice is not an error, it is the same state.
+    """
+    MessageHidden.objects.get_or_create(message=message, user=user)

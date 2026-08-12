@@ -32,7 +32,12 @@ from dataclasses import dataclass
 
 from django.db.models import QuerySet
 
-from messaging.models import Conversation, ConversationMember, Message
+from messaging.models import (
+    Conversation,
+    ConversationMember,
+    Message,
+    MessageHidden,
+)
 from users.models import User
 from users.selectors import blocked_ids, exclude_blocked
 
@@ -117,6 +122,34 @@ def existing_dm(*, a: User, b: User) -> Conversation | None:
     )
 
 
+#: Everything a rendered message needs, in one query rather than four per row.
+MESSAGE_RELATIONS = (
+    "sender",
+    "sender__avatar_media",
+    "media",
+    "shared_post",
+    "shared_post__author",
+    "shared_post__author__avatar_media",
+    "replied_story",
+    "replied_story__media",
+)
+
+
+def _exclude_hidden(
+    queryset: QuerySet[Message], viewer: User | None
+) -> QuerySet[Message]:
+    """Drop the messages this person deleted for themselves.
+
+    A subquery rather than a join, so the row count cannot change — the same
+    reason `exclude_blocked` next to it is written the way it is.
+    """
+    if viewer is None:
+        return queryset
+    return queryset.exclude(
+        pk__in=MessageHidden.objects.filter(user=viewer).values("message_id")
+    )
+
+
 def messages_after(
     *,
     conversation: Conversation,
@@ -136,11 +169,12 @@ def messages_after(
         conversation=conversation,
         seq__gt=after_seq,
         deleted_at__isnull=True,
-    ).select_related("sender", "sender__avatar_media", "media")
+    ).select_related(*MESSAGE_RELATIONS)
 
     # Rule 8. Filtered before the slice, or a page could come back short of
     # its limit while more messages waited behind the ones removed.
     live = exclude_blocked(live, viewer, author_field="sender_id")
+    live = _exclude_hidden(live, viewer)
 
     return live.order_by("seq")[: min(limit, MAX_PAGE_SIZE)]
 
@@ -155,12 +189,13 @@ def messages_before(
     """Scrollback. The same index, read the other way."""
     history = Message.objects.filter(
         conversation=conversation, deleted_at__isnull=True
-    ).select_related("sender", "sender__avatar_media", "media")
+    ).select_related(*MESSAGE_RELATIONS)
 
     if before_seq is not None:
         history = history.filter(seq__lt=before_seq)
 
     history = exclude_blocked(history, viewer, author_field="sender_id")
+    history = _exclude_hidden(history, viewer)
 
     return history.order_by("-seq")[: min(limit, MAX_PAGE_SIZE)]
 
@@ -267,8 +302,12 @@ def last_messages_for(
 
     live = Message.objects.filter(
         conversation_id__in=conversation_ids, deleted_at__isnull=True
-    ).select_related("sender", "sender__avatar_media", "media")
+    ).select_related(*MESSAGE_RELATIONS)
     live = exclude_blocked(live, viewer, author_field="sender_id")
+    # Same reasoning as the block filter above: a message deleted for this
+    # person is one they may not see, so the preview falls through to the one
+    # before it rather than showing a row they asked to be rid of.
+    live = _exclude_hidden(live, viewer)
 
     rows = live.order_by("conversation_id", "-seq").distinct("conversation_id")
     return {row.conversation_id: row for row in rows}
