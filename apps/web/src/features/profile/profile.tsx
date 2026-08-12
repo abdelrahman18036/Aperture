@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Avatar, AvatarFallback, Button, Skeleton } from "@repo/ui";
@@ -126,7 +127,14 @@ export function ProfileScreen({ username }: { username: string }) {
             ) : null}
           </div>
 
-          {!profile.is_self ? (
+          {profile.is_self ? (
+            <Link
+              href="/settings"
+              className="ml-auto flex h-9 items-center rounded-control border border-line px-4 text-label text-ink hover:border-ink-dim"
+            >
+              Edit profile
+            </Link>
+          ) : (
             <Button
               className="ml-auto"
               variant={profile.follow_state === "none" ? "primary" : "secondary"}
@@ -137,7 +145,7 @@ export function ProfileScreen({ username }: { username: string }) {
             >
               {label}
             </Button>
-          ) : null}
+          )}
         </div>
 
         {/* The meta strip again — counts are metadata, so they are set in it. */}

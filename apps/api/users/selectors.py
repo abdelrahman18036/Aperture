@@ -160,12 +160,19 @@ def accepted_followee_ids(user: User) -> QuerySet[Follow, int]:
     ).values_list("followee_id", flat=True)
 
 
-def pending_requests_for(user: User) -> QuerySet[Follow]:
-    """Follow requests awaiting this user's approval. Private accounts only."""
+def pending_requests_for(user: User, *, limit: int = 50) -> QuerySet[Follow]:
+    """Follow requests awaiting this user's approval. Private accounts only.
+
+    Bounded, because this list has no natural ceiling. A seeded account here
+    already had 315 pending — a real private account that gets linked
+    somewhere has orders of magnitude more, and an unbounded query means the
+    response, the serialisation and the DOM all grow with it. Fifty is a
+    screenful; the rest arrive as these are answered.
+    """
     return (
         Follow.objects.filter(followee=user, status=Follow.Status.PENDING)
         .select_related("follower")
-        .order_by("-id")
+        .order_by("-id")[:limit]
     )
 
 

@@ -6,6 +6,7 @@ import {
   House,
   MessageCircle,
   Search,
+  Settings,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
@@ -44,7 +45,10 @@ export function NavRail({ username }: { username: string | null }) {
   const items: Destination[] = [
     ...DESTINATIONS,
     ...(username
-      ? [{ href: `/u/${username}`, label: "Profile", icon: UserRound }]
+      ? [
+          { href: `/u/${username}`, label: "Profile", icon: UserRound },
+          { href: "/settings", label: "Settings", icon: Settings },
+        ]
       : []),
   ];
 
