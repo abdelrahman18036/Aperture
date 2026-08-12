@@ -47,9 +47,7 @@ def _counters_apply(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     from counters import services as counter_services
     from counters.tasks import adjust
 
-    def apply(
-        entity_type: str, entity_id: int, metric: str, delta: int = 1
-    ) -> None:
+    def apply(entity_type: str, entity_id: int, metric: str, delta: int = 1) -> None:
         counter_services.increment(
             entity_type=entity_type,
             entity_id=entity_id,

@@ -66,18 +66,15 @@ class TestReactions:
         services.react(story=story, user=user, emoji=HEART)
         assert services.unreact(story=story, user=user) is True
         assert StoryReaction.objects.count() == 0
-        assert Notification.objects.filter(
-            verb=Notification.Verb.STORY_REACTION
-        ).exists() is False
+        assert (
+            Notification.objects.filter(verb=Notification.Verb.STORY_REACTION).exists()
+            is False
+        )
 
-    def test_unreacting_twice_is_not_an_error(
-        self, user: User, story: Story
-    ) -> None:
+    def test_unreacting_twice_is_not_an_error(self, user: User, story: Story) -> None:
         assert services.unreact(story=story, user=user) is False
 
-    def test_the_viewer_sees_their_own_reaction(
-        self, user: User, story: Story
-    ) -> None:
+    def test_the_viewer_sees_their_own_reaction(self, user: User, story: Story) -> None:
         services.react(story=story, user=user, emoji=HEART)
         assert selectors.viewer_reactions(viewer=user, story_ids=[story.pk]) == {
             story.pk: HEART

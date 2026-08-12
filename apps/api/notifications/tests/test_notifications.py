@@ -67,9 +67,7 @@ class TestNotify:
         first = post_services.add_comment(author=other_user, post=post, body="one")
         second = post_services.add_comment(author=other_user, post=post, body="two")
         assert first.pk != second.pk
-        assert (
-            Notification.objects.filter(verb=Notification.Verb.COMMENT).count() == 2
-        )
+        assert Notification.objects.filter(verb=Notification.Verb.COMMENT).count() == 2
 
 
 class TestLikeNotifications:
@@ -82,23 +80,17 @@ class TestLikeNotifications:
         post_services.unlike(user=other_user, post=post)
         assert Notification.objects.filter(verb=Notification.Verb.LIKE).count() == 0
 
-    def test_liking_your_own_post_notifies_nobody(
-        self, user: User, post: Post
-    ) -> None:
+    def test_liking_your_own_post_notifies_nobody(self, user: User, post: Post) -> None:
         post_services.like(user=user, post=post)
         assert Notification.objects.count() == 0
 
 
 class TestFollowNotifications:
-    def test_a_public_follow_is_a_follow(
-        self, user: User, other_user: User
-    ) -> None:
+    def test_a_public_follow_is_a_follow(self, user: User, other_user: User) -> None:
         user_services.follow(follower=other_user, followee=user)
         assert Notification.objects.get().verb == Notification.Verb.FOLLOW
 
-    def test_a_private_follow_is_a_request(
-        self, user: User, other_user: User
-    ) -> None:
+    def test_a_private_follow_is_a_request(self, user: User, other_user: User) -> None:
         user.is_private = True
         user.save(update_fields=["is_private"])
         user_services.follow(follower=other_user, followee=user)
