@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    The aperture ring, which is already the mark in the nav rail: a safelight
+    circle on the base. Nothing else — at 16px an icon is a silhouette, and
+    anything inside this one becomes a smudge.
+
+    An `icon.svg` in `app/` is all Next needs; it generates the link tags and
+    the sizes. There was no icon of any kind before this, so every tab showed
+    a blank page glyph and every load logged a 404 for `/favicon.ico`.
+  -->
+  <rect width="32" height="32" rx="7" fill="#0B0B0E" />
+  <circle cx="16" cy="16" r="8" fill="none" stroke="#F0A868" stroke-width="3" />
+</svg>

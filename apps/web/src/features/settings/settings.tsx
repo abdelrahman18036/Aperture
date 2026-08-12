@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { Schemas } from "@repo/api-client";
 import { Button, Input, Skeleton, TabBar } from "@repo/ui";
 import type { TabDefinition } from "@repo/ui";
 
@@ -24,13 +25,15 @@ import { api } from "@/lib/api";
  * feed follows, and for the same reason.
  */
 
-interface CurrentUser {
-  username: string;
-  display_name: string;
-  bio: string;
-  is_private: boolean;
-  avatar_url: string | null;
-}
+/**
+ * Generated, not hand-written. `01-ARCHITECTURE.md` §3: never restate a DRF
+ * serializer in TypeScript. Both of the local interfaces that used to be
+ * here had already drifted — the request row's `follower` had no
+ * `avatar_url`, so every avatar in the requests list was initials no matter
+ * what the account had set.
+ */
+type CurrentUser = Schemas["CurrentUser"];
+type PendingRequest = Schemas["FollowRequest"];
 
 /** Matches `users.selectors.pending_requests_for`'s own limit. */
 const REQUEST_PAGE = 50;
@@ -49,10 +52,6 @@ const TABS: readonly TabDefinition<Tab>[] = [
   { id: "requests", label: "Requests" },
   { id: "account", label: "Account" },
 ];
-
-interface PendingRequest {
-  follower: { username: string; display_name: string };
-}
 
 function Section({
   title,
@@ -104,12 +103,12 @@ export function SettingsScreen() {
         router.push("/login");
         return;
       }
-      const user = meResponse.data as CurrentUser;
+      const user = meResponse.data;
       setMe(user);
       setDisplayName(user.display_name);
       setBio(user.bio);
       setIsPrivate(user.is_private);
-      setRequests((requestsResponse.data ?? []) as PendingRequest[]);
+      setRequests(requestsResponse.data ?? []);
     })();
 
     return () => {
@@ -127,7 +126,7 @@ export function SettingsScreen() {
       });
       setBusy(false);
       if (response.data !== undefined) {
-        setMe(response.data as CurrentUser);
+        setMe(response.data);
         setSaved(true);
       }
     },
@@ -157,7 +156,7 @@ export function SettingsScreen() {
       setAvatarError(detail ?? "That did not save.");
       return;
     }
-    setMe(response.data as CurrentUser);
+    setMe(response.data);
     setAvatarError(null);
   }, []);
 

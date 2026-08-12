@@ -89,25 +89,29 @@ class ConversationListView(APIView):
         members = list(selectors.inbox(viewer))
         unread = selectors.unread_counts(user=viewer)
 
+        # One query for every conversation's other members and their read
+        # positions, rather than two per conversation. See `other_members_for`.
+        conversation_ids = [member.conversation_id for member in members]
+        others_by_conversation = selectors.other_members_for(
+            conversation_ids=conversation_ids, viewer=viewer
+        )
+        # And one more for every conversation's last message, so the whole
+        # inbox is a constant number of queries rather than three per row.
+        last_by_conversation = selectors.last_messages_for(
+            conversation_ids=conversation_ids, viewer=viewer
+        )
+
         rows: list[dict[str, Any]] = []
         for member in members:
-            others = [
-                m.user
-                for m in selectors.members_of(member.conversation)
-                if m.user_id != viewer.pk
-            ]
-            last = selectors.messages_before(
-                conversation=member.conversation, viewer=viewer, limit=1
-            ).first()
+            other = others_by_conversation[member.conversation_id]
+            last = last_by_conversation.get(member.conversation_id)
             rows.append(
                 conversation_payload(
                     member=member,
-                    members=others,
+                    members=other.users,
                     unread=unread.get(member.conversation_id, 0),
                     last_message=last,
-                    others_read=selectors.read_positions(
-                        conversation=member.conversation, viewer=viewer
-                    ),
+                    others_read=other.read_positions,
                 )
             )
         return Response(rows)
@@ -152,9 +156,9 @@ class ConversationListView(APIView):
                 members=others,
                 unread=0,
                 last_message=None,
-                others_read=selectors.read_positions(
-                    conversation=conversation, viewer=viewer
-                ),
+                others_read=selectors.other_members_for(
+                    conversation_ids=[conversation.pk], viewer=viewer
+                )[conversation.pk].read_positions,
             ),
             status=status.HTTP_201_CREATED,
         )

@@ -76,10 +76,17 @@ def seen_ids(*, viewer: User, story_ids: list[int]) -> set[int]:
     )
 
 
-def viewers_of(story: Story) -> QuerySet[StoryView]:
-    """Who has watched it, newest first. For the author only."""
+#: The viewer list is a peek, not a report. A story on a popular account is
+#: read by everyone who follows it, and an unbounded list would be tens of
+#: thousands of rows serialised into a panel nobody scrolls — the same
+#: mistake `pending_requests_for` made with 315 follow requests.
+VIEWER_PAGE = 100
+
+
+def viewers_of(story: Story, *, limit: int = VIEWER_PAGE) -> QuerySet[StoryView]:
+    """Who has watched it, newest first. For the author only, and bounded."""
     return (
         StoryView.objects.filter(story=story)
         .select_related("viewer", "viewer__avatar_media")
-        .order_by("-id")
+        .order_by("-id")[:limit]
     )

@@ -28,6 +28,8 @@ applies here identically.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.db.models import QuerySet
 
 from messaging.models import Conversation, ConversationMember, Message
@@ -202,15 +204,71 @@ def unread_counts(*, user: User) -> dict[int, int]:
     }
 
 
-def read_positions(*, conversation: Conversation, viewer: User) -> dict[str, int]:
-    """How far each other member has read, keyed by user id as a string.
+@dataclass(frozen=True, slots=True)
+class OtherMembers:
+    """Everyone in a conversation but the viewer, and how far each has read."""
 
-    Ids cross the wire as strings — above 2^53 a JSON number rounds, and a
-    key that rounds silently matches the wrong person.
+    users: list[User]
+    read_positions: dict[str, int]
+
+
+def other_members_for(
+    *, conversation_ids: list[int], viewer: User
+) -> dict[int, OtherMembers]:
+    """Both facts about every conversation's other members, in one query.
+
+    **Batched because the inbox is a loop.** Fetching members and read
+    positions per conversation made an inbox of fifty conversations 150
+    queries — and both came from the same table, so one pass answers both.
+    Rule 10 names this exactly: the N+1 the ORM hides is the most common way
+    a Django app gets slow, and this one hid behind two innocent selectors.
+
+    Read positions are keyed by user id **as a string**, because that is how
+    the id crosses the wire — above 2^53 a JSON number rounds, and a key that
+    rounds silently matches the wrong person.
     """
-    return {
-        str(row.user_id): row.last_read_seq
-        for row in ConversationMember.objects.filter(conversation=conversation).exclude(
-            user=viewer
-        )
+    if not conversation_ids:
+        return {}
+
+    rows = (
+        ConversationMember.objects.filter(conversation_id__in=conversation_ids)
+        .exclude(user=viewer)
+        .select_related("user", "user__avatar_media")
+    )
+
+    grouped: dict[int, OtherMembers] = {
+        conversation_id: OtherMembers(users=[], read_positions={})
+        for conversation_id in conversation_ids
     }
+    for row in rows:
+        entry = grouped[row.conversation_id]
+        entry.users.append(row.user)
+        entry.read_positions[str(row.user_id)] = row.last_read_seq
+    return grouped
+
+
+def last_messages_for(
+    *, conversation_ids: list[int], viewer: User
+) -> dict[int, Message]:
+    """The newest visible message in each conversation, in one query.
+
+    `DISTINCT ON (conversation_id)` with a matching `ORDER BY` — Postgres
+    keeps the first row per group, and the first row is the highest `seq`
+    because that is what the ordering says. One query for the whole inbox
+    instead of one per row.
+
+    Block filtering happens before the distinct, so the "last message" of a
+    conversation whose most recent sender is blocked is the last one the
+    viewer may actually see, not a gap. Rule 8 again, and it is the reason
+    this cannot be a plain `values` aggregate over `last_message_seq`.
+    """
+    if not conversation_ids:
+        return {}
+
+    live = Message.objects.filter(
+        conversation_id__in=conversation_ids, deleted_at__isnull=True
+    ).select_related("sender", "sender__avatar_media", "media")
+    live = exclude_blocked(live, viewer, author_field="sender_id")
+
+    rows = live.order_by("conversation_id", "-seq").distinct("conversation_id")
+    return {row.conversation_id: row for row in rows}

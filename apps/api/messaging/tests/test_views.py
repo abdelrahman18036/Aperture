@@ -461,3 +461,55 @@ def test_a_ticket_signed_with_the_wrong_secret_does_not_verify(
     token = signed_in.post("/api/realtime/ticket").json()["ticket"]
     with pytest.raises(jwt.InvalidSignatureError):
         jwt.decode(token, "a" * 48, algorithms=["HS256"])
+
+
+def test_the_inbox_costs_the_same_at_one_conversation_as_at_five(
+    signed_in: APIClient, user: User
+) -> None:
+    """Rule 10, pinned.
+
+    The inbox is a loop, and three of its queries used to be inside it:
+    members, read positions and the last message, once per conversation. At
+    fifty conversations that is a hundred and fifty queries for one screen.
+
+    Counting rather than asserting an absolute number, because the constant
+    part legitimately changes — a new `select_related`, a session lookup. What
+    must not change is that the count stops depending on how many
+    conversations there are.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from messaging import services
+
+    others = [
+        User.objects.create_user(
+            email=f"inbox{index}@example.com",
+            username=f"inbox{index}",
+            password="correct-horse-staple",
+        )
+        for index in range(5)
+    ]
+
+    def measure(count: int) -> int:
+        for index in range(count):
+            conversation = services.start_dm(initiator=user, other=others[index])
+            services.send_message(
+                sender=user,
+                conversation=conversation,
+                body="hello",
+                client_id=f"00000000-0000-4000-8000-00000000000{index}",
+            )
+        # Warm anything cached outside the view before counting.
+        signed_in.get("/api/messaging/conversations")
+        with CaptureQueriesContext(connection) as captured:
+            signed_in.get("/api/messaging/conversations")
+        return len(captured)
+
+    with_one = measure(1)
+    with_five = measure(4)
+
+    assert with_five == with_one, (
+        f"the inbox grew from {with_one} to {with_five} queries between one "
+        "conversation and five — something moved back inside the loop"
+    )
