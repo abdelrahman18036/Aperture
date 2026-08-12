@@ -99,6 +99,10 @@ export function MessageRow({
                 blurhash={message.media.blurhash}
                 durationMs={message.media.duration_ms}
                 label={message.media.alt_text}
+                // 256px in a thread: timecodes and a fullscreen button do
+                // not fit, and are not what anybody wants from a clip in a
+                // conversation.
+                compact
               />
             ) : message.media.width && message.media.height ? (
               <DevelopImage
