@@ -14,7 +14,7 @@ from __future__ import annotations
 from django.db.models import QuerySet
 from django.utils import timezone
 
-from stories.models import Story, StoryView
+from stories.models import Story, StoryReaction, StoryView
 from users.models import Follow, User
 from users.selectors import exclude_blocked
 
@@ -90,3 +90,13 @@ def viewers_of(story: Story, *, limit: int = VIEWER_PAGE) -> QuerySet[StoryView]
         .select_related("viewer", "viewer__avatar_media")
         .order_by("-id")[:limit]
     )
+
+
+def viewer_reactions(*, viewer: User, story_ids: list[int]) -> dict[int, str]:
+    """What this person reacted with, across a whole tray. One query."""
+    if not story_ids:
+        return {}
+    rows = StoryReaction.objects.filter(
+        user=viewer, story_id__in=story_ids
+    ).values_list("story_id", "emoji")
+    return dict(rows)

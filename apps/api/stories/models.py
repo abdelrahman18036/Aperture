@@ -143,3 +143,33 @@ class StoryView(models.Model):
 
     def __str__(self) -> str:
         return f"{self.viewer.pk} saw {self.story.pk}"
+
+
+class StoryReaction(models.Model):
+    """One emoji from one person on one story.
+
+    A row rather than a counter, for the same reason `StoryView` is: the
+    author wants to know *who*, and a reaction can be taken back.
+    """
+
+    id = models.BigIntegerField(primary_key=True, default=snowflake, editable=False)
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="reactions")
+    user = models.ForeignKey(
+        "users.User", on_delete=models.CASCADE, related_name="story_reactions"
+    )
+    #: Short enough for one emoji including a skin-tone modifier and a ZWJ
+    #: sequence, short enough not to be a text field in disguise.
+    emoji = models.CharField(max_length=16)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "story_reactions"
+        constraints = [
+            # One reaction per person per story; reacting again replaces it.
+            models.UniqueConstraint(
+                fields=["story", "user"], name="story_reactions_unique"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user.pk} {self.emoji} {self.story.pk}"

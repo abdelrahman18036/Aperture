@@ -15,6 +15,7 @@ from config.fields import SnowflakeField
 from links.serializers import LinkPreviewSerializer
 from media.serializers import MediaSerializer
 from stories.models import DEFAULT_BACKGROUND, STORY_BACKGROUNDS, Story
+from stories.services import REACTIONS
 from users.serializers import UserSerializer
 
 
@@ -30,6 +31,9 @@ class StorySerializer(serializers.ModelSerializer[Story]):
     #: than as a name, so adding a background is a server change alone.
     background_css = serializers.SerializerMethodField()
     link_preview = LinkPreviewSerializer(read_only=True, allow_null=True)
+    #: The emoji this viewer left, or blank. Read from context so a tray of
+    #: forty frames costs one query rather than forty.
+    viewer_reaction = serializers.SerializerMethodField()
 
     class Meta:
         model = Story
@@ -44,8 +48,14 @@ class StorySerializer(serializers.ModelSerializer[Story]):
             "link_preview",
             "created_at",
             "expires_at",
+            "viewer_reaction",
         )
         read_only_fields = fields
+
+    @extend_schema_field(serializers.CharField())
+    def get_viewer_reaction(self, story: Story) -> str:
+        reactions: dict[int, str] = self.context.get("viewer_reactions", {})
+        return reactions.get(story.pk, "")
 
     @extend_schema_field(serializers.CharField())
     def get_background_css(self, story: Story) -> str:
@@ -96,3 +106,18 @@ class StoryViewerSerializer(serializers.Serializer[dict[str, Any]]):
 
     viewer = UserSerializer(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
+
+
+class ReactToStorySerializer(serializers.Serializer[dict[str, Any]]):
+    emoji = serializers.ChoiceField(choices=[(e, e) for e in REACTIONS])
+
+
+class ReplyToStorySerializer(serializers.Serializer[dict[str, Any]]):
+    """A story reply, which is a direct message. See `services.reply`.
+
+    `client_id` is required for the same reason it is on `SendMessageSerializer`
+    — it is the only thing between a flaky network and a doubled message.
+    """
+
+    client_id = serializers.UUIDField()
+    body = serializers.CharField(max_length=4000)

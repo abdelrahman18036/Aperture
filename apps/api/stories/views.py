@@ -23,11 +23,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from config.auth import current_user
+from messaging.serializers import MessageSerializer
+from messaging.services import MessagingRejectedError
 from moderation.throttling import make_throttle
 from stories import selectors, services
 from stories.models import Story
 from stories.serializers import (
     CreateStorySerializer,
+    ReactToStorySerializer,
+    ReplyToStorySerializer,
     StorySerializer,
     StoryTrayEntrySerializer,
     StoryViewerSerializer,
@@ -86,7 +90,15 @@ class TrayView(APIView):
         )
 
         return Response(
-            StoryTrayEntrySerializer(entries, many=True).data  # type: ignore[arg-type]
+            StoryTrayEntrySerializer(
+                entries,  # type: ignore[arg-type]
+                many=True,
+                context={
+                    "viewer_reactions": selectors.viewer_reactions(
+                        viewer=viewer, story_ids=[story.pk for story in stories]
+                    )
+                },
+            ).data
         )
 
 
@@ -143,8 +155,93 @@ class AuthorStoriesView(APIView):
             # 403 keeps "this account exists" out of the reply.
             raise NotFound("No such account.")
 
-        stories = selectors.by_author(viewer=viewer, author=author)
-        return Response(StorySerializer(stories, many=True).data)
+        stories = list(selectors.by_author(viewer=viewer, author=author))
+        return Response(
+            StorySerializer(
+                stories,
+                many=True,
+                context={
+                    "viewer_reactions": selectors.viewer_reactions(
+                        viewer=viewer, story_ids=[story.pk for story in stories]
+                    )
+                },
+            ).data
+        )
+
+
+class StoryReactionView(APIView):
+    """`POST`/`DELETE /api/stories/{story_id}/react`."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _story(self, request: Request, story_id: int) -> Story:
+        story = selectors.live(current_user(request)).filter(pk=story_id).first()
+        if story is None:
+            raise NotFound("That story has expired or does not exist.")
+        return story
+
+    @extend_schema(
+        operation_id="stories_react",
+        request=ReactToStorySerializer,
+        responses={204: None, 400: None, 404: None},
+        description="React to a story. Reacting again replaces the reaction.",
+    )
+    def post(self, request: Request, story_id: int) -> Response:
+        form = ReactToStorySerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        try:
+            services.react(
+                story=self._story(request, story_id),
+                user=current_user(request),
+                emoji=form.validated_data["emoji"],
+            )
+        except services.StoryRejectedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        operation_id="stories_unreact",
+        responses={204: None, 404: None},
+        description="Take a reaction back. Idempotent.",
+    )
+    def delete(self, request: Request, story_id: int) -> Response:
+        services.unreact(
+            story=self._story(request, story_id), user=current_user(request)
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StoryReplyView(APIView):
+    """`POST /api/stories/{story_id}/reply` — answer a story in a DM."""
+
+    permission_classes = [IsAuthenticated]
+    # The same bucket messages use: a story reply *is* a message, so it should
+    # not be a way around the limit on sending them.
+    throttle_classes = [make_throttle("message")]
+
+    @extend_schema(
+        operation_id="stories_reply",
+        request=ReplyToStorySerializer,
+        responses={200: MessageSerializer, 400: None, 404: None},
+        description="Reply to a story. Lands in the direct conversation.",
+    )
+    def post(self, request: Request, story_id: int) -> Response:
+        story = selectors.live(current_user(request)).filter(pk=story_id).first()
+        if story is None:
+            raise NotFound("That story has expired or does not exist.")
+
+        form = ReplyToStorySerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        try:
+            message = services.reply(
+                story=story,
+                user=current_user(request),
+                body=form.validated_data["body"],
+                client_id=str(form.validated_data["client_id"]),
+            )
+        except (services.StoryRejectedError, MessagingRejectedError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(MessageSerializer(message).data)
 
 
 class StoryDetailView(APIView):

@@ -6,6 +6,8 @@ from stories.views import (
     AuthorStoriesView,
     CreateStoryView,
     StoryDetailView,
+    StoryReactionView,
+    StoryReplyView,
     StoryViewersView,
     TrayView,
 )
@@ -24,6 +26,16 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("create", CreateStoryView.as_view(), name="create"),
     path("by/<str:username>", AuthorStoriesView.as_view(), name="by-author"),
     path("<snowflake:story_id>", StoryDetailView.as_view(), name="detail"),
+    path(
+        "<snowflake:story_id>/react",
+        StoryReactionView.as_view(),
+        name="react",
+    ),
+    path(
+        "<snowflake:story_id>/reply",
+        StoryReplyView.as_view(),
+        name="reply",
+    ),
     path(
         "<snowflake:story_id>/viewers",
         StoryViewersView.as_view(),

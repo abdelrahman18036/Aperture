@@ -12,7 +12,16 @@ from django.utils import timezone
 from config import broadcast
 from links import services as link_services
 from media.models import Media
-from stories.models import DEFAULT_BACKGROUND, STORY_BACKGROUNDS, Story, StoryView
+from messaging.models import Message
+from notifications.models import Notification
+from notifications.services import notify, withdraw
+from stories.models import (
+    DEFAULT_BACKGROUND,
+    STORY_BACKGROUNDS,
+    Story,
+    StoryReaction,
+    StoryView,
+)
 from users.models import User
 
 
@@ -155,3 +164,82 @@ def remove_story(*, story: Story) -> Story:
     story.deleted_at = timezone.now()
     story.save(update_fields=["deleted_at"])
     return story
+
+
+# ---------------------------------------------------------------------------
+# Reactions and replies
+# ---------------------------------------------------------------------------
+
+#: What the picker offers. Server-side, because the notification carries the
+#: emoji through to the author's screen and an unbounded field there is a
+#: place to put anything at all.
+REACTIONS = ("❤️", "🔥", "😂", "😮", "😢", "👏")
+
+
+@transaction.atomic
+def react(*, story: Story, user: User, emoji: str) -> StoryReaction:
+    """React to a story, replacing whatever you reacted with before.
+
+    Replace rather than accumulate: the model's unique constraint says one
+    reaction per person per story, and changing your mind should read as a
+    correction rather than as two opinions.
+    """
+    if emoji not in REACTIONS:
+        raise StoryRejectedError("That is not one of the reactions.")
+
+    reaction, _created = StoryReaction.objects.update_or_create(
+        story=story, user=user, defaults={"emoji": emoji}
+    )
+
+    # Not `notify`'s dedupe: the emoji is the news, so switching from a heart
+    # to a fire should re-announce rather than be swallowed as a duplicate.
+    withdraw(recipient=story.author, actor=user, verb=Notification.Verb.STORY_REACTION)
+    notify(
+        recipient=story.author,
+        actor=user,
+        verb=Notification.Verb.STORY_REACTION,
+        story=story,
+        detail=emoji,
+    )
+    return reaction
+
+
+@transaction.atomic
+def unreact(*, story: Story, user: User) -> bool:
+    """Take a reaction back. False if there was none."""
+    deleted, _ = StoryReaction.objects.filter(story=story, user=user).delete()
+    if not deleted:
+        return False
+    withdraw(recipient=story.author, actor=user, verb=Notification.Verb.STORY_REACTION)
+    return True
+
+
+def reply(*, story: Story, user: User, body: str, client_id: str) -> Message:
+    """Answer a story in a direct message.
+
+    **A story reply is a DM and nothing else.** There is no separate inbox for
+    them, no second delivery path and no second unread count — it opens the
+    conversation the two of them already have, or starts one, and sends a
+    message that remembers which frame it was about.
+
+    Deliberately not `@transaction.atomic` here: `send_message` runs its own
+    transaction and publishes after committing it. Wrapping this would push
+    that publish out to the end of an outer block for no gain.
+    """
+    text = body.strip()
+    if not text:
+        raise StoryRejectedError("A reply needs something in it.")
+    if story.author_id == user.pk:
+        raise StoryRejectedError("That is your own story.")
+
+    from messaging import services as messaging_services
+
+    conversation = messaging_services.start_dm(initiator=user, other=story.author)
+    message, _ = messaging_services.send_message(
+        sender=user,
+        conversation=conversation,
+        client_id=client_id,
+        body=text,
+        replied_story=story,
+    )
+    return message
