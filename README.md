@@ -151,6 +151,42 @@ the plan Postgres chose:
 cd apps/api && uv run manage.py bench_feed
 ```
 
+Sweep the fan-in, which is the variable that decides whether a pull feed
+holds — `01-ARCHITECTURE.md` §7 warns that "someone following 5,000 accounts
+triggers a brutal fan-in on every scroll":
+
+```bash
+cd apps/api && uv run manage.py bench_feed --follows 5000
+```
+
+Measured on the development machine at 6,004 users / 120,000 posts / 200,000
+follow edges:
+
+| followees | p50 | p95 | p99 |
+|---|---|---|---|
+| 200 | 6.23 ms | 9.01 ms | 10.10 ms |
+| 1,000 | 6.32 ms | 9.45 ms | 10.41 ms |
+| 3,000 | 6.31 ms | 8.05 ms | 10.47 ms |
+| 5,000 | 6.10 ms | 8.50 ms | 10.21 ms |
+
+Flat across a 25× change in fan-in. §7 puts the trigger for hybrid push
+fanout at p99 above ~200 ms, so **it is not built** — and that is a
+measurement rather than a preference.
+
+The Redis feed cache from §7 phase 2 *is* built, and is off. Compare the two
+before turning it on:
+
+```bash
+cd apps/api && uv run manage.py bench_feed --cached
+```
+
+At this corpus it is about 2× slower (p50 30.72 ms against 16.13 ms), because
+caching post ids rather than rows means Postgres is queried either way — the
+Redis round trips add to the total instead of replacing it. That is the
+tradeoff that keeps a cache hit correct when a post is deleted or a block
+appears. Set `FEED_CACHE_ENABLED=1` when the sweep says the query has grown
+past it.
+
 Turbo can drive the JavaScript side of that from the root — `pnpm dev` runs
 every package's `dev` task — but the Django processes are usually clearer run
 directly.
