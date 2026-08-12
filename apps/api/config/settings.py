@@ -318,6 +318,41 @@ REALTIME_TICKET_TTL_SECONDS = 60
 REALTIME_URL = os.environ.get("REALTIME_URL", "ws://localhost:4000/ws")
 
 # ---------------------------------------------------------------------------
+# Calls — 01-ARCHITECTURE.md §9
+# ---------------------------------------------------------------------------
+#
+# LiveKit runs the SFU for group calls; 1:1 stays peer-to-peer with a TURN
+# fallback. Tokens are minted here with `livekit-api` — never in the browser,
+# never in the Node gateway. Self-hosted locally, LiveKit Cloud in production,
+# identical client SDK, so this is an endpoint swap rather than a rewrite.
+
+LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "ws://localhost:7880")
+LIVEKIT_API_KEY = os.environ.get("LIVEKIT_API_KEY", "devkey")
+LIVEKIT_API_SECRET = os.environ.get(
+    "LIVEKIT_API_SECRET", "devsecret_devsecret_devsecret_dev"
+)
+#: How long a room token stays usable. It only has to survive joining.
+LIVEKIT_TOKEN_TTL_SECONDS = 10 * 60
+
+# TURN. `TURN_STATIC_AUTH_SECRET` is shared with coturn the same way the
+# realtime ticket secret is shared with the gateway: both sides compute the
+# same HMAC and neither calls the other. See core/turn.py.
+TURN_HOST = os.environ.get("TURN_HOST", "localhost")
+TURN_TLS_PORT = int(os.environ.get("TURN_TLS_PORT", "443"))
+TURN_UDP_PORT = int(os.environ.get("TURN_UDP_PORT", "3478"))
+TURN_STATIC_AUTH_SECRET = os.environ.get(
+    "TURN_STATIC_AUTH_SECRET", "dev-only-insecure-turn-secret-0123456789abcdef"
+)
+STUN_URLS: tuple[str, ...] = tuple(
+    url for url in os.environ.get("STUN_URLS", "").split(",") if url
+)
+
+#: Above this many participants a call stops being peer-to-peer and goes
+#: through the SFU. Three is where the mesh stops being cheaper: every
+#: participant would otherwise hold n-1 encoders and n-1 uplinks.
+SFU_THRESHOLD = 3
+
+# ---------------------------------------------------------------------------
 # DRF and the OpenAPI schema — the type boundary
 # ---------------------------------------------------------------------------
 
