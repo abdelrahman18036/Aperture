@@ -17,9 +17,14 @@ type Post = Schemas["Post"];
  *
  * The feed answers "what did the people I chose post?". This answers "who
  * else is here?", and the difference has to show in the layout or it is the
- * same page twice. So: the contact sheet's tight 2px gutters rather than the
- * feed's full-width prints, because scanning many is a different act from
- * reading one.
+ * same page twice — which is exactly what it was: an identical grid of
+ * identical squares, distinguishable from a profile only by the heading.
+ *
+ * So every seventh tile is printed large. That is not decoration: a wall of
+ * equal squares has no entry point and the eye slides off it, and the large
+ * frames give it a rhythm to scan by. It stays off below `md`, where two
+ * columns of a three-column grid is most of the row and the effect is a
+ * lopsided page rather than a rhythm.
  *
  * No frame numbers. `02-DESIGN-SYSTEM.md` allows them on a profile because a
  * contact sheet genuinely *is* a numbered sequence — someone's roll of film.
@@ -107,8 +112,25 @@ export function Explore() {
       <h1 className="px-4 pb-4 font-display text-display-l text-ink">Explore</h1>
 
       {/* Three on a phone, more once there is room — the cells stay square
-          and the grid stops being a 640px ribbon on a 1920px screen. */}
-      <ul className="grid grid-cols-3 gap-[2px] md:grid-cols-4 xl:grid-cols-5">
+          and the grid stops being a 640px ribbon on a 1920px screen.
+
+          `px-4` to match the heading. Without it the grid ran flush into the
+          nav rail on one side and off the window on the other, which read as
+          a page that had lost its margins rather than as a full-bleed choice.
+
+          `grid-flow-dense` so the gap a large tile leaves beside it is filled
+          by the next small one rather than left as a hole. */}
+      <ul
+        className={cn(
+          "grid grid-cols-3 gap-[2px] px-4 md:grid-cols-4 xl:grid-cols-5",
+          "grid-flow-dense auto-rows-[1fr]",
+          // Every seventh, from `md` up. A CSS selector rather than a prop,
+          // because the rhythm is a property of the grid rather than of any
+          // one post — and a JS `index % 7` would have to be recomputed
+          // against a column count this stylesheet already knows.
+          "md:[&>li:nth-child(7n+1)]:col-span-2 md:[&>li:nth-child(7n+1)]:row-span-2",
+        )}
+      >
         {posts.map((post) => (
           <PostTile key={post.id} post={post} />
         ))}

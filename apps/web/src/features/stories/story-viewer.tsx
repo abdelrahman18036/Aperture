@@ -446,6 +446,15 @@ export function StoryViewer({
           <p
             className={cn(
               "max-w-prose px-8 text-center text-ink [text-wrap:balance]",
+              // Above the tap halves, which are siblings rendered after this
+              // and so were painted over every link in a story — the text
+              // looked clickable, and tapping it advanced the frame instead.
+              //
+              // Transparent to pointers except on the links themselves, so
+              // tapping the *words* still advances. Raising the whole block
+              // would put a dead zone the size of a paragraph in the middle
+              // of the one gesture this screen is built around.
+              "relative z-10 pointer-events-none [&_a]:pointer-events-auto",
               story.text.length > 280
                 ? "text-body"
                 : story.text.length > 90

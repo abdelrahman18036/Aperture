@@ -161,7 +161,12 @@ export function ProfileScreen({ username }: { username: string }) {
         : "Follow";
 
   return (
-    <div className="flex flex-col gap-10 py-10">
+    // `data-wide`, like explore and the queues. A contact sheet is a grid of
+    // many small frames, and in the 640px feed column it was six of them with
+    // a third of the window empty beside it. The feed column exists so a
+    // photograph never changes size mid-scroll; nothing on this page is that
+    // photograph.
+    <div data-wide className="flex flex-col gap-10 px-4 py-10">
       <header className="flex flex-col gap-5">
         <div className="flex items-center gap-6">
           {/* A live story turns the avatar into a way in — the ring is the
