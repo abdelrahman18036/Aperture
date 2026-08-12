@@ -250,14 +250,23 @@ cat docs/verify-call-media.js
 Measured on the development machine, two `RTCPeerConnection`s and the ICE
 servers from a live `POST /api/calls/start`:
 
-| | selected pair | video | audio |
-|---|---|---|---|
-| default policy | `host` / udp | 590 frames, 239 KB | 79 KB, 985 packets |
-| `iceTransportPolicy: "relay"` | `relay` / udp | 356 frames, 45 KB | 48 KB |
+| ICE servers offered | policy | selected pair | video | audio |
+|---|---|---|---|---|
+| all | default | `host` / udp | 590 frames, 239 KB | 79 KB |
+| all | `relay` | `relay` / udp | 356 frames, 45 KB | 48 KB |
+| **`turns:` only** | **`relay`** | **`relay` / tls** | **416 frames, 52 KB** | **56 KB** |
 
-The second row is the one worth keeping: under `relay` nothing connects unless
-coturn allocates and forwards, so frames arriving proves the relay path end to
-end with a credential Django minted.
+The last row is the one §9 cares about. With only the `turns:` server offered
+and relay-only policy, nothing can connect unless coturn allocates **over TLS
+on 443** and forwards every packet — so frames arriving proves the TCP/443
+path end to end, with a credential Django minted. That is the transport that
+survives a network dropping UDP, and it is the reason the connection rate does
+not quietly sit near 70%.
+
+Reaching that row needs a certificate the browser trusts. See
+`infra/coturn/turnserver.conf` — and note both traps recorded there: issue the
+certificate from the same shell that ran `mkcert -install`, and restart the
+browser afterwards, because a running one has already cached the root store.
 
 ---
 
