@@ -29,7 +29,11 @@ type Post = Schemas["Post"];
  * open it is information you want *before* deciding to.
  */
 export function PostTile({ post }: { post: Post }) {
-  const media = post.media[0];
+  // A repost carries no media of its own — the original does. Without this
+  // fallthrough every repost is an empty square in the grid, which is what
+  // the contact sheet showed the first time one existed.
+  const source = post.reposted_from ?? post;
+  const media = source.media[0];
   const isVideo = media?.kind === "video";
 
   return (
@@ -38,8 +42,8 @@ export function PostTile({ post }: { post: Post }) {
         href={`/p/${post.id}`}
         className="group block size-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-safelight-dim"
         aria-label={
-          `${post.author.username}: ${post.caption || "post"} — ` +
-          `${String(post.like_count)} likes, ${String(post.comment_count)} comments`
+          `${source.author.username}: ${source.caption || "post"} — ` +
+          `${String(source.like_count)} likes, ${String(source.comment_count)} comments`
         }
       >
         {media === undefined ? (
@@ -88,17 +92,17 @@ export function PostTile({ post }: { post: Post }) {
           )}
         >
           <span className="truncate meta text-ink">
-            {post.author.username}
+            {source.author.username}
           </span>
           <span className="flex items-center gap-3 meta text-ink-dim">
             <span className="flex items-center gap-1">
               <Heart className="size-3" />
-              <span className="tabular-nums">{compact(post.like_count)}</span>
+              <span className="tabular-nums">{compact(source.like_count)}</span>
             </span>
             <span className="flex items-center gap-1">
               <MessageCircle className="size-3" />
               <span className="tabular-nums">
-                {compact(post.comment_count)}
+                {compact(source.comment_count)}
               </span>
             </span>
           </span>

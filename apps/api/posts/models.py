@@ -39,10 +39,17 @@ class Post(models.Model):
     #: What this is a repost of, if it is one.
     #:
     #: A repost is a `Post` rather than its own model, because it *is* one:
-    #: it appears in feeds, carries its own likes and comments, and can be
-    #: deleted independently. A separate table would mean every read path
-    #: unioning two sources forever. `CASCADE` — a repost of a hard-deleted
-    #: post has nothing left to show.
+    #: it appears in feeds, is cursor-paginated by the same query and can be
+    #: deleted through every path that already exists. A separate table would
+    #: mean every read path unioning two sources forever.
+    #:
+    #: **Likes and comments belong to the original, not to the repost.** The
+    #: UI routes both there — reposting something must not fork its
+    #: conversation into as many threads as there are reposts, each invisible
+    #: from the others. So a repost row's own like and comment counters stay
+    #: at zero by construction.
+    #:
+    #: `CASCADE` — a repost of a hard-deleted post has nothing left to show.
     reposted_from = models.ForeignKey(
         "self",
         null=True,

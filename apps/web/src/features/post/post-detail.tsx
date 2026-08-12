@@ -48,6 +48,18 @@ export function PostDetail({ postId }: { postId: string }) {
   const { viewerId } = useRealtimeApi();
   const router = useRouter();
 
+  /**
+   * Whose conversation this is.
+   *
+   * A repost routes every action to the original — the like, the comment
+   * count, the repost count — so the comments have to go to the same place.
+   * Threading them onto the repost instead would split one conversation into
+   * as many as there are reposts, each invisible from the others.
+   *
+   * Null until the post loads, which is why the comment effect waits on it.
+   */
+  const subjectId = post === null ? null : (post.reposted_from?.id ?? post.id);
+
   useEffect(() => {
     void api
       .GET("/api/posts/{post_id}", { params: { path: { post_id: postId } } })
@@ -61,15 +73,16 @@ export function PostDetail({ postId }: { postId: string }) {
   }, [postId]);
 
   const loadComments = useCallback(() => {
+    if (subjectId === null) return;
     void api
       .GET("/api/posts/{post_id}/comments", {
-        params: { path: { post_id: postId } },
+        params: { path: { post_id: subjectId } },
       })
       .then((response) => {
         if (response.data === undefined) return;
         setComments(response.data.comments);
       });
-  }, [postId]);
+  }, [subjectId]);
 
   useEffect(loadComments, [loadComments]);
 
@@ -102,9 +115,10 @@ export function PostDetail({ postId }: { postId: string }) {
     setSending(true);
     setError(null);
 
+    if (subjectId === null) return;
     void api
       .POST("/api/posts/{post_id}/comments", {
-        params: { path: { post_id: postId } },
+        params: { path: { post_id: subjectId } },
         body: { body },
       })
       .then((response) => {

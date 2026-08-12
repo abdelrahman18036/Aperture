@@ -1,6 +1,8 @@
 "use client";
 
-import { Flag, Trash2 } from "lucide-react";
+import { EyeOff, Flag, Info, Reply, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
 import {
   Button,
@@ -12,6 +14,7 @@ import {
 
 import { ReportDialog } from "@/features/moderation/report-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
+import { relativeTime } from "@/lib/time";
 
 import type { Message } from "./use-conversation";
 import type { PendingMessage } from "./use-conversation";
@@ -42,15 +45,28 @@ export function MessageRow({
   mine,
   showSender,
   onUnsend,
+  onHide,
+  onReply,
+  quoted,
   seen = false,
 }: {
   message: Message;
   mine: boolean;
   showSender: boolean;
   onUnsend: (seq: number) => void;
+  /** Stop seeing this one. Available on anybody's message, unlike unsend. */
+  onHide: (seq: number) => void;
+  onReply: (message: Message) => void;
+  /** The message this one answers, when we still hold it. */
+  quoted?: Message;
   /** Everyone else has read this. Only ever set on your own last message. */
   seen?: boolean;
 }) {
+  // Local, and deliberately not lifted: which row has its details open is
+  // nobody else's business, and holding it in the conversation would mean
+  // every message re-rendering when one of them is expanded.
+  const [showInfo, setShowInfo] = useState(false);
+
   return (
     <li
       className={cn(
@@ -80,6 +96,62 @@ export function MessageRow({
         {showSender && !mine && (
           <p className="meta mb-0.5">{message.sender.username}</p>
         )}
+        {/* What this answers. A quote rather than a jump link: the message
+            being replied to is usually two rows up, and the point is to say
+            *which* one, not to navigate. */}
+        {message.reply_to_seq === null ? null : (
+          <p
+            className={cn(
+              "mb-1 block truncate border-l-2 border-line pl-2 text-left meta",
+              mine && "ml-auto",
+            )}
+          >
+            {quoted === undefined
+              ? `replying to #${String(message.reply_to_seq)}`
+              : `${quoted.sender.username}: ${quoted.body || "attachment"}`}
+          </p>
+        )}
+
+        {/* A story this answers. Their frame expires; the reply does not, so
+            this falls back to saying nothing rather than to a broken chip. */}
+        {message.replied_story === null ? null : (
+          <p className={cn("mb-1 meta", mine && "text-right")}>
+            replied to a story
+          </p>
+        )}
+
+        {/* A post somebody sent into the thread. Rendered as a link with its
+            own thumbnail rather than as a full post: a conversation is not a
+            feed, and a photograph at feed size would take the thread over. */}
+        {message.shared_post === null ? null : (
+          <Link
+            href={`/p/${message.shared_post.id}`}
+            className="mb-1 flex w-64 max-w-full items-center gap-3 overflow-hidden rounded-image border border-line p-2 text-left transition-colors duration-[var(--duration-hover)] hover:border-ink-faint"
+          >
+            {/* A plain `img` and no develop-in, for the same reason the
+                activity list uses one: a 40px pointer to a post is not a
+                photograph being presented. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={
+                message.shared_post.media[0]?.sources.at(-1)?.url ??
+                message.shared_post.media[0]?.original_url ??
+                ""
+              }
+              alt=""
+              className="size-10 shrink-0 rounded-image object-cover"
+            />
+            <span className="flex min-w-0 flex-col">
+              <span className="meta">
+                {message.shared_post.author.username}
+              </span>
+              <span className="truncate text-body text-ink">
+                {message.shared_post.caption || "a photograph"}
+              </span>
+            </span>
+          </Link>
+        )}
+
         {/* An attachment, when there is one. `Message.media` has been on
             the model and in the send payload since Phase 6 and nothing ever
             set it or drew it — a photograph could be attached by an API
@@ -147,7 +219,47 @@ export function MessageRow({
               something happening now rather than something you did, and the
               design system puts that on the cool side. */}
           {seen ? <span className="ml-2 text-daylight">seen</span> : null}
+          <button
+            type="button"
+            onClick={() => {
+              setShowInfo((current) => !current);
+            }}
+            aria-expanded={showInfo}
+            aria-label={`Details for message ${String(message.seq)}`}
+            className="ml-2 align-middle text-ink-dim transition-colors duration-[var(--duration-hover)] hover:text-ink"
+          >
+            <Info className="inline size-3" aria-hidden="true" />
+          </button>
         </p>
+
+        {/* When it was sent, and whether it has been read. Behind a toggle
+            rather than always on: a thread where every line carries two
+            timestamps is a log file, not a conversation. */}
+        {showInfo ? (
+          <dl
+            className={cn(
+              "mt-1 flex flex-col gap-0.5 meta",
+              mine && "items-end",
+            )}
+          >
+            <div className="flex gap-2">
+              <dt>sent</dt>
+              <dd className="text-ink-dim">
+                {new Date(message.created_at).toLocaleString("en-GB")}
+                {" · "}
+                {relativeTime(message.created_at)}
+              </dd>
+            </div>
+            {mine ? (
+              <div className="flex gap-2">
+                <dt>seen</dt>
+                <dd className={seen ? "text-daylight" : "text-ink-dim"}>
+                  {seen ? "yes" : "not yet"}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
       </div>
 
       {/* Only theirs. Reporting your own message is refused by the service
@@ -159,38 +271,71 @@ export function MessageRow({
       {/* Your own message is withdrawn, not reported. The endpoint has
           existed since Phase 6 and nothing called it, so there was no way to
           take back a message you had just sent. */}
-      {mine ? (
+      <div
+        className={cn(
+          "flex self-center opacity-100 transition-opacity duration-[var(--duration-hover)]",
+          "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+        )}
+      >
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`Unsend message ${String(message.seq)}`}
-          className="self-center opacity-100 transition-opacity duration-[var(--duration-hover)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+          aria-label={`Reply to message ${String(message.seq)}`}
           onClick={() => {
-            onUnsend(message.seq);
+            onReply(message);
           }}
         >
-          <Trash2 aria-hidden="true" />
+          <Reply aria-hidden="true" />
         </Button>
-      ) : (
-        <ReportDialog
-          subjectType="message"
-          subjectId={message.id}
-          trigger={
-            <DialogTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="self-center opacity-100 transition-opacity duration-[var(--duration-hover)] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-                  aria-label={`Report this message from ${message.sender.username}`}
-                />
-              }
-            >
-              <Flag aria-hidden="true" />
-            </DialogTrigger>
-          }
-        />
-      )}
+
+        {/* Two deletions, two controls. "Delete for me" is on every message
+            including your own — you may want a photograph out of your own
+            history without taking it back from the person you sent it to —
+            and "unsend" is only ever on yours, because it changes what
+            somebody else can see. Collapsing them into one control with a
+            confirmation is how people unsend things they meant to hide. */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Delete message ${String(message.seq)} for you only`}
+          onClick={() => {
+            onHide(message.seq);
+          }}
+        >
+          <EyeOff aria-hidden="true" />
+        </Button>
+
+        {mine ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Unsend message ${String(message.seq)}`}
+            onClick={() => {
+              onUnsend(message.seq);
+            }}
+          >
+            <Trash2 aria-hidden="true" />
+          </Button>
+        ) : (
+          <ReportDialog
+            subjectType="message"
+            subjectId={message.id}
+            trigger={
+              <DialogTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Report this message from ${message.sender.username}`}
+                  />
+                }
+              >
+                <Flag aria-hidden="true" />
+              </DialogTrigger>
+            }
+          />
+        )}
+      </div>
     </li>
   );
 }

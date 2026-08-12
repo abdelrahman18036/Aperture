@@ -40,6 +40,8 @@ export interface PendingMessage {
   body: string;
   /** An attachment already uploaded and processed, awaiting its message. */
   mediaId?: string | null;
+  /** The `seq` this answers, so the optimistic row shows the quote too. */
+  replyToSeq?: number | null;
   /** Set when the send failed and the user can retry. */
   failed: boolean;
 }
@@ -59,10 +61,18 @@ export interface ConversationState {
   /** Seed presence from the inbox payload. */
   setOnline: (ids: string[] | undefined) => void;
   loading: boolean;
-  send: (body: string, mediaId?: string | null) => void;
+  send: (body: string, mediaId?: string | null, replyToSeq?: number | null) => void;
   retry: (clientId: string) => void;
   /** Withdraw one of your own messages. Yours only — the service checks. */
   unsend: (seq: number) => void;
+  /**
+   * Stop seeing a message, without touching what anybody else sees.
+   *
+   * Works on anybody's message, unlike `unsend`. The two are genuinely
+   * different operations, which is why they are two functions rather than one
+   * with a flag — a flag would eventually be passed wrong.
+   */
+  hide: (seq: number) => void;
   noteTyping: () => void;
   loadOlder: () => void;
   hasOlder: boolean;
@@ -286,6 +296,28 @@ export function useConversation(
     [conversationId, drop],
   );
 
+  const hide = useCallback(
+    (seq: number) => {
+      void api
+        .DELETE(
+          "/api/messaging/conversations/{conversation_id}/messages/{seq}",
+          {
+            params: {
+              path: { conversation_id: conversationId, seq },
+              query: { scope: "me" },
+            },
+          },
+        )
+        .then((response) => {
+          // No socket event follows this one — hiding is a private decision
+          // and the room is told nothing — so dropping it locally is the
+          // only thing that makes it disappear before the next fetch.
+          if (response.response.status === 204) drop(seq);
+        });
+    },
+    [conversationId, drop],
+  );
+
   const {
     state: connection,
     sendTyping,
@@ -330,11 +362,22 @@ export function useConversation(
   }, [bySeq, conversationId]);
 
   const post = useCallback(
-    (clientId: string, body: string, mediaId?: string | null) => {
+    (
+      clientId: string,
+      body: string,
+      mediaId?: string | null,
+      replyToSeq?: number | null,
+    ) => {
       void api
         .POST("/api/messaging/conversations/{conversation_id}/messages", {
           params: { path: { conversation_id: conversationId } },
-          body: { client_id: clientId, body, media_id: mediaId ?? null },
+          body: {
+            client_id: clientId,
+            body,
+            media_id: mediaId ?? null,
+            reply_to_seq: replyToSeq ?? null,
+            shared_post_id: null,
+          },
         })
         .then((response) => {
           if (response.data === undefined) {
@@ -355,7 +398,7 @@ export function useConversation(
   );
 
   const send = useCallback(
-    (body: string, mediaId?: string | null) => {
+    (body: string, mediaId?: string | null, replyToSeq?: number | null) => {
       const trimmed = body.trim();
       // An attachment is a message on its own. The service asks only that a
       // message have *something* in it, and requiring a caption to send a
@@ -369,9 +412,9 @@ export function useConversation(
       const clientId = newClientId();
       setPending((current) => [
         ...current,
-        { client_id: clientId, body: trimmed, mediaId, failed: false },
+        { client_id: clientId, body: trimmed, mediaId, replyToSeq, failed: false },
       ]);
-      post(clientId, trimmed, mediaId);
+      post(clientId, trimmed, mediaId, replyToSeq);
       sendTyping(conversationId, false);
     },
     [conversationId, post, sendTyping],
@@ -388,7 +431,7 @@ export function useConversation(
       );
       // Same client_id deliberately. If the first attempt actually landed,
       // the server returns that message instead of writing a second one.
-      post(clientId, item.body, item.mediaId);
+      post(clientId, item.body, item.mediaId, item.replyToSeq);
     },
     [pending, post],
   );
@@ -443,6 +486,7 @@ export function useConversation(
     send,
     retry,
     unsend,
+    hide,
     seenUpToSeq,
     setOthersRead: seedOthersRead,
     online,

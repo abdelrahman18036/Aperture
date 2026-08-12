@@ -14,6 +14,7 @@ import { relativeTime } from "@/lib/time";
 import { MessageRow, PendingRow } from "./message-row";
 import { TypingLine } from "./typing-dots";
 import { useConversation } from "./use-conversation";
+import type { Message } from "./use-conversation";
 
 /**
  * One thread: history above, composer below, live in between.
@@ -59,6 +60,7 @@ export function Conversation({
     send,
     retry,
     unsend,
+    hide,
     seenUpToSeq,
     setOthersRead,
     online,
@@ -137,11 +139,21 @@ export function Conversation({
     [uploadMedia],
   );
 
+  /**
+   * What the composer is answering, if anything.
+   *
+   * The whole message rather than its `seq`, so the strip above the field can
+   * quote it without looking it back up — and so it still reads correctly if
+   * the message it answers scrolls out of what we hold.
+   */
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+
   function submit(event: React.FormEvent): void {
     event.preventDefault();
-    send(draft, attachment?.id);
+    send(draft, attachment?.id, replyTo?.seq ?? null);
     setDraft("");
     setAttachment(null);
+    setReplyTo(null);
   }
 
   return (
@@ -208,6 +220,14 @@ export function Conversation({
               message={message}
               mine={message.sender.id === viewerId}
               onUnsend={unsend}
+              onHide={hide}
+              onReply={setReplyTo}
+              // What it answers, when we still hold it. `seq` is dense and
+              // sorted, so this is a lookup rather than a scan — and
+              // undefined is a fine answer: the row falls back to the number.
+              quoted={messages.find(
+                (candidate) => candidate.seq === message.reply_to_seq,
+              )}
               // Only the last of your own messages carries it. A "Seen"
               // under every line is noise; under the newest one it is the
               // single fact you wanted.
@@ -233,6 +253,26 @@ export function Conversation({
         // and it is one Map lookup against members we already hold.
         names={typing.map((id) => names.get(id) ?? "Someone")}
       />
+
+      {/* What the next message answers. Above the field rather than inside
+          it, so the quote does not fight the text being typed. */}
+      {replyTo === null ? null : (
+        <div className="flex items-center gap-3 border-t border-line px-4 py-2">
+          <span className="min-w-0 flex-1 truncate border-l-2 border-safelight pl-2 meta">
+            replying to {replyTo.sender.username}: {replyTo.body || "attachment"}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Stop replying"
+            onClick={() => {
+              setReplyTo(null);
+            }}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+      )}
 
       {/* What is attached but not yet sent. Shown rather than implied: an
           attach button that silently arms itself is a button people press
@@ -305,9 +345,10 @@ export function Conversation({
             // is correct for a document and wrong for a conversation.
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              send(draft, attachment?.id);
+              send(draft, attachment?.id, replyTo?.seq ?? null);
               setDraft("");
               setAttachment(null);
+              setReplyTo(null);
             }
           }}
           placeholder="Write a message"
