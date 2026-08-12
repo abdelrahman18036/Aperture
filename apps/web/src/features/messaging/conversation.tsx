@@ -1,6 +1,7 @@
 "use client";
 
 import { Phone, SendHorizontal } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Button, cn } from "@repo/ui";
@@ -77,11 +78,26 @@ export function Conversation({
     [session.call, viewerId],
   );
 
+  /**
+   * `?relay=1` forces every candidate through TURN.
+   *
+   * This phase's verification asks for exactly this, and putting it in the
+   * product rather than in a one-off script means the check stays runnable:
+   * a call that connects under `relay` proves the TCP/443 path works, which
+   * is the path that survives a network dropping UDP.
+   *
+   * Harmless to leave in. It only *restricts* which candidates are tried, so
+   * the worst a user can do with it is make their own call take a slower
+   * route — which, on a hostile network, is sometimes what they want.
+   */
+  const relayOnly = useSearchParams().get("relay") === "1";
+
   const peer = usePeerCall({
     call: session.call,
     viewerId,
     peerId,
     sendSignal: sendCallSignal,
+    relayOnly,
   });
 
   const sfu = useSfuCall(session.call);
