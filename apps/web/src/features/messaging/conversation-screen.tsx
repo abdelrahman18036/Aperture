@@ -74,6 +74,10 @@ export function ConversationScreen({
       viewerId={viewerId}
       title={title}
       names={names}
+      // Where everyone else had read when the thread opened. The socket takes
+      // over from here; without this the first paint claims nothing has been
+      // seen, and then corrects itself the moment somebody reads something.
+      othersRead={summary.others_read}
     />
   );
 }

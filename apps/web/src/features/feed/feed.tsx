@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { Skeleton } from "@repo/ui";
+import { Skeleton, Spinner } from "@repo/ui";
 
 import { FeedPost } from "./feed-post";
 import { useFeed } from "./use-feed";
@@ -70,8 +70,16 @@ export function Feed() {
         <p className="py-16 text-body text-danger">{error}</p>
       ) : null}
 
-      {loading || !initialised ? (
-        <FeedSkeleton count={posts.length === 0 ? 2 : 1} />
+      {/* Skeletons for the first paint, a spinner for every page after.
+          They answer different questions — "what is coming" versus "is
+          anything still happening" — and a second full skeleton post below
+          content you are already reading just looks like a broken render. */}
+      {!initialised ? <FeedSkeleton count={2} /> : null}
+
+      {initialised && loading ? (
+        <div className="flex justify-center py-10">
+          <Spinner label="Loading more posts" />
+        </div>
       ) : null}
 
       {initialised && posts.length === 0 && error === null ? (

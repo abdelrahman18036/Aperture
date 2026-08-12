@@ -581,6 +581,9 @@ export interface components {
             readonly last_read_seq: number;
             readonly unread_count: number;
             readonly last_message: components["schemas"]["Message"] | null;
+            readonly others_read: {
+                [key: string]: number;
+            };
         };
         CreateCommentRequest: {
             body: string;

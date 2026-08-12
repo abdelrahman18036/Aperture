@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Button, Input, Skeleton } from "@repo/ui";
+import { Button, Input, Skeleton, TabBar } from "@repo/ui";
+import type { TabDefinition } from "@repo/ui";
 
 import { UserAvatar } from "@/features/profile/user-avatar";
 import { useAvatarUpload } from "./use-avatar-upload";
@@ -33,6 +34,21 @@ interface CurrentUser {
 
 /** Matches `users.selectors.pending_requests_for`'s own limit. */
 const REQUEST_PAGE = 50;
+
+type Tab = "profile" | "requests" | "account";
+
+/**
+ * Three panels rather than one long scroll.
+ *
+ * Requests earns its own tab because it is a *queue* — a thing with a count
+ * that you work through — and burying a queue at the bottom of a settings
+ * page is how it stops being worked through. The badge is the point.
+ */
+const TABS: readonly TabDefinition<Tab>[] = [
+  { id: "profile", label: "Profile" },
+  { id: "requests", label: "Requests" },
+  { id: "account", label: "Account" },
+];
 
 interface PendingRequest {
   follower: { username: string; display_name: string };
@@ -68,6 +84,7 @@ export function SettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [tab, setTab] = useState<Tab>("profile");
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const avatarInput = useRef<HTMLInputElement | null>(null);
@@ -197,6 +214,15 @@ export function SettingsScreen() {
         <p className="meta">signed in as {me.username}</p>
       </header>
 
+      <TabBar
+        tabs={TABS}
+        active={tab}
+        onSelect={setTab}
+        badges={{ requests: requests.length }}
+      />
+
+      {tab === "profile" ? (
+        <>
       <Section
         title="Avatar"
         note="a square photograph — everything else is cropped to it"
@@ -307,7 +333,10 @@ export function SettingsScreen() {
           </div>
         </form>
       </Section>
+        </>
+      ) : null}
 
+      {tab === "requests" ? (
       <Section
         title="Follow requests"
         // The API caps this at fifty, so past that the count is a floor
@@ -357,7 +386,10 @@ export function SettingsScreen() {
           ))}
         </ul>
       </Section>
+      ) : null}
 
+      {tab === "account" ? (
+        <>
       <Section title="Session" note="this browser only">
         <div>
           {/* There was no way to sign out at all — the endpoint has existed
@@ -419,6 +451,8 @@ export function SettingsScreen() {
           </div>
         )}
       </Section>
+        </>
+      ) : null}
     </div>
   );
 }

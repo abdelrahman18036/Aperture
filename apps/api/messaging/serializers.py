@@ -55,6 +55,10 @@ class ConversationSerializer(serializers.Serializer[dict[str, Any]]):
     last_read_seq = serializers.IntegerField(read_only=True)
     unread_count = serializers.IntegerField(read_only=True)
     last_message = MessageSerializer(read_only=True, allow_null=True)
+    #: user id (string) -> how far that member has read. Everyone but you.
+    others_read = serializers.DictField(
+        child=serializers.IntegerField(), read_only=True
+    )
 
 
 class MessagePageSerializer(serializers.Serializer[dict[str, Any]]):
@@ -119,6 +123,7 @@ def conversation_payload(
     members: list[Any],
     unread: int,
     last_message: Message | None,
+    others_read: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Assemble the inbox row. Formatting, not logic."""
     conversation: Conversation = member.conversation
@@ -137,4 +142,10 @@ def conversation_payload(
         "last_message": (
             MessageSerializer(last_message).data if last_message else None
         ),
+        #: How far every *other* member has read, keyed by user id as a
+        #: string. `last_read_seq` above is only your own, which is enough to
+        #: count what you have not read and no use at all for showing whether
+        #: what you sent has been seen. The socket keeps this current with
+        #: `message.read`; this is the value it starts from.
+        "others_read": others_read or {},
     }

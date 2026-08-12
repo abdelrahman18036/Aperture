@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { PostTile } from "@/features/explore/post-tile";
 
-import { DevelopImage } from "@repo/ui";
 
 import type { Post } from "@/features/feed/use-feed";
 
@@ -46,34 +45,16 @@ export function ContactSheet({ posts }: { posts: Post[] }) {
             {String(rowIndex * 3 + 1).padStart(2, "0")}
           </span>
 
-          <div className="grid flex-1 grid-cols-3 gap-[2px]">
-            {row.map((post) => {
-              const image = post.media[0];
-              return (
-                <Link
-                  key={post.id}
-                  href={`/p/${post.id}`}
-                  className="block"
-                  aria-label={image?.alt_text || "Open post"}
-                >
-                  {image?.width && image.height ? (
-                    <DevelopImage
-                      src={image.sources.at(-1)?.url ?? image.original_url ?? ""}
-                      sources={image.sources}
-                      alt={image.alt_text}
-                      // Square cells: a contact sheet is a grid of frames, not
-                      // a masonry wall.
-                      width={1}
-                      height={1}
-                      blurhash={image.blurhash}
-                      dominantColor={image.dominant_color}
-                      sizes="(max-width: 640px) 33vw, 210px"
-                    />
-                  ) : null}
-                </Link>
-              );
-            })}
-          </div>
+          {/* The same tile the explore grid uses. It was a bare
+              `DevelopImage` guarded on `width && height`, which a video row
+              satisfies — so a video post rendered an image element pointed at
+              image derivatives that do not exist for it, and the cell came
+              out solid grey. */}
+          <ul className="grid flex-1 grid-cols-3 gap-[2px]">
+            {row.map((post) => (
+              <PostTile key={post.id} post={post} />
+            ))}
+          </ul>
         </div>
       ))}
     </div>

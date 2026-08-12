@@ -105,6 +105,9 @@ class ConversationListView(APIView):
                     members=others,
                     unread=unread.get(member.conversation_id, 0),
                     last_message=last,
+                    others_read=selectors.read_positions(
+                        conversation=member.conversation, viewer=viewer
+                    ),
                 )
             )
         return Response(rows)
@@ -149,6 +152,9 @@ class ConversationListView(APIView):
                 members=others,
                 unread=0,
                 last_message=None,
+                others_read=selectors.read_positions(
+                    conversation=conversation, viewer=viewer
+                ),
             ),
             status=status.HTTP_201_CREATED,
         )

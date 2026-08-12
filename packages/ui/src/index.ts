@@ -34,6 +34,9 @@ export {
   DialogTrigger,
 } from "./primitives/dialog";
 export { Skeleton } from "./primitives/skeleton";
+export { Spinner } from "./primitives/spinner";
+export { TabBar } from "./primitives/tab-bar";
+export type { TabDefinition } from "./primitives/tab-bar";
 export { Grain } from "./primitives/grain";
 
 export { AmbientGlow } from "./media/ambient-glow";

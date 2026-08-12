@@ -1971,6 +1971,13 @@
                             }
                         ],
                         "readOnly": true
+                    },
+                    "others_read": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer"
+                        },
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -1980,6 +1987,7 @@
                     "last_message_seq",
                     "last_read_seq",
                     "members",
+                    "others_read",
                     "title",
                     "unread_count"
                 ]

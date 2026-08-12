@@ -48,6 +48,10 @@ export interface ConversationState {
   connection: ConnectionState;
   /** User ids currently typing, excluding you. */
   typing: string[];
+  /** Everyone else has read up to and including this `seq`. 0 for nobody. */
+  seenUpToSeq: number;
+  /** Seed the read positions from the inbox payload. */
+  setOthersRead: (positions: Record<string, number>) => void;
   loading: boolean;
   send: (body: string) => void;
   retry: (clientId: string) => void;
@@ -86,6 +90,8 @@ export function useConversation(
     new Map(),
   );
   const [loading, setLoading] = useState(true);
+  /** user id -> how far they have read. Seeded by the API, kept by the socket. */
+  const [othersRead, setOthersRead] = useState<Map<string, number>>(new Map());
   /** Set once a scrollback page comes back empty. See `hasOlder` below. */
   const [exhausted, setExhausted] = useState(false);
 
@@ -196,6 +202,26 @@ export function useConversation(
       if (event.type === "message.deleted") {
         if (event.conversation_id !== conversationId) return;
         drop(event.seq);
+        return;
+      }
+
+      if (event.type === "message.read") {
+        if (event.conversation_id !== conversationId) return;
+        // Your own read receipt tells you nothing you did not do yourself.
+        const payload = event.payload as {
+          user_id: string;
+          last_read_seq: number;
+        };
+        if (payload.user_id === viewerId) return;
+        setOthersRead((current) => {
+          const seen = current.get(payload.user_id) ?? 0;
+          // Never backwards. A reconnecting client can replay an older
+          // position, and "seen" that un-sees itself is worse than late.
+          if (payload.last_read_seq <= seen) return current;
+          const next = new Map(current);
+          next.set(payload.user_id, payload.last_read_seq);
+          return next;
+        });
       }
 
       // Anything else on this socket belongs to somebody else — calls, today.
@@ -203,6 +229,10 @@ export function useConversation(
     },
     [absorb, conversationId, drop, viewerId],
   );
+
+  const seedOthersRead = useCallback((positions: Record<string, number>) => {
+    setOthersRead(new Map(Object.entries(positions)));
+  }, []);
 
   const unsend = useCallback(
     (seq: number) => {
@@ -341,6 +371,19 @@ export function useConversation(
   const typing = useMemo(() => [...typingUntil.keys()], [typingUntil]);
 
   /**
+   * The highest `seq` *everybody else* has read past.
+   *
+   * The minimum across members, not the maximum: in a group, "seen" should
+   * mean seen by the room. Claiming a message was seen because one of six
+   * people opened it is the kind of small lie that makes a read receipt
+   * worth less than no read receipt.
+   */
+  const seenUpToSeq = useMemo(() => {
+    const positions = [...othersRead.values()];
+    return positions.length === 0 ? 0 : Math.min(...positions);
+  }, [othersRead]);
+
+  /**
    * Whether there is anything above the top of what we hold.
    *
    * Derived rather than assumed: holding `seq` 1 means we are at the start of
@@ -363,6 +406,8 @@ export function useConversation(
     send,
     retry,
     unsend,
+    seenUpToSeq,
+    setOthersRead: seedOthersRead,
     noteTyping,
     loadOlder,
     hasOlder,

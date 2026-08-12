@@ -200,3 +200,17 @@ def unread_counts(*, user: User) -> dict[int, int]:
         conversation_id: max(0, last_message_seq - last_read_seq)
         for conversation_id, last_message_seq, last_read_seq in rows
     }
+
+
+def read_positions(*, conversation: Conversation, viewer: User) -> dict[str, int]:
+    """How far each other member has read, keyed by user id as a string.
+
+    Ids cross the wire as strings — above 2^53 a JSON number rounds, and a
+    key that rounds silently matches the wrong person.
+    """
+    return {
+        str(row.user_id): row.last_read_seq
+        for row in ConversationMember.objects.filter(conversation=conversation).exclude(
+            user=viewer
+        )
+    }

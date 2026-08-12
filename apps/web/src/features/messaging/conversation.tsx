@@ -29,12 +29,15 @@ export function Conversation({
   viewerId,
   title,
   names,
+  othersRead,
 }: {
   conversationId: string;
   viewerId: string;
   title: string;
   /** User id to username, for the people in this conversation. */
   names: ReadonlyMap<string, string>;
+  /** Read positions as of the inbox fetch, keyed by user id. */
+  othersRead: Record<string, number>;
 }) {
   const {
     messages,
@@ -45,10 +48,16 @@ export function Conversation({
     send,
     retry,
     unsend,
+    seenUpToSeq,
+    setOthersRead,
     noteTyping,
     loadOlder,
     hasOlder,
   } = useConversation(conversationId, viewerId);
+
+  useEffect(() => {
+    setOthersRead(othersRead);
+  }, [othersRead, setOthersRead]);
 
   // The call itself lives in the shell — this screen only starts one. That is
   // what lets a call keep running while you navigate away from the thread.
@@ -72,6 +81,15 @@ export function Conversation({
     if (element === null || !wasAtBottom.current) return;
     element.scrollTop = element.scrollHeight;
   }, [messages, pending, typing]);
+
+  /** The newest message you sent, which is the only one that shows "Seen". */
+  const lastOwnSeq = messages.reduce(
+    (highest, message) =>
+      message.sender.id === viewerId && message.seq > highest
+        ? message.seq
+        : highest,
+    0,
+  );
 
   function submit(event: React.FormEvent): void {
     event.preventDefault();
@@ -138,6 +156,14 @@ export function Conversation({
               message={message}
               mine={message.sender.id === viewerId}
               onUnsend={unsend}
+              // Only the last of your own messages carries it. A "Seen"
+              // under every line is noise; under the newest one it is the
+              // single fact you wanted.
+              seen={
+                message.sender.id === viewerId &&
+                message.seq <= seenUpToSeq &&
+                message.seq === lastOwnSeq
+              }
               // Group runs from the same person: repeating the avatar and
               // name on every line makes a conversation read like a list.
               showSender={messages[index - 1]?.sender.id !== message.sender.id}

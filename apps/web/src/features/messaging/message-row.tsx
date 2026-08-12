@@ -36,11 +36,14 @@ export function MessageRow({
   mine,
   showSender,
   onUnsend,
+  seen = false,
 }: {
   message: Message;
   mine: boolean;
   showSender: boolean;
   onUnsend: (seq: number) => void;
+  /** Everyone else has read this. Only ever set on your own last message. */
+  seen?: boolean;
 }) {
   return (
     <li
@@ -89,6 +92,10 @@ export function MessageRow({
               exactly this. It is genuinely useful when reading a thread that
               has just resynced. */}
           <span className="ml-2 opacity-60">#{message.seq}</span>
+          {/* Daylight, not safelight. Someone else reading your message is
+              something happening now rather than something you did, and the
+              design system puts that on the cool side. */}
+          {seen ? <span className="ml-2 text-daylight">seen</span> : null}
         </p>
       </div>
 

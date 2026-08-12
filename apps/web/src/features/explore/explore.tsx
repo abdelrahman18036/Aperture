@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { DevelopImage, DevelopVideo, Skeleton, cn } from "@repo/ui";
+import { Skeleton, Spinner, cn } from "@repo/ui";
 
 import { api } from "@/lib/api";
+
+import { PostTile } from "./post-tile";
 
 type Post = Schemas["Post"];
 
@@ -114,55 +115,30 @@ export function Explore() {
       <h1 className="px-4 pb-4 font-display text-display-l text-ink">Explore</h1>
 
       <ul className="grid grid-cols-3 gap-[2px]">
-        {posts.map((post) => {
-          const image = post.media[0];
-          return (
-            <li key={post.id} className="aspect-square">
-              <Link
-                href={`/p/${post.id}`}
-                className="block size-full"
-                aria-label={`${post.author.username}: ${post.caption || "post"}`}
-              >
-                {image === undefined ? (
-                  <Skeleton className="size-full" />
-                ) : image.kind === "video" ? (
-                  // A grid cell is a still even for video — the poster is the
-                  // blurhash, and playing happens on the post page. A grid
-                  // where nine videos load is a grid nobody can scroll.
-                  <DevelopVideo
-                    src={image.video_url ?? image.original_url ?? ""}
-                    width={1}
-                    height={1}
-                    blurhash={image.blurhash}
-                    durationMs={image.duration_ms}
-                    label={image.alt_text}
-                    className="size-full"
-                  />
-                ) : (
-                  <DevelopImage
-                    src={image.sources.at(-1)?.url ?? image.original_url ?? ""}
-                    sources={image.sources}
-                    alt={image.alt_text}
-                    // Square cells. A grid of frames, not a masonry wall.
-                    width={1}
-                    height={1}
-                    blurhash={image.blurhash}
-                    dominantColor={image.dominant_color}
-                    sizes="(max-width: 640px) 33vw, 210px"
-                  />
-                )}
-              </Link>
-            </li>
-          );
-        })}
+        {posts.map((post) => (
+          <PostTile key={post.id} post={post} />
+        ))}
 
         {!loaded &&
           Array.from({ length: 9 }, (_, index) => (
             <li key={`skeleton-${String(index)}`} className="aspect-square">
-              <Skeleton className="size-full" />
+              {/* `still` here and nowhere else: nine sweeps running at once
+                  in a tight grid is worse than none, which is the case the
+                  design system's no-shimmer rule was actually about. */}
+              <Skeleton still className="size-full rounded-none" />
             </li>
           ))}
       </ul>
+
+      {loaded && hasMore ? (
+        <div className="flex justify-center py-10">
+          <Spinner label="Loading more posts" />
+        </div>
+      ) : null}
+
+      {loaded && !hasMore && posts.length > 0 ? (
+        <p className="meta py-10 text-center">that is everything</p>
+      ) : null}
 
       <div
         ref={sentinel}

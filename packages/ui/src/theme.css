@@ -283,6 +283,69 @@
   animation: typing-dot 1.4s ease-in-out infinite;
 }
 
+/* ---- Loading -----------------------------------------------------------
+ *
+ * **Deviation from 02-DESIGN-SYSTEM.md, requested and deliberate.** The spec
+ * says "Skeletons — solid --color-surface, no shimmer", on the reasoning that
+ * a shimmer competes with the develop-in. The owner asked for animated
+ * loading throughout, which is what every mainstream social app does and is
+ * what makes a placeholder read as *loading* rather than as broken. The
+ * conflict was raised rather than silently resolved.
+ *
+ * It is kept as quiet as the request allows: a 12% highlight rather than the
+ * usual white sweep, 1.6s so it reads as breathing rather than scanning, and
+ * it stops entirely under reduced motion.
+ */
+@keyframes sheen {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@utility animate-sheen {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-ink) 12%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: sheen 1.6s linear infinite;
+}
+
+/* The pagination spinner: a ring with a gap, at safelight. Rotation is the
+ * one honest way to say "still working" without claiming progress we cannot
+ * measure — a bar that fills to 90% and waits is a lie. */
+@keyframes revolve {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@utility animate-revolve {
+  animation: revolve 700ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes sheen {
+    from,
+    to {
+      background-position: 50% 0;
+    }
+  }
+
+  @keyframes revolve {
+    from,
+    to {
+      transform: none;
+    }
+  }
+}
+
 /* A message that arrives while you are reading should not slide under
  * reduced motion. It still needs to appear, so the fade stays and only the
  * movement goes — the same reasoning as the develop-in's 120ms cross-fade. */
