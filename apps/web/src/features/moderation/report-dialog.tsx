@@ -46,7 +46,7 @@ export function ReportDialog({
   subjectId,
   trigger,
 }: {
-  subjectType: "post" | "comment" | "user" | "media" | "message";
+  subjectType: "post" | "comment" | "user" | "media" | "message" | "story";
   subjectId: string;
   trigger: React.ReactNode;
 }) {

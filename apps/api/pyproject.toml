@@ -135,5 +135,10 @@ django_settings_module = "config.settings"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py"]
-testpaths = ["core", "users", "media", "posts", "messaging", "calls", "moderation"]
+# **No `testpaths` allowlist.** There was one, and it silently excluded
+# every app added after it was written — `counters` and `stories` both
+# had passing suites that `pnpm test` never ran, and nothing said so:
+# the count went up by zero and the run stayed green. Discovery from the
+# root cannot forget a new app. `.venv` is skipped by pytest's own
+# defaults, which ignore dot-directories.
 addopts = "--strict-markers"

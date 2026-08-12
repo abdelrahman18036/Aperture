@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
 import { Button, DevelopImage, Input, Skeleton, cn } from "@repo/ui";
@@ -46,6 +46,10 @@ interface Picked {
 }
 
 export function Composer() {
+  // `?to=story` — the tray's plus button is the only way in, and a mode is
+  // not a route: the pick-crop-upload flow is identical and only the last
+  // step differs.
+  const toStory = useSearchParams().get("to") === "story";
   const [picked, setPicked] = useState<Picked | null>(null);
   const [aspect, setAspect] = useState<AspectName>("4:5");
   const [altText, setAltText] = useState("");
@@ -266,6 +270,7 @@ export function Composer() {
           altText={altText}
           onSaveAltText={saveAltText}
           onDiscard={clear}
+          toStory={toStory}
         />
       ) : null}
     </div>
@@ -290,7 +295,9 @@ function PublishForm({
   altText,
   onSaveAltText,
   onDiscard,
+  toStory,
 }: {
+  toStory: boolean;
   media: {
     id: string;
     blurhash: string;
@@ -325,6 +332,22 @@ function PublishForm({
     // person has to write it.
     await onSaveAltText(media.id);
 
+    if (toStory) {
+      const story = await api.POST("/api/stories/create", {
+        body: { media_id: media.id, caption },
+      });
+      setBusy(false);
+      if (story.data === undefined) {
+        const detail = (story.error as { detail?: string } | undefined)?.detail;
+        setError(detail ?? "That did not post. Try again.");
+        return;
+      }
+      // Back to the feed, where the tray is — a story has no page of its own
+      // to land on, and the ring going warm is the confirmation.
+      router.push("/");
+      return;
+    }
+
     const response = await api.POST("/api/posts/create", {
       body: {
         media_ids: [media.id],
@@ -343,7 +366,7 @@ function PublishForm({
     // Straight to the post. Landing back on an empty composer gives no
     // evidence that anything happened.
     router.push(`/p/${response.data.id}`);
-  }, [caption, location, visibility, media.id, onSaveAltText, router]);
+  }, [caption, location, visibility, media.id, onSaveAltText, router, toStory]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -377,18 +400,23 @@ function PublishForm({
         />
       </label>
 
-      <label className="flex flex-col gap-2">
-        <span className="meta">location</span>
-        <Input
-          value={location}
-          maxLength={120}
-          onChange={(event) => {
-            setLocation(event.target.value);
-          }}
-        />
-      </label>
+      {/* Neither belongs to a story. A story is one frame for one day —
+          it has no location line and no audience of its own, because who
+          sees it is already decided by who follows you. */}
+      {!toStory ? (
+        <label className="flex flex-col gap-2">
+          <span className="meta">location</span>
+          <Input
+            value={location}
+            maxLength={120}
+            onChange={(event) => {
+              setLocation(event.target.value);
+            }}
+          />
+        </label>
+      ) : null}
 
-      <fieldset className="flex flex-col gap-2">
+      <fieldset className={cn("flex flex-col gap-2", toStory && "hidden")}>
         <legend className="meta">who can see it</legend>
         <div className="flex gap-4">
           {VISIBILITIES.map((option) => (
@@ -421,7 +449,13 @@ function PublishForm({
             void publish();
           }}
         >
-          {busy ? "Publishing…" : "Publish"}
+          {busy
+            ? toStory
+              ? "Posting…"
+              : "Publishing…"
+            : toStory
+              ? "Add to story"
+              : "Publish"}
         </Button>
         <Button variant="ghost" onClick={onDiscard}>
           Discard

@@ -54,6 +54,12 @@ def _resolve_subject(subject_type: str, subject_id: int) -> tuple[Any, User | No
         message = Message.objects.filter(pk=subject_id).first()
         return message, (message.sender if message else None)
 
+    if subject_type == Report.Subject.STORY:
+        from stories.models import Story
+
+        story = Story.objects.filter(pk=subject_id).first()
+        return story, (story.author if story else None)
+
     if subject_type == Report.Subject.USER:
         user = User.objects.filter(pk=subject_id).first()
         return user, user
@@ -195,6 +201,10 @@ def _remove_subject(report: Report) -> None:
         from messaging.services import remove_message
 
         remove_message(message=subject)
+    elif report.subject_type == Report.Subject.STORY:
+        from stories.services import remove_story
+
+        remove_story(story=subject)
     elif report.subject_type == Report.Subject.USER:
         suspend(user=subject)
 

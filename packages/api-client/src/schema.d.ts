@@ -351,6 +351,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stories/{story_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Record that you watched it. Idempotent. */
+        post: operations["stories_view"];
+        /** @description Take down your own story. */
+        delete: operations["stories_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stories/{story_id}/viewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Who has watched your story, newest first. */
+        get: operations["stories_viewers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stories/by/{username}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Live stories for one account, oldest first. */
+        get: operations["stories_by_author"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stories/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Post a story from media that has finished processing. */
+        post: operations["stories_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stories/tray": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Live stories, grouped by author and ordered newest first. */
+        get: operations["stories_tray"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/{username}": {
         parameters: {
             query?: never;
@@ -605,6 +691,11 @@ export interface components {
             reason: components["schemas"]["ReasonEnum"];
             /** @default  */
             note: string;
+        };
+        CreateStoryRequest: {
+            media_id: string;
+            /** @default  */
+            caption: string;
         };
         /** @description The signed-in user seeing their own account. Adds the private bits. */
         CurrentUser: {
@@ -925,15 +1016,47 @@ export interface components {
          * @enum {string}
          */
         StateEnum: "pending" | "ready" | "failed";
+        /** @description One frame. */
+        Story: {
+            readonly id: string;
+            readonly author: components["schemas"]["User"];
+            readonly media: components["schemas"]["Media"];
+            readonly caption: string;
+            /** Format: date-time */
+            readonly created_at: string;
+            /** Format: date-time */
+            readonly expires_at: string;
+        };
+        /**
+         * @description One author's worth of the tray.
+         *
+         *     Grouped by author rather than a flat list, because that is what the tray
+         *     renders and what the viewer advances through — flattening it here would
+         *     only mean regrouping it in the browser.
+         */
+        StoryTrayEntry: {
+            readonly author: components["schemas"]["User"];
+            readonly stories: components["schemas"]["Story"][];
+            readonly all_seen: boolean;
+            /** Format: date-time */
+            readonly latest_at: string;
+        };
+        /** @description One line of "who watched this", for the author. */
+        StoryViewer: {
+            readonly viewer: components["schemas"]["User"];
+            /** Format: date-time */
+            readonly created_at: string;
+        };
         /**
          * @description * `post` - Post
          *     * `comment` - Comment
          *     * `user` - User
          *     * `media` - Media
          *     * `message` - Message
+         *     * `story` - Story
          * @enum {string}
          */
-        SubjectTypeEnum: "post" | "comment" | "user" | "media" | "message";
+        SubjectTypeEnum: "post" | "comment" | "user" | "media" | "message" | "story";
         /** @description What the client asks for before it uploads anything. */
         UploadIntentRequestRequest: {
             kind: components["schemas"]["KindEnum"];
@@ -1792,6 +1915,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RealtimeTicket"];
+                };
+            };
+        };
+    };
+    stories_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                story_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                story_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_viewers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                story_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryViewer"][];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_by_author: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Story"][];
+                };
+            };
+            /** @description No response body */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStoryRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["CreateStoryRequest"];
+                "multipart/form-data": components["schemas"]["CreateStoryRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Story"];
+                };
+            };
+            /** @description No response body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    stories_tray: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryTrayEntry"][];
                 };
             };
         };

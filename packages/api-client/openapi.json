@@ -1183,6 +1183,233 @@
                 }
             }
         },
+        "/api/stories/{story_id}": {
+            "post": {
+                "operationId": "stories_view",
+                "description": "Record that you watched it. Idempotent.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "story_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "stories"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "stories_delete",
+                "description": "Take down your own story.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "story_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "stories"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/stories/{story_id}/viewers": {
+            "get": {
+                "operationId": "stories_viewers",
+                "description": "Who has watched your story, newest first.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "story_id",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "stories"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/StoryViewer"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/stories/by/{username}": {
+            "get": {
+                "operationId": "stories_by_author",
+                "description": "Live stories for one account, oldest first.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "username",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "stories"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Story"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/stories/create": {
+            "post": {
+                "operationId": "stories_create",
+                "description": "Post a story from media that has finished processing.",
+                "tags": [
+                    "stories"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateStoryRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateStoryRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateStoryRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Story"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/stories/tray": {
+            "get": {
+                "operationId": "stories_tray",
+                "description": "Live stories, grouped by author and ordered newest first.",
+                "tags": [
+                    "stories"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/StoryTrayEntry"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/users/{username}": {
             "get": {
                 "operationId": "users_profile",
@@ -2071,6 +2298,23 @@
                     "reason",
                     "subject_id",
                     "subject_type"
+                ]
+            },
+            "CreateStoryRequest": {
+                "type": "object",
+                "properties": {
+                    "media_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "caption": {
+                        "type": "string",
+                        "default": "",
+                        "maxLength": 200
+                    }
+                },
+                "required": [
+                    "media_id"
                 ]
             },
             "CurrentUser": {
@@ -3009,16 +3253,124 @@
                 "type": "string",
                 "description": "* `pending` - Pending\n* `ready` - Ready\n* `failed` - Failed"
             },
+            "Story": {
+                "type": "object",
+                "description": "One frame.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "author": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "media": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/Media"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "caption": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "author",
+                    "caption",
+                    "created_at",
+                    "expires_at",
+                    "id",
+                    "media"
+                ]
+            },
+            "StoryTrayEntry": {
+                "type": "object",
+                "description": "One author's worth of the tray.\n\nGrouped by author rather than a flat list, because that is what the tray\nrenders and what the viewer advances through — flattening it here would\nonly mean regrouping it in the browser.",
+                "properties": {
+                    "author": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "stories": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Story"
+                        },
+                        "readOnly": true
+                    },
+                    "all_seen": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "latest_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "all_seen",
+                    "author",
+                    "latest_at",
+                    "stories"
+                ]
+            },
+            "StoryViewer": {
+                "type": "object",
+                "description": "One line of \"who watched this\", for the author.",
+                "properties": {
+                    "viewer": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "viewer"
+                ]
+            },
             "SubjectTypeEnum": {
                 "enum": [
                     "post",
                     "comment",
                     "user",
                     "media",
-                    "message"
+                    "message",
+                    "story"
                 ],
                 "type": "string",
-                "description": "* `post` - Post\n* `comment` - Comment\n* `user` - User\n* `media` - Media\n* `message` - Message"
+                "description": "* `post` - Post\n* `comment` - Comment\n* `user` - User\n* `media` - Media\n* `message` - Message\n* `story` - Story"
             },
             "UploadIntentRequestRequest": {
                 "type": "object",

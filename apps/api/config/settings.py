@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     "users",
     "media",
     "posts",
+    "stories",
     "counters",
     "messaging",
     "calls",
@@ -196,6 +197,13 @@ CELERY_BEAT_SCHEDULE = {
         # sweeps a corpus of 6,000 users in about five hours, which is the
         # right order for a number nobody watches to the second.
         "schedule": crontab(minute="*/10"),
+    },
+    "reap-expired-stories": {
+        "task": "stories.reap_expired",
+        # Hourly. Expiry itself is a column every read filters on, so this
+        # only moves lapsed rows onto the hard-delete path — nothing about
+        # whether a story is visible waits for it.
+        "schedule": crontab(minute=15),
     },
     "csam-escalation-backlog": {
         "task": "moderation.report_escalation_backlog",

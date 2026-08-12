@@ -382,11 +382,38 @@ Each fans out across both ecosystems: `ruff` and `mypy --strict` with
 `django-stubs` on the Python side, ESLint and `tsc --noEmit` on the
 TypeScript side, `pytest` and Vitest for tests.
 
+`pytest` discovers from the root rather than from a `testpaths` allowlist.
+There was one, and it silently excluded every app added after it was
+written — two apps had passing suites the gate never ran, and nothing said
+so: the total went up by zero and the run stayed green.
+
 **There is no automated regression net on user flows.** Playwright is
 deliberately not in this stack — flows are walked in a real browser instead.
 A break in signup, upload or send will not be caught by CI, only by someone
 walking it, so the critical flows get re-walked at every phase gate rather
 than assumed still working.
+
+---
+
+## Stories
+
+`01-ARCHITECTURE.md` §11 says "the report button ships before stories". It
+did, in Phase 5, so these are the feature that was waiting on it — and a
+story is reportable like everything else, because a new content type that
+cannot be reported undoes that rule from the other end.
+
+**Expiry is a column, not a job.** `expires_at` is written once and filtered
+on every read, so a story is gone from every surface the instant it lapses
+whether or not a worker is running. `stories.reap_expired` runs hourly and
+only moves long-lapsed rows onto the existing soft-delete path — nothing
+about visibility waits for it. That distinction is the whole design: a
+scheduled flag would leave a window where an expired story is still being
+served, and that window is exactly what someone posting to one is trusting us
+not to have.
+
+The tray shows your own stories and those of accounts you follow, never
+strangers'. A story is a day rather than a portfolio, and a discovery surface
+full of other people's days is a different product.
 
 ---
 

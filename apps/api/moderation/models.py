@@ -31,6 +31,10 @@ class Report(models.Model):
         #: under a photograph where it is public. A queue that covers only
         #: public content covers the easy half.
         MESSAGE = "message", "Message"
+        #: A story. New content types have to arrive here at the same time
+        #: they arrive in the product — §11 puts the report button before
+        #: stories, and a story nobody can report is that rule undone.
+        STORY = "story", "Story"
 
     class Reason(models.TextChoices):
         #: First, and not alphabetically. It routes differently from

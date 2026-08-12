@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 
 import { Skeleton, Spinner } from "@repo/ui";
 
+import { StoryTray } from "@/features/stories/story-tray";
+
 import { FeedPost } from "./feed-post";
 import { useFeed } from "./use-feed";
 
@@ -58,6 +60,8 @@ export function Feed() {
 
   return (
     <div className="flex flex-col">
+      <StoryTray />
+
       {posts.map((post) => (
         <FeedPost key={post.id} post={post} />
       ))}
