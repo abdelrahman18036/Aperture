@@ -32,10 +32,24 @@ cd infra && docker compose up -d
 ```
 
 Brings up Postgres (host port **5433**), Redis, MinIO with its two buckets,
-and Typesense. LiveKit and coturn sit behind a `calls` profile and stay down
-until Phase 7 — `docker compose --profile calls up -d` when that lands.
+and Typesense. Wait for `docker compose ps` to show postgres, redis and minio
+as `healthy`.
 
-Wait for `docker compose ps` to show postgres, redis and minio as `healthy`.
+Calls need two more, behind a profile so the everyday case stays small:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -keyout coturn/certs/privkey.pem -out coturn/certs/fullchain.pem -days 825 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+```bash
+docker compose --profile calls up -d
+```
+
+LiveKit runs the SFU for group calls; coturn relays 1:1 media when a network
+refuses a direct connection, with **TLS on 443** because that is the transport
+that survives a firewall dropping UDP. The certificate is generated locally
+and git-ignored — see `infra/coturn/turnserver.conf`, which also records what
+a browser will and will not accept from a self-signed one.
 
 ### 2. Install
 
