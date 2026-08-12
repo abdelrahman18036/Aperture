@@ -20,6 +20,8 @@ about them is gone.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import redis
 from django.conf import settings
 
@@ -64,3 +66,36 @@ def online_ids(user_ids: list[int]) -> set[int]:
 def is_online(user_id: int) -> bool:
     """One person. Prefer `online_ids` — this exists for genuinely single reads."""
     return user_id in online_ids([user_id])
+
+
+#: Written by the gateway alongside the presence key, with no TTL — the
+#: point of "last seen" is that it outlives the thing that says you are here.
+LAST_SEEN_PREFIX = "last-seen:"
+
+
+def last_seen(user_ids: list[int]) -> dict[int, datetime]:
+    """When each of these was last connected, for those we have a record of.
+
+    Milliseconds since the epoch on the wire, because that is what
+    `Date.now()` writes on the other side of the seam. Converted here so
+    nothing downstream has to know that.
+    """
+    if not user_ids:
+        return {}
+
+    try:
+        client = _client()
+        values = client.mget([f"{LAST_SEEN_PREFIX}{user_id}" for user_id in user_ids])
+    except redis.RedisError:
+        return {}
+
+    seen: dict[int, datetime] = {}
+    for user_id, raw in zip(user_ids, values, strict=True):
+        if raw is None:
+            continue
+        try:
+            millis = int(raw)
+        except (TypeError, ValueError):
+            continue
+        seen[user_id] = datetime.fromtimestamp(millis / 1000, tz=UTC)
+    return seen

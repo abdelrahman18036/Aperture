@@ -20,12 +20,35 @@ function key(userId: string): string {
   return `presence:${userId}`;
 }
 
+/**
+ * When somebody was last connected.
+ *
+ * A separate key with no TTL, because it has to *outlive* the presence one —
+ * the whole point of "last seen 20 minutes ago" is that it is readable after
+ * the presence key has expired. Written on every heartbeat rather than only
+ * on disconnect: a socket that dies without a close frame never gets to write
+ * anything, and the last heartbeat is within one interval of the truth.
+ */
+function lastSeenKey(userId: string): string {
+  return `last-seen:${userId}`;
+}
+
 export async function touch(redis: Redis, userId: string): Promise<void> {
-  await redis.set(key(userId), "1", "EX", PRESENCE_TTL_SECONDS);
+  await redis
+    .multi()
+    .set(key(userId), "1", "EX", PRESENCE_TTL_SECONDS)
+    .set(lastSeenKey(userId), Date.now().toString())
+    .exec();
 }
 
 export async function clear(redis: Redis, userId: string): Promise<void> {
-  await redis.del(key(userId));
+  // The presence key goes; the timestamp stays, and stays accurate — this
+  // *is* the moment they were last seen.
+  await redis
+    .multi()
+    .del(key(userId))
+    .set(lastSeenKey(userId), Date.now().toString())
+    .exec();
 }
 
 export async function isOnline(redis: Redis, userId: string): Promise<boolean> {

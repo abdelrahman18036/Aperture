@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Skeleton, Spinner } from "@repo/ui";
 
+import type { AnyServerEvent } from "@repo/realtime-events";
+
+import { useRealtimeEvents } from "@/features/realtime/provider";
 import { StoryTray } from "@/features/stories/story-tray";
 
 import { FeedPost } from "./feed-post";
@@ -22,7 +25,14 @@ import { useFeed } from "./use-feed";
  * empty list it is already on screen — see `useFeed`.
  */
 export function Feed() {
-  const { posts, loading, initialised, error, hasMore, loadMore } = useFeed();
+  const [fresh, setFresh] = useState(0);
+  const { posts, loading, initialised, error, hasMore, loadMore, refresh } =
+    useFeed();
+
+  const onEvent = useCallback((event: AnyServerEvent) => {
+    if (event.type === "post.created") setFresh((count) => count + 1);
+  }, []);
+  useRealtimeEvents(onEvent);
   const sentinel = useRef<HTMLDivElement | null>(null);
   /** Guards the mount fetch against a second run in development. */
   const started = useRef(false);
@@ -61,6 +71,25 @@ export function Feed() {
   return (
     <div className="flex flex-col">
       <StoryTray />
+
+      {/* Announced, not inserted.
+          Splicing a post into a feed somebody is reading moves what they were
+          looking at under their eyes, which is the one thing an infinite list
+          must never do. A count they can act on costs one line and takes the
+          decision back. */}
+      {fresh > 0 ? (
+        <button
+          type="button"
+          onClick={() => {
+            setFresh(0);
+            window.scrollTo({ top: 0 });
+            refresh();
+          }}
+          className="border-b border-line py-3 meta text-safelight hover:text-ink"
+        >
+          {fresh === 1 ? "1 new post" : `${String(fresh)} new posts`}
+        </button>
+      ) : null}
 
       {posts.map((post) => (
         <FeedPost key={post.id} post={post} />

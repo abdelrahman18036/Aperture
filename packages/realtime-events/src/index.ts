@@ -35,6 +35,12 @@ export const durableEventTypeSchema = z.enum([
   "message.created",
   "message.read",
   "message.deleted",
+  // Not messages, and that is the point: everything outside messaging used to
+  // have no way to reach a socket, so a new post or story only appeared if
+  // you refreshed. These carry no `conversation_id` — the envelope's field is
+  // empty for them.
+  "post.created",
+  "story.created",
 ]);
 
 export type DurableEventType = z.infer<typeof durableEventTypeSchema>;

@@ -35,6 +35,7 @@ export function Conversation({
   names,
   othersRead,
   onlineNow,
+  lastSeenAt,
 }: {
   conversationId: string;
   viewerId: string;
@@ -45,6 +46,8 @@ export function Conversation({
   othersRead: Record<string, number>;
   /** Who was online as of the inbox fetch. The socket takes over from here. */
   onlineNow: string[];
+  /** When each other member was last connected, ISO strings by user id. */
+  lastSeenAt: Record<string, string>;
 }) {
   const {
     messages,
@@ -98,6 +101,18 @@ export function Conversation({
     if (element === null || !wasAtBottom.current) return;
     element.scrollTop = element.scrollHeight;
   }, [messages, pending, typing]);
+
+  /**
+   * The most recent moment anybody else was here.
+   *
+   * The maximum, not the minimum: "last seen" is about whether the thread is
+   * being watched at all, and in a group the person who left most recently is
+   * the honest answer to that.
+   */
+  const lastSeen = Object.values(lastSeenAt).reduce<string | null>(
+    (latest, at) => (latest === null || at > latest ? at : latest),
+    null,
+  );
 
   /** The newest message you sent, which is the only one that shows "Seen". */
   const lastOwnSeq = messages.reduce(
@@ -154,6 +169,7 @@ export function Conversation({
             state={connection}
             othersOnline={online.size > 0}
             group={names.size > 1}
+            lastSeen={lastSeen}
           />
           <Button
             variant="ghost"
@@ -325,14 +341,27 @@ export function Conversation({
  * rather than danger red: a dropped socket is not an error, it is a state
  * that resolves itself, and colouring it red teaches people to ignore red.
  */
+/** "2 min ago", "3 hr ago", "5 days ago". Coarse on purpose. */
+function ago(iso: string): string {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${String(minutes)} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${String(hours)} hr ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "yesterday" : `${String(days)} days ago`;
+}
+
 function PresencePip({
   state,
   othersOnline,
   group,
+  lastSeen,
 }: {
   state: "connecting" | "open" | "offline";
   othersOnline: boolean;
   group: boolean;
+  lastSeen: string | null;
 }) {
   /**
    * Two facts, and only one of them was ever shown.
@@ -355,7 +384,11 @@ function PresencePip({
         ? group
           ? "Someone here"
           : "Online"
-        : "Away";
+        : // "Away" alone says nothing about whether they left a minute ago
+          // or last week, which is the only thing anybody wants from it.
+          lastSeen !== null
+          ? `Last seen ${ago(lastSeen)}`
+          : "Away";
 
   // Daylight is "happening now" — somebody actually being there qualifies,
   // and your own socket being open does not.

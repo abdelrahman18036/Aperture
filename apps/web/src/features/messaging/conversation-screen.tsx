@@ -79,6 +79,7 @@ export function ConversationScreen({
       // seen, and then corrects itself the moment somebody reads something.
       othersRead={summary.others_read}
       onlineNow={summary.online}
+      lastSeenAt={summary.last_seen}
     />
   );
 }

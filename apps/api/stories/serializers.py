@@ -67,6 +67,11 @@ class StoryTrayEntrySerializer(serializers.Serializer[dict[str, Any]]):
     all_seen = serializers.BooleanField(read_only=True)
     #: Newest first across authors, so the tray can order by it.
     latest_at = serializers.DateTimeField(read_only=True)
+    #: Index of the first frame the viewer has not watched, or 0 when they
+    #: have watched them all. Computed here because the server already knows
+    #: which `StoryView` rows exist — the client would otherwise need a second
+    #: request to answer "where should this open?".
+    first_unseen = serializers.IntegerField(read_only=True)
 
 
 class CreateStorySerializer(serializers.Serializer[dict[str, Any]]):

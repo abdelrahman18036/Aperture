@@ -1,11 +1,18 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { CallProvider } from "@/features/calls/provider";
 import { ComposeProvider } from "@/features/composer/compose-dialog";
-import { RealtimeProvider } from "@/features/realtime/provider";
+import type { AnyServerEvent } from "@repo/realtime-events";
+
+import {
+  RealtimeProvider,
+  useRealtimeApi,
+  useRealtimeEvents,
+} from "@/features/realtime/provider";
+import { chime } from "./chime";
 import { api } from "@/lib/api";
 
 import { NavBar, NavRail } from "./nav-rail";
@@ -22,8 +29,31 @@ import type { NavCounts } from "./nav-rail";
  * you resize the window makes the whole page feel unstable.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    // One socket for the whole shell, and one place a call can appear. Both
+    // live here rather than inside a screen because a call that only rings
+    // when you are already looking at the right thread is not a call.
+    <RealtimeProvider>
+      <CallProvider>
+        <ComposeProvider>
+          <Shell>{children}</Shell>
+        </ComposeProvider>
+      </CallProvider>
+    </RealtimeProvider>
+  );
+}
+
+/**
+ * The chrome, *inside* the providers.
+ *
+ * Split out because it consumes the socket — `useRealtimeApi` and
+ * `useRealtimeEvents` both throw outside `RealtimeProvider`, and a component
+ * cannot be inside a provider it renders itself.
+ */
+function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { viewerId } = useRealtimeApi();
   const [username, setUsername] = useState<string | null>(null);
   const [counts, setCounts] = useState<NavCounts>({ requests: 0, unread: 0 });
 
@@ -44,10 +74,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   /**
    * What the rail's pips read from.
    *
-   * Two requests on mount, and no polling: both queues also arrive over the
-   * socket while the app is open — a message event moves the unread count and
-   * the requests page refetches itself. Polling a sidebar every few seconds
-   * is a request per user per tick for a number that changes hourly.
+   * Two requests on mount, and no polling — the socket carries the changes.
    */
   useEffect(() => {
     void Promise.all([
@@ -64,14 +91,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  /**
+   * A message arrived somewhere.
+   *
+   * The count moves for any conversation that is not the one on screen, and
+   * a sound plays for the same set. Chiming for the thread somebody is
+   * already reading is the thing every chat app gets wrong once: they can see
+   * it, and the noise is pure interruption.
+   *
+   * Your own messages are ignored — you know.
+   */
+  const onEvent = useCallback(
+    (event: AnyServerEvent) => {
+      if (event.type !== "message.created") return;
+      const message = event.payload as { sender?: { id?: string } };
+      if (message.sender?.id === viewerId) return;
+      if (pathname === `/messages/${event.conversation_id}`) return;
+
+      setCounts((current) => ({ ...current, unread: current.unread + 1 }));
+      void chime();
+    },
+    [pathname, viewerId],
+  );
+  useRealtimeEvents(onEvent);
+
   return (
-    // One socket for the whole shell, and one place a call can appear. Both
-    // live here rather than inside a screen because a call that only rings
-    // when you are already looking at the right thread is not a call.
-    <RealtimeProvider>
-      <CallProvider>
-        <ComposeProvider>
-        <div className="min-h-dvh">
+    <div className="min-h-dvh">
       <NavRail username={username} counts={counts} />
       <NavBar username={username} counts={counts} />
 
@@ -90,9 +135,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </aside>
         </div>
       </div>
-        </div>
-        </ComposeProvider>
-      </CallProvider>
-    </RealtimeProvider>
+    </div>
   );
 }

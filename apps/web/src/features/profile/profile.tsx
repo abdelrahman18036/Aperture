@@ -270,6 +270,10 @@ export function ProfileScreen({ username }: { username: string }) {
               author: profile.user,
               stories,
               all_seen: false,
+              // From the start: this list is one author's live stories
+              // fetched directly, and it carries no per-frame watched state
+              // the way the tray's does.
+              first_unseen: 0,
               latest_at: stories[0]?.created_at ?? "",
             },
           ]}

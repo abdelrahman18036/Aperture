@@ -697,6 +697,9 @@ export interface components {
                 [key: string]: number;
             };
             readonly online: string[];
+            readonly last_seen: {
+                [key: string]: string;
+            };
         };
         CreateCommentRequest: {
             body: string;
@@ -1101,6 +1104,7 @@ export interface components {
             readonly all_seen: boolean;
             /** Format: date-time */
             readonly latest_at: string;
+            readonly first_unseen: number;
         };
         /** @description One line of "who watched this", for the author. */
         StoryViewer: {

@@ -59,10 +59,19 @@ class TrayView(APIView):
         by_author = sorted(stories, key=lambda story: story.author_id)
         for _, group in groupby(by_author, key=lambda story: story.author_id):
             owned = list(group)
+            # Where the viewer should be put when they open this entry:
+            # their first unwatched frame. Landing on frame one of four when
+            # three are already seen means tapping past your own history to
+            # reach the new thing.
+            unseen = next(
+                (index for index, story in enumerate(owned) if story.pk not in seen),
+                0,
+            )
             entries.append(
                 {
                     "author": owned[0].author,
                     "stories": owned,
+                    "first_unseen": unseen,
                     # Your own entry is never "unwatched" — you posted it.
                     "all_seen": owned[0].author_id == viewer.pk
                     or all(story.pk in seen for story in owned),

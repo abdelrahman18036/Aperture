@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from config import broadcast
 from links import services as link_services
 from media.models import Media
 from stories.models import DEFAULT_BACKGROUND, STORY_BACKGROUNDS, Story, StoryView
@@ -58,7 +59,7 @@ def create_story(
         # colour name would be the wrong trade.
         background = DEFAULT_BACKGROUND
 
-    return Story.objects.create(
+    story = Story.objects.create(
         author=author,
         media=media,
         text=body,
@@ -68,6 +69,38 @@ def create_story(
         # so both fields are searched — text first.
         link_preview=link_services.preview_for(f"{body} {caption}"),
     )
+
+    # After commit, so a rollback never announces a story that does not exist
+    # — rule 11. Before this the tray only changed on a page load, which is
+    # what made a story feel like it had not posted.
+    audience = _followers_of(author)
+    transaction.on_commit(
+        lambda: broadcast.publish_to_users(
+            user_ids=audience,
+            event_type="story.created",
+            payload={"author_id": str(author.pk)},
+        )
+    )
+    return story
+
+
+def _followers_of(author: User) -> list[int]:
+    """Who should hear about this, including the author's own tabs.
+
+    The payload deliberately carries only the author's id rather than the
+    story: whoever receives it refetches, which keeps one authorisation path
+    — the tray already filters blocks, privacy and expiry, and a payload
+    would need all three re-implemented on the wire.
+    """
+    from users.models import Follow
+
+    ids = list(
+        Follow.objects.filter(
+            followee=author, status=Follow.Status.ACCEPTED
+        ).values_list("follower_id", flat=True)
+    )
+    ids.append(author.pk)
+    return ids
 
 
 def mark_viewed(*, story: Story, viewer: User) -> None:

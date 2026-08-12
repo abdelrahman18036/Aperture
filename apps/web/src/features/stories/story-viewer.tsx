@@ -15,6 +15,18 @@ import { api } from "@/lib/api";
 type TrayEntry = Schemas["StoryTrayEntry"];
 type StoryViewerRow = Schemas["StoryViewer"];
 
+/**
+ * Where to open an entry: the first frame its viewer has not watched.
+ *
+ * The server computes it — it already holds the `StoryView` rows, and a
+ * client deriving it would need a second request for state it was never
+ * sent. Zero when everything has been seen, which is right: an entry that is
+ * entirely watched is a rewatch, and a rewatch starts at the beginning.
+ */
+function firstUnwatched(entry: TrayEntry | undefined): number {
+  return entry?.first_unseen ?? 0;
+}
+
 /** How long one frame holds before it advances itself. */
 const FRAME_MS = 5000;
 /** Progress ticks. 50ms is smooth enough and cheap enough. */
@@ -50,7 +62,22 @@ export function StoryViewer({
   onClose: () => void;
 }) {
   const [authorIndex, setAuthorIndex] = useState(startAt);
-  const [frameIndex, setFrameIndex] = useState(0);
+  /**
+   * Start on the first frame they have not watched, then wrap.
+   *
+   * Opening somebody with four stories and being put back on the first one
+   * you already saw is the most annoying thing a story viewer can do — you
+   * have to tap past your own history to reach the new thing. So the entry
+   * point is the first unseen frame, and only if every frame has been seen
+   * does it start from the beginning, which is then a deliberate rewatch.
+   *
+   * A lazy initialiser rather than an effect: it runs once, on mount, and an
+   * effect would set state during the first commit for a value that is knowable
+   * before it.
+   */
+  const [frameIndex, setFrameIndex] = useState(() =>
+    firstUnwatched(entries[startAt]),
+  );
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
   /** Elapsed on the current frame, carried across a pause. */
@@ -72,7 +99,8 @@ export function StoryViewer({
     }
     if (authorIndex + 1 < entries.length) {
       setAuthorIndex(authorIndex + 1);
-      setFrameIndex(0);
+      // The next person starts at *their* first unseen frame too.
+      setFrameIndex(firstUnwatched(entries[authorIndex + 1]));
       return;
     }
     onClose();

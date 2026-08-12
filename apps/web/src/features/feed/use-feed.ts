@@ -29,6 +29,8 @@ export function useFeed(): {
   error: string | null;
   hasMore: boolean;
   loadMore: () => void;
+  /** Throw the feed away and fetch page one. For "N new posts". */
+  refresh: () => void;
 } {
   const [posts, setPosts] = useState<Post[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -70,5 +72,16 @@ export function useFeed(): {
       });
   }, [cursor, hasMore]);
 
-  return { posts, loading, initialised, error, hasMore, loadMore };
+  const refresh = useCallback(() => {
+    // Resetting the cursor is what makes the next `loadMore` fetch page one.
+    // The posts are cleared with it, because a fresh page prepended to a
+    // stale list would duplicate everything the two have in common.
+    inFlight.current = false;
+    setPosts([]);
+    setCursor(null);
+    setHasMore(true);
+    setInitialised(false);
+  }, []);
+
+  return { posts, loading, initialised, error, hasMore, loadMore, refresh };
 }

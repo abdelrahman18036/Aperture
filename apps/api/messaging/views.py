@@ -104,13 +104,11 @@ class ConversationListView(APIView):
 
         # One Redis round trip for the whole inbox, for the same reason the
         # member queries are batched.
-        connected = presence.online_ids(
-            [
-                user.pk
-                for entry in others_by_conversation.values()
-                for user in entry.users
-            ]
-        )
+        everyone = [
+            user.pk for entry in others_by_conversation.values() for user in entry.users
+        ]
+        connected = presence.online_ids(everyone)
+        seen_at = presence.last_seen(everyone)
 
         rows: list[dict[str, Any]] = []
         for member in members:
@@ -126,6 +124,11 @@ class ConversationListView(APIView):
                     online=[
                         str(user.pk) for user in other.users if user.pk in connected
                     ],
+                    last_seen={
+                        str(user.pk): seen_at[user.pk]
+                        for user in other.users
+                        if user.pk in seen_at
+                    },
                 )
             )
         return Response(rows)

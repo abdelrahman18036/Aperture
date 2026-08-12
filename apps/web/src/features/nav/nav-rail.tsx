@@ -181,11 +181,16 @@ export function NavRail({
               {/* Daylight, and a dot rather than a number at this width —
                   the count is in the accessible name and spelled out beside
                   the label once the rail expands. */}
+              {/* The number, not a dot. "You have messages" is what a dot
+                  says; "you have four" is what somebody actually wants, and
+                  it fits. */}
               {count ? (
                 <span
                   aria-hidden="true"
-                  className="absolute -right-1 -top-0.5 size-2 rounded-full bg-daylight ring-2 ring-base xl:hidden"
-                />
+                  className="absolute -right-2 -top-1.5 min-w-4 rounded-full bg-daylight px-1 text-center text-[10px] font-semibold leading-4 text-base ring-2 ring-base xl:hidden"
+                >
+                  {count > 9 ? "9+" : count}
+                </span>
               ) : null}
             </span>
             <span aria-hidden="true" className="hidden xl:inline">

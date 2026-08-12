@@ -63,6 +63,9 @@ class ConversationSerializer(serializers.Serializer[dict[str, Any]]):
     #: keeps this current with `presence` events; this is what a thread opens
     #: with, so the header is right before anybody moves.
     online = serializers.ListField(child=serializers.CharField(), read_only=True)
+    #: user id (string) -> when they were last connected. Absent for anybody
+    #: who has never held a socket, and stale-but-correct for everyone else.
+    last_seen = serializers.DictField(child=serializers.DateTimeField(), read_only=True)
 
 
 class MessagePageSerializer(serializers.Serializer[dict[str, Any]]):
@@ -129,6 +132,7 @@ def conversation_payload(
     last_message: Message | None,
     others_read: dict[str, int] | None = None,
     online: list[str] | None = None,
+    last_seen: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the inbox row. Formatting, not logic."""
     conversation: Conversation = member.conversation
@@ -154,4 +158,5 @@ def conversation_payload(
         #: `message.read`; this is the value it starts from.
         "others_read": others_read or {},
         "online": online or [],
+        "last_seen": last_seen or {},
     }

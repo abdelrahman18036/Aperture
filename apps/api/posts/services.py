@@ -10,13 +10,14 @@ from __future__ import annotations
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from config import broadcast
 from counters.models import Counter
 from counters.tasks import adjust
 from links import services as link_services
 from media.models import Media
 from posts import cache
 from posts.models import Comment, Like, Post, PostMedia
-from users.models import User
+from users.models import Follow, User
 from users.selectors import can_view_posts
 
 MAX_MEDIA_PER_POST = 10
@@ -96,7 +97,35 @@ def create_post(
     # holding a post that does not exist, and it holds it for thirty minutes.
     transaction.on_commit(lambda: _fan_out_to_feeds(post))
 
+    # And to whoever is watching right now. The same after-commit rule, and
+    # the same reasoning as the cache above: announcing a post that then rolls
+    # back is worse than announcing it a moment late.
+    audience = _follower_ids(author)
+    post_id = str(post.pk)
+    transaction.on_commit(
+        lambda: broadcast.publish_to_users(
+            user_ids=audience,
+            event_type="post.created",
+            payload={"post_id": post_id, "author_id": str(author.pk)},
+        )
+    )
+
     return post
+
+
+def _follower_ids(author: User) -> list[int]:
+    """Who to tell about a new post.
+
+    Ids only. The feed applies visibility, blocks and privacy, and a payload
+    carrying the post would need every one of those checks re-implemented for
+    the wire — so the client is told *that* something arrived and fetches it
+    through the path that already gets that right.
+    """
+    return list(
+        Follow.objects.filter(
+            followee=author, status=Follow.Status.ACCEPTED
+        ).values_list("follower_id", flat=True)
+    )
 
 
 def _fan_out_to_feeds(post: Post) -> None:

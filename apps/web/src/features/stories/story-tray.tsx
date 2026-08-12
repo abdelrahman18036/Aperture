@@ -6,9 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Schemas } from "@repo/api-client";
 import { Skeleton, cn } from "@repo/ui";
 
+import type { AnyServerEvent } from "@repo/realtime-events";
+
 import { useCompose } from "@/features/composer/compose-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
-import { useRealtimeApi } from "@/features/realtime/provider";
+import {
+  useRealtimeApi,
+  useRealtimeEvents,
+} from "@/features/realtime/provider";
 import { api } from "@/lib/api";
 
 import { StoryViewer } from "./story-viewer";
@@ -45,6 +50,17 @@ export function StoryTray() {
       setEntries(response.data ?? []);
     });
   }, []);
+
+  // Somebody posted. The payload carries an author id and nothing else, so
+  // the answer is to refetch — the tray already applies blocks, privacy and
+  // expiry, and none of that should be re-derived from a wire payload.
+  const onEvent = useCallback(
+    (event: AnyServerEvent) => {
+      if (event.type === "story.created") load();
+    },
+    [load],
+  );
+  useRealtimeEvents(onEvent);
 
   // Loaded because the page opened, not because something was scrolled into
   // view — the mistake the feed and explore both made. Reloaded whenever

@@ -2265,6 +2265,14 @@
                             "type": "string"
                         },
                         "readOnly": true
+                    },
+                    "last_seen": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -2273,6 +2281,7 @@
                     "last_message",
                     "last_message_seq",
                     "last_read_seq",
+                    "last_seen",
                     "members",
                     "online",
                     "others_read",
@@ -3509,11 +3518,16 @@
                         "type": "string",
                         "format": "date-time",
                         "readOnly": true
+                    },
+                    "first_unseen": {
+                        "type": "integer",
+                        "readOnly": true
                     }
                 },
                 "required": [
                     "all_seen",
                     "author",
+                    "first_unseen",
                     "latest_at",
                     "stories"
                 ]
