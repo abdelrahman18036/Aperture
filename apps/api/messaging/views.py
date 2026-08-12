@@ -97,7 +97,7 @@ class ConversationListView(APIView):
                 if m.user_id != viewer.pk
             ]
             last = selectors.messages_before(
-                conversation=member.conversation, limit=1
+                conversation=member.conversation, viewer=viewer, limit=1
             ).first()
             rows.append(
                 conversation_payload(
@@ -209,7 +209,9 @@ class MessageListView(APIView):
         if after is not None:
             messages = list(
                 selectors.messages_after(
-                    conversation=conversation, after_seq=int(after)
+                    conversation=conversation,
+                    after_seq=int(after),
+                    viewer=current_user(request),
                 )
             )
         else:
@@ -218,6 +220,7 @@ class MessageListView(APIView):
                 selectors.messages_before(
                     conversation=conversation,
                     before_seq=int(before) if before else None,
+                    viewer=current_user(request),
                 )
             )
             # Read newest-first for the index, handed back oldest-first

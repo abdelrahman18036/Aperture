@@ -165,13 +165,73 @@ def test_an_empty_message_is_rejected(
     assert response.status_code == 400
 
 
-def test_a_block_stops_the_send_with_400(
+def test_a_blocked_dm_becomes_indistinguishable_from_one_that_never_existed(
     signed_in: APIClient, user: User, other_user: User, conversation: Conversation
 ) -> None:
+    """404 on every verb, and no `detail` to read anything out of.
+
+    This used to answer 400 "that account is unavailable", which is a worse
+    answer than it looks: a 400 confirms the conversation is there. Filtering
+    the block at the selector rather than the service means the thread is
+    simply not the caller's any more, and the endpoints cannot say anything
+    else — see `01-ARCHITECTURE.md` §11, which names DMs.
+    """
     Block.objects.create(blocker=other_user, blocked=user)
-    response = send_via_api(signed_in, conversation)
-    assert response.status_code == 400
-    assert "block" not in response.json()["detail"].lower()
+
+    assert send_via_api(signed_in, conversation).status_code == 404
+    assert (
+        signed_in.get(
+            f"/api/messaging/conversations/{conversation.pk}/messages"
+        ).status_code
+        == 404
+    )
+    assert (
+        signed_in.post(
+            f"/api/messaging/conversations/{conversation.pk}/read",
+            {"up_to_seq": 1},
+            format="json",
+        ).status_code
+        == 404
+    )
+    # And identical to a conversation id nobody has ever used.
+    absent = signed_in.get("/api/messaging/conversations/80000000000000000/messages")
+    real = signed_in.get(f"/api/messaging/conversations/{conversation.pk}/messages")
+    assert absent.status_code == real.status_code
+    assert absent.json() == real.json()
+
+
+def test_a_blocked_dm_leaves_the_inbox_over_http(
+    signed_in: APIClient, user: User, other_user: User, conversation: Conversation
+) -> None:
+    assert len(signed_in.get("/api/messaging/conversations").json()) == 1
+
+    Block.objects.create(blocker=user, blocked=other_user)
+
+    assert signed_in.get("/api/messaging/conversations").json() == []
+
+
+def test_a_group_keeps_working_when_one_member_blocks_you(
+    signed_in: APIClient, user: User, other_user: User
+) -> None:
+    """The read path filters that person's messages, not the whole thread."""
+    third = User.objects.create_user("third@example.com", "third", "correct-horse-x")
+    group = services.start_group(
+        initiator=user, others=[other_user, third], title="Darkroom"
+    )
+    for sender, body in ((other_user, "from them"), (third, "from third")):
+        services.send_message(
+            sender=sender,
+            conversation=group,
+            client_id=str(uuid.uuid4()),
+            body=body,
+        )
+
+    Block.objects.create(blocker=user, blocked=other_user)
+
+    page = signed_in.get(f"/api/messaging/conversations/{group.pk}/messages")
+    assert page.status_code == 200
+    assert [m["body"] for m in page.json()["messages"]] == ["from third"]
+    assert len(signed_in.get("/api/messaging/conversations").json()) == 1
 
 
 def test_media_belonging_to_someone_else_is_refused(

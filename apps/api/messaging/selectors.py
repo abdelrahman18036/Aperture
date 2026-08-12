@@ -3,11 +3,27 @@
 Every query in this app lives here and returns a queryset. Views never touch
 the ORM directly.
 
-**Membership is the access control.** There is no "public" conversation and no
-blocked-user filter on messages: you are either a member of a conversation or
-you cannot see it at all, and every selector here starts from that. Blocking
-is enforced when a conversation is *created* and when a message is *sent*,
-which is the point at which it can still do something useful.
+**Membership is the access control, and blocking is enforced on top of it.**
+
+Membership alone was the original argument here, and it was wrong.
+`01-ARCHITECTURE.md` §11 names the read paths blocking must cover — "feed,
+search, comments, **DMs**, notifications" — and a thread you are already a
+member of is exactly the case where membership tells you nothing. Blocking
+someone you have a history with is the whole point of blocking them; leaving
+the history readable, and leaving them in your inbox, is the version of the
+feature that does not work.
+
+Two shapes, because a DM and a group are not the same question:
+
+- **A DM with a blocked counterpart disappears.** Not in the inbox, 404 on
+  open, 404 on call, 404 on send. There is nothing else in that conversation.
+- **A group survives, minus that person.** Losing a thread of thirty people
+  because one of them blocked you would be the block acting on the wrong
+  target.
+
+Both directions, always. A block that only hides the blocker from the blocked
+leaves the blocked account able to watch, which is `users.selectors` rule and
+applies here identically.
 """
 
 from __future__ import annotations
@@ -16,14 +32,32 @@ from django.db.models import QuerySet
 
 from messaging.models import Conversation, ConversationMember, Message
 from users.models import User
+from users.selectors import blocked_ids, exclude_blocked
 
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
 
 
 def memberships(user: User) -> QuerySet[ConversationMember]:
-    """Every conversation this user belongs to. Served by the `user` index."""
-    return ConversationMember.objects.filter(user=user).select_related("conversation")
+    """Every conversation this user can still see. Served by the `user` index.
+
+    "Can still see" rather than "belongs to": a DM whose other member is in a
+    block relationship is filtered out here, which is what makes it vanish
+    from the inbox, the unread counts, and every path that starts from a
+    membership. One place to audit, per rule 8.
+    """
+    rows = ConversationMember.objects.filter(user=user).select_related("conversation")
+
+    hidden = blocked_ids(user)
+    if not hidden:
+        return rows
+
+    # Only DMs. A group is not forfeited because one member blocked you — its
+    # messages are filtered instead, in `messages_after` and `messages_before`.
+    return rows.exclude(
+        conversation__kind=Conversation.Kind.DM,
+        conversation__members__user_id__in=hidden,
+    )
 
 
 def inbox(user: User) -> QuerySet[ConversationMember]:
@@ -41,12 +75,18 @@ def membership_or_none(
 ) -> ConversationMember | None:
     """The caller's membership, or None if they are not in this conversation.
 
-    Every message read and write goes through this. Returning None rather than
+    Every message read and write goes through this, and calls too, via
+    `calls.selectors.callable_conversation`. Returning None rather than
     raising lets the view answer 404 — telling someone a conversation exists
     but is not theirs is an enumeration oracle.
+
+    Built on `memberships`, so a blocked DM is *not their conversation* as far
+    as every caller is concerned: opening it, sending to it, marking it read
+    and ringing it all answer 404 without any of them knowing why.
     """
     return (
-        ConversationMember.objects.filter(user=user, conversation_id=conversation_id)
+        memberships(user)
+        .filter(conversation_id=conversation_id)
         .select_related("conversation")
         .first()
     )
@@ -76,7 +116,11 @@ def existing_dm(*, a: User, b: User) -> Conversation | None:
 
 
 def messages_after(
-    *, conversation: Conversation, after_seq: int, limit: int = DEFAULT_PAGE_SIZE
+    *,
+    conversation: Conversation,
+    after_seq: int,
+    viewer: User | None = None,
+    limit: int = DEFAULT_PAGE_SIZE,
 ) -> QuerySet[Message]:
     """**The reconnect sync.** Everything newer than a known position.
 
@@ -86,21 +130,24 @@ def messages_after(
     why `01-ARCHITECTURE.md` §5 calls it one of the two most important lines
     in the schema.
     """
-    return (
-        Message.objects.filter(
-            conversation=conversation,
-            seq__gt=after_seq,
-            deleted_at__isnull=True,
-        )
-        .select_related("sender", "media")
-        .order_by("seq")[: min(limit, MAX_PAGE_SIZE)]
-    )
+    live = Message.objects.filter(
+        conversation=conversation,
+        seq__gt=after_seq,
+        deleted_at__isnull=True,
+    ).select_related("sender", "media")
+
+    # Rule 8. Filtered before the slice, or a page could come back short of
+    # its limit while more messages waited behind the ones removed.
+    live = exclude_blocked(live, viewer, author_field="sender_id")
+
+    return live.order_by("seq")[: min(limit, MAX_PAGE_SIZE)]
 
 
 def messages_before(
     *,
     conversation: Conversation,
     before_seq: int | None = None,
+    viewer: User | None = None,
     limit: int = DEFAULT_PAGE_SIZE,
 ) -> QuerySet[Message]:
     """Scrollback. The same index, read the other way."""
@@ -110,6 +157,8 @@ def messages_before(
 
     if before_seq is not None:
         history = history.filter(seq__lt=before_seq)
+
+    history = exclude_blocked(history, viewer, author_field="sender_id")
 
     return history.order_by("-seq")[: min(limit, MAX_PAGE_SIZE)]
 

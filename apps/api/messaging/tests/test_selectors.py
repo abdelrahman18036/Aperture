@@ -16,7 +16,7 @@ from django.test.utils import CaptureQueriesContext
 
 from messaging import selectors, services
 from messaging.models import Conversation
-from users.models import User
+from users.models import Block, User
 
 
 @pytest.fixture
@@ -205,7 +205,12 @@ def test_unread_issues_no_count_query(
 ) -> None:
     """Rule 9, asserted against the SQL rather than trusted.
 
-    One query for the whole inbox, and no `COUNT(`  in it.
+    No `COUNT(` anywhere, however many queries it takes — the rule is about
+    counting rows, not about round trips.
+
+    Two queries, not one: the block list is materialised first, which
+    `users.selectors.blocked_ids` argues for explicitly — block lists are
+    short, so one small query beats a correlated subquery evaluated per row.
     """
     for _ in range(5):
         send(bob, conversation)
@@ -213,9 +218,9 @@ def test_unread_issues_no_count_query(
     with CaptureQueriesContext(connection) as captured:
         selectors.unread_counts(user=alice)
 
-    assert len(captured) == 1
-    sql = captured[0]["sql"].upper()
-    assert "COUNT(" not in sql
+    assert len(captured) <= 2
+    for query in captured:
+        assert "COUNT(" not in query["sql"].upper()
 
 
 # ---------------------------------------------------------------------------
@@ -245,3 +250,109 @@ def test_inbox_orders_by_most_recent_activity(alice: User, bob: User) -> None:
     # Most messages, hence highest last_message_seq, hence top.
     assert inbox[0].conversation_id == second.pk
     assert inbox[1].conversation_id == first.pk
+
+
+# ---------------------------------------------------------------------------
+# Blocking — 01-ARCHITECTURE.md §11 names DMs explicitly
+# ---------------------------------------------------------------------------
+
+
+def test_a_blocked_dm_leaves_the_inbox(
+    alice: User, bob: User, conversation: Conversation
+) -> None:
+    """The whole point of blocking somebody you have a history with."""
+    send(bob, conversation)
+    assert len(list(selectors.inbox(alice))) == 1
+
+    Block.objects.create(blocker=alice, blocked=bob)
+
+    assert list(selectors.inbox(alice)) == []
+    assert selectors.unread_counts(user=alice) == {}
+
+
+def test_a_blocked_dm_disappears_for_the_blocked_account_too(
+    alice: User, bob: User, conversation: Conversation
+) -> None:
+    """One-directional hiding is what makes blocking feel useless.
+
+    If only the blocker stops seeing the thread, the blocked account keeps
+    reading everything and simply cannot reply.
+    """
+    send(alice, conversation)
+    Block.objects.create(blocker=alice, blocked=bob)
+
+    assert list(selectors.inbox(bob)) == []
+    assert (
+        selectors.membership_or_none(user=bob, conversation_id=conversation.pk) is None
+    )
+
+
+def test_a_blocked_dm_cannot_be_opened_or_rung(
+    alice: User, bob: User, conversation: Conversation
+) -> None:
+    """`membership_or_none` is the choke point every caller goes through.
+
+    Messages, read receipts and calls all resolve a conversation through it,
+    so filtering here is what makes one change cover all of them.
+    """
+    from calls.selectors import callable_conversation
+
+    Block.objects.create(blocker=bob, blocked=alice)
+
+    assert (
+        selectors.membership_or_none(user=alice, conversation_id=conversation.pk)
+        is None
+    )
+    assert callable_conversation(user=alice, conversation_id=conversation.pk) is None
+
+
+def test_a_group_survives_a_block_minus_that_person(alice: User, bob: User) -> None:
+    """Losing thirty people because one of them blocked you is the block
+    acting on the wrong target."""
+    carol = User.objects.create_user("sel-d@example.com", "sel-d", "pw-sel-12345")
+    group = services.start_group(initiator=alice, others=[bob, carol])
+
+    send(bob, group, "from bob")
+    send(carol, group, "from carol")
+    send(alice, group, "from alice")
+
+    Block.objects.create(blocker=alice, blocked=bob)
+
+    # Still in the inbox.
+    assert [m.conversation_id for m in selectors.inbox(alice)] == [group.pk]
+
+    bodies = [
+        m.body
+        for m in selectors.messages_after(conversation=group, after_seq=0, viewer=alice)
+    ]
+    assert bodies == ["from carol", "from alice"]
+
+
+def test_scrollback_filters_blocked_senders_too(alice: User, bob: User) -> None:
+    """Both directions of the same index, or the block only half works."""
+    carol = User.objects.create_user("sel-e@example.com", "sel-e", "pw-sel-12345")
+    group = services.start_group(initiator=alice, others=[bob, carol])
+
+    send(bob, group, "from bob")
+    send(carol, group, "from carol")
+
+    Block.objects.create(blocker=carol, blocked=bob)
+
+    bodies = [
+        m.body for m in selectors.messages_before(conversation=group, viewer=carol)
+    ]
+    assert bodies == ["from carol"]
+
+
+def test_no_viewer_means_no_filtering(alice: User, bob: User) -> None:
+    """The selectors are also called where there is no viewer to filter for.
+
+    Defaulting to unfiltered is safe *only* because every request path passes
+    one — which the view tests assert separately.
+    """
+    group = services.start_group(initiator=alice, others=[bob])
+    send(bob, group, "from bob")
+    Block.objects.create(blocker=alice, blocked=bob)
+
+    unfiltered = list(selectors.messages_after(conversation=group, after_seq=0))
+    assert [m.body for m in unfiltered] == ["from bob"]
