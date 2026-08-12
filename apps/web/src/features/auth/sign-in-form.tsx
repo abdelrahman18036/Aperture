@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 
@@ -93,6 +94,15 @@ export function SignInForm() {
           {busy ? "Signing in…" : "Sign in"}
         </Button>
       </div>
+      <p className="text-body text-ink-dim">
+        No account yet?{" "}
+        <Link
+          href="/signup"
+          className="text-safelight underline underline-offset-4"
+        >
+          Create one
+        </Link>
+      </p>
     </form>
   );
 }
