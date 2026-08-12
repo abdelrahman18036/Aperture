@@ -223,6 +223,38 @@ Record as a Deviation in the Phase 1 handoff.
 
 Ports verified free: 6379, 9000, 9001, 7880, 8108, 3000, 8000, 3478, 443.
 
+### Two uvicorn servers can hold port 8000 at once, and the old one answers
+
+Cost real time twice on 2026-08-12, both times looking like the same bug: a route that exists on
+disk, resolves in `manage.py shell`, and 404s over HTTP after a restart.
+
+**Windows let three `uvicorn` processes bind `127.0.0.1:8000` simultaneously.** `netstat -ano`
+showed two `LISTENING` rows for the port with different PIDs; requests were answered by the
+*oldest* one, which had been running since before the code existed. Killing "the" server by port
+owner killed one of them and left the others serving.
+
+Two things make it hard to see:
+
+- `Get-CimInstance Win32_Process | Where CommandLine -like '*uvicorn*'` returns **nothing** for
+  these — the command line is not readable, so a search by command line finds no server at all
+  while one is plainly answering. Search by process *name* instead: `Get-Process python`.
+- `--reload` uses `StatReload` here, which polls mtimes and has been observed to miss edits
+  entirely. A restart that appears to work can leave the old URLconf loaded.
+
+When an endpoint 404s but `reverse()` finds it, check for extra listeners before debugging the
+code:
+
+```powershell
+netstat -ano | Select-String ":8000.*LISTENING"
+```
+
+```powershell
+Get-Process python, uv | Select-Object Id, ProcessName, StartTime | Sort-Object StartTime
+```
+
+Kill every one of them by id, confirm the port stops answering, then start a single server. The
+`StartTime` column is what identifies the stragglers.
+
 ### `network_mode: host` does not do what the spec assumes — ruled
 
 `01-ARCHITECTURE.md` §4 gives coturn `network_mode: host`. That is correct on Linux, where the

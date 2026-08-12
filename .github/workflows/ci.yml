@@ -87,13 +87,24 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm lint
+      # Turbo, not the root `pnpm lint`/`test`/`check-types` scripts.
+      #
+      # Those fan out across BOTH ecosystems, which is what you want on a
+      # machine that has uv — one command, everything checked. This runner
+      # does not have uv, and `@repo/api` is a shim whose scripts are
+      # `uv run ruff` / `uv run mypy` / `uv run pytest`, so the root scripts
+      # die on `uv: not found` before touching a line of TypeScript.
+      #
+      # Installing uv here would work and would also re-run, more slowly,
+      # exactly what the `backend` job above already ran. The jobs own one
+      # ecosystem each; this filter is what says so.
+      - run: pnpm exec turbo run lint --filter='!@repo/api'
 
-      - run: pnpm check-types
+      - run: pnpm exec turbo run check-types --filter='!@repo/api'
 
-      - run: pnpm test
+      - run: pnpm exec turbo run test --filter='!@repo/api'
 
-      - run: pnpm build
+      - run: pnpm exec turbo run build --filter='!@repo/api'
 
   api-client-drift:
     # The seam the Django choice costs us. A serializer change that is not
