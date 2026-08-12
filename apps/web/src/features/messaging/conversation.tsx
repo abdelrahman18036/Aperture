@@ -1,16 +1,11 @@
 "use client";
 
 import { Phone, SendHorizontal } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button, cn } from "@repo/ui";
 
-import { CallPanel } from "@/features/calls/call-panel";
-import { useEventBus } from "@/features/calls/event-bus";
-import { useCall } from "@/features/calls/use-call";
-import { usePeerCall } from "@/features/calls/use-peer-call";
-import { useSfuCall } from "@/features/calls/use-sfu-call";
+import { useCallControls } from "@/features/calls/provider";
 
 import { MessageRow, PendingRow } from "./message-row";
 import { TypingLine } from "./typing-dots";
@@ -40,11 +35,6 @@ export function Conversation({
   /** User id to username, for the people in this conversation. */
   names: ReadonlyMap<string, string>;
 }) {
-  // The bus breaks a genuine ordering problem: the conversation needs a call
-  // handler before the call hooks — which need its `sendCallSignal` — exist.
-  // Its identity never changes, so subscribers attach from effects later.
-  const bus = useEventBus();
-
   const {
     messages,
     pending,
@@ -56,54 +46,11 @@ export function Conversation({
     noteTyping,
     loadOlder,
     hasOlder,
-    sendCallSignal,
-    setCallIds,
-  } = useConversation(conversationId, viewerId, { onOtherEvent: bus.emit });
+  } = useConversation(conversationId, viewerId);
 
-  const session = useCall({ conversationId, sendSignal: sendCallSignal });
-
-  // Subscribing to the call's channel is what makes signalling reach us, and
-  // it must happen before the first offer does. Driven by the call's
-  // *existence* rather than its state, and by the invite as well as the call
-  // itself — a callee has to be listening while they decide whether to
-  // answer.
-  const activeCallId = session.call?.id ?? session.incoming?.call_id ?? null;
-  useEffect(() => {
-    setCallIds(activeCallId === null ? [] : [activeCallId]);
-  }, [activeCallId, setCallIds]);
-
-  const peerId = useMemo(
-    () =>
-      session.call?.participant_ids.find((id) => id !== viewerId) ?? null,
-    [session.call, viewerId],
-  );
-
-  /**
-   * `?relay=1` forces every candidate through TURN.
-   *
-   * This phase's verification asks for exactly this, and putting it in the
-   * product rather than in a one-off script means the check stays runnable:
-   * a call that connects under `relay` proves the TCP/443 path works, which
-   * is the path that survives a network dropping UDP.
-   *
-   * Harmless to leave in. It only *restricts* which candidates are tried, so
-   * the worst a user can do with it is make their own call take a slower
-   * route — which, on a hostile network, is sometimes what they want.
-   */
-  const relayOnly = useSearchParams().get("relay") === "1";
-
-  const peer = usePeerCall({
-    call: session.call,
-    viewerId,
-    peerId,
-    sendSignal: sendCallSignal,
-    relayOnly,
-  });
-
-  const sfu = useSfuCall(session.call);
-
-  useEffect(() => bus.subscribe(session.observe), [bus, session.observe]);
-  useEffect(() => bus.subscribe(peer.handleSignal), [bus, peer.handleSignal]);
+  // The call itself lives in the shell — this screen only starts one. That is
+  // what lets a call keep running while you navigate away from the thread.
+  const { session, busy } = useCallControls();
 
   const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -141,53 +88,17 @@ export function Conversation({
         <h1 className="text-title text-ink">{title}</h1>
         <div className="flex items-center gap-4">
           <ConnectionPip state={connection} />
-          {session.call === null && (
-            <Button
-              variant="ghost"
-              onClick={session.start}
-              disabled={session.starting}
-              aria-label={`Call ${title}`}
-            >
-              <Phone className="size-4" aria-hidden="true" />
-              Call
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            onClick={() => session.start(conversationId, title)}
+            disabled={busy || session.starting}
+            aria-label={`Call ${title}`}
+          >
+            <Phone className="size-4" aria-hidden="true" />
+            Call
+          </Button>
         </div>
       </header>
-
-      {session.error !== null && (
-        <p className="px-4 py-2 text-body text-danger" role="alert">
-          {session.error}
-        </p>
-      )}
-
-      {session.incoming !== null && (
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <p className="text-body text-ink">
-            {/* Daylight: something happening now, per the palette rule. */}
-            <span className="text-daylight">
-              {session.incoming.caller.username}
-            </span>{" "}
-            is calling
-          </p>
-          <div className="flex gap-2">
-            <Button onClick={session.answer}>Answer</Button>
-            <Button variant="ghost" onClick={session.decline}>
-              Decline
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {session.call !== null && (
-        <CallPanel
-          call={session.call}
-          peer={peer}
-          sfu={sfu}
-          peerName={title}
-          onHangUp={session.hangUp}
-        />
-      )}
 
       <div ref={scroller} className="flex-1 overflow-y-auto py-4">
         {hasOlder && messages.length > 0 && (

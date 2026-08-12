@@ -1,19 +1,35 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { AnyServerEvent, CallInvite } from "@repo/realtime-events";
 
+import { useRealtimeApi, useRealtimeEvents } from "@/features/realtime/provider";
 import { api } from "@/lib/api";
 
 import type { CallPayload } from "./use-peer-call";
 
 /**
- * Call lifecycle, on top of the socket a conversation already holds.
+ * `?relay=1` forces every candidate through TURN.
  *
- * §9 says not to open a second connection, and the reason is not tidiness:
- * a second socket means a second ticket, a second reconnect path, and two
- * places for presence to disagree. Calls ride the one that already exists.
+ * Phase 7's verification asks for exactly this, and keeping it in the product
+ * rather than a throwaway script keeps the check runnable. Read from the URL
+ * at the moment a call starts: harmless, since it only *restricts* which
+ * candidates are tried, so the most it can do is route your own call the slow
+ * way — which on a hostile network is sometimes the point.
+ */
+function readRelayFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("relay") === "1";
+}
+
+/**
+ * Call lifecycle, on the application's one socket.
+ *
+ * §9 says not to open a second connection, and once calls had to ring
+ * anywhere rather than only inside an open thread that became load-bearing:
+ * a global listener plus a per-thread socket is two sockets. Both now share
+ * the one in `features/realtime`.
  *
  * The split of responsibilities is the interesting part and it is deliberate:
  *
@@ -30,51 +46,63 @@ export interface CallSession {
   incoming: CallInvite | null;
   starting: boolean;
   error: string | null;
-  start: () => void;
+  /** Who is on the other end, for the dock's header. */
+  label: string | null;
+  /**
+   * Whether this call was placed with every candidate forced through TURN.
+   *
+   * Captured when the call starts rather than read from a hook, so the shell
+   * does not need `useSearchParams` — which would drag a Suspense boundary
+   * around every static route for the sake of a debugging flag.
+   */
+  relayOnly: boolean;
+  /** Ring a conversation. */
+  start: (conversationId: string, label: string) => void;
   answer: () => void;
   decline: () => void;
   hangUp: () => void;
-  /** Feed socket traffic in. Returns true if the event was a call event. */
-  observe: (event: AnyServerEvent) => boolean;
+  /** Dismiss a failure without ending anything. */
+  clearError: () => void;
 }
 
-interface Options {
-  conversationId: string;
-  /** Send one signalling frame. Owned by the conversation's socket. */
-  sendSignal: (
-    callId: string,
-    signal: "offer" | "answer" | "ice" | "hangup",
-    payload: unknown,
-  ) => void;
-}
-
-export function useCall({ conversationId, sendSignal }: Options): CallSession {
+export function useCallSession(): CallSession {
   const [call, setCall] = useState<CallPayload | null>(null);
   const [incoming, setIncoming] = useState<CallInvite | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [label, setLabel] = useState<string | null>(null);
+  const [relayOnly, setRelayOnly] = useState(false);
 
-  const start = useCallback(() => {
-    setStarting(true);
-    setError(null);
+  const { sendCallSignal, setCallIds } = useRealtimeApi();
 
-    void api
-      .POST("/api/calls/start", { body: { conversation_id: conversationId } })
-      .then((response) => {
-        setStarting(false);
-        if (response.data === undefined) {
-          setError("The call could not be placed.");
-          return;
-        }
-        setCall(response.data);
-      });
-  }, [conversationId]);
+  const start = useCallback(
+    (conversationId: string, who: string) => {
+      setStarting(true);
+      setError(null);
+      setLabel(who);
+      setRelayOnly(readRelayFlag());
+
+      void api
+        .POST("/api/calls/start", { body: { conversation_id: conversationId } })
+        .then((response) => {
+          setStarting(false);
+          if (response.data === undefined) {
+            setError("The call could not be placed.");
+            return;
+          }
+          setCall(response.data);
+        });
+    },
+    [],
+  );
 
   const answer = useCallback(() => {
     if (incoming === null) return;
     const invite = incoming;
     setIncoming(null);
     setStarting(true);
+    setLabel(invite.caller.username);
+    setRelayOnly(readRelayFlag());
 
     void api
       .POST("/api/calls/join", {
@@ -97,49 +125,70 @@ export function useCall({ conversationId, sendSignal }: Options): CallSession {
   const decline = useCallback(() => {
     if (incoming === null) return;
     // Tell the caller rather than leaving them ringing out. Best effort: a
-    // declined call that fails to say so simply times out at the other end,
-    // which is the same thing a dropped network does.
-    sendSignal(incoming.call_id, "hangup", { reason: "declined" });
+    // decline that fails to send simply times out at the other end, which is
+    // what a dropped network does anyway.
+    sendCallSignal(incoming.call_id, "hangup", { reason: "declined" });
     setIncoming(null);
-  }, [incoming, sendSignal]);
+  }, [incoming, sendCallSignal]);
 
   const hangUp = useCallback(() => {
-    if (call !== null) sendSignal(call.id, "hangup", { reason: "ended" });
+    if (call !== null) sendCallSignal(call.id, "hangup", { reason: "ended" });
     setCall(null);
-  }, [call, sendSignal]);
+    setLabel(null);
+  }, [call, sendCallSignal]);
 
-  const observe = useCallback(
-    (event: AnyServerEvent): boolean => {
+  const clearError = useCallback(() => setError(null), []);
+
+  const onEvent = useCallback(
+    (event: AnyServerEvent) => {
       if (event.type === "call.incoming") {
-        // Only ring for the thread on screen. A global incoming-call surface
-        // is a real feature and a bigger one than this phase — see the
-        // handoff.
-        if (event.conversation_id !== conversationId) return true;
-        setIncoming(event);
-        return true;
+        // No conversation filter: this is the whole point of hoisting the
+        // socket. A call rings while you are reading the feed, or a different
+        // thread, or nothing at all.
+        setIncoming((current) => {
+          // Already in a call, or already ringing for another. Answering two
+          // at once is not a state this product has, and silently replacing
+          // the first invite would lose whoever rang first.
+          if (current !== null) return current;
+          return event;
+        });
+        return;
       }
 
-      if (event.type === "call.signal") {
-        if (event.signal === "hangup" && call !== null) {
-          if (event.call_id === call.id) setCall(null);
-        }
-        return true;
+      if (event.type === "call.signal" && event.signal === "hangup") {
+        setIncoming((current) =>
+          current !== null && current.call_id === event.call_id ? null : current,
+        );
+        setCall((current) =>
+          current !== null && current.id === event.call_id ? null : current,
+        );
       }
-
-      return false;
     },
-    [call, conversationId],
+    [],
   );
+
+  useRealtimeEvents(onEvent);
+
+  // Subscribing to the call's channel is what makes signalling reach us, and
+  // it must happen before the first offer does. Driven by the call's
+  // *existence* rather than its state, and by the invite as well as the call
+  // itself — a callee has to be listening while they decide whether to answer.
+  const activeCallId = call?.id ?? incoming?.call_id ?? null;
+  useEffect(() => {
+    setCallIds(activeCallId === null ? [] : [activeCallId]);
+  }, [activeCallId, setCallIds]);
 
   return {
     call,
     incoming,
     starting,
     error,
+    label,
+    relayOnly,
     start,
     answer,
     decline,
     hangUp,
-    observe,
+    clearError,
   };
 }
