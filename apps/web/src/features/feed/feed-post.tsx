@@ -94,16 +94,17 @@ export function FeedPost({ post }: { post: Post }) {
           return;
         }
 
-        // Reconcile `liked` but **not** the count.
+        // Both, now.
         //
-        // The Like row is written synchronously, so `viewer_has_liked` in this
-        // response is authoritative. The count is not: counters move on the
-        // queue via transaction.on_commit, so the number here is whatever it
-        // was before this like landed. Adopting it would visibly undo the
-        // optimistic increment — which is exactly what it did the first time
-        // this was written. Our local delta is the more accurate figure until
-        // the next fetch.
+        // The count used to be deliberately ignored: counters moved only on
+        // the queue, so the number in this response was whatever it was
+        // *before* the like, and adopting it visibly undid the optimistic
+        // increment. `counters.services.apply_now` moves the cached number in
+        // the request that caused it, so the response is correct when it is
+        // sent — and adopting it is now the only way two tabs, or a like
+        // somebody else made a second ago, ever agree.
         setLiked(response.data.viewer_has_liked);
+        setLikeCount(Math.max(0, response.data.like_count));
       });
     },
     [source.id],

@@ -18,6 +18,7 @@ from django.http import HttpRequest
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
+from counters import services as counter_services
 from counters.models import Counter
 from counters.tasks import adjust
 from media.models import Media
@@ -122,7 +123,20 @@ def _bump(entity_type: str, entity_id: int, metric: str, delta: int) -> None:
     Inside the transaction it would increment for a follow that then rolls
     back — the same class of mistake as publishing a socket event early.
     """
-    transaction.on_commit(lambda: adjust.delay(entity_type, entity_id, metric, delta))
+
+    def move() -> None:
+        # Visible now, durable shortly. See `counters.services.apply_now`
+        # — the cache is the read path, so this is what makes the count
+        # in the response the count the client should render.
+        counter_services.apply_now(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            metric=metric,
+            delta=delta,
+        )
+        adjust.delay(entity_type, entity_id, metric, delta)
+
+    transaction.on_commit(move)
 
 
 @transaction.atomic

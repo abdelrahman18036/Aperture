@@ -105,9 +105,13 @@ export function ShareSheet({
       if (sent.data === undefined) return;
 
       setSentTo((current) => [...current, username]);
-      onShared?.(count + sentTo.length + 1);
+      // One more than the count we were handed, and nothing cleverer. The
+      // previous `count + sentTo.length + 1` double-counted from the second
+      // send on: `count` is a prop that this call itself moves, so adding the
+      // running total again counted every earlier send twice.
+      onShared?.(count + 1);
     },
-    [count, onShared, postId, sentTo.length],
+    [count, onShared, postId],
   );
 
   const copyLink = useCallback(async () => {

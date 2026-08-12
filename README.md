@@ -728,9 +728,25 @@ Counters are **at-most-once plus reconciliation**, which is worth knowing
 before reading a count as a bug. `counters.adjust` is enqueued with
 `transaction.on_commit` and never retried: `increment` is not idempotent, so a
 retry policy would trade a missed increment for a double-counted one, and a
-like that shows twice is worse than one that shows a minute late. A count that
-looks wrong while no worker is running is not wrong — the message is waiting in
-Redis and applies as soon as one starts.
+like that shows twice is worse than one that shows a minute late.
+
+**The queue owns durability, not visibility.** It used to own both, and that
+was a real bug rather than a subtlety: the read path is Redis-first, so with no
+worker running — or one a few seconds behind — a like that had definitely been
+recorded came back with the old number. Every client then had to do its own
+arithmetic and deliberately *not* trust the count in the response, which is the
+kind of rule that gets forgotten. The repost button trusted it and visibly
+snapped back to the old number a moment after being pressed.
+
+So `counters.services.apply_now` moves the **cached** number in the request that
+caused it, with `INCRBY` rather than an absolute write — that is the race
+`increment` avoids by deleting the key, and a relative operation does not have
+it. A cold key seeds from the table with `SET NX` first, or a post with
+forty-three likes would read "1". The count in a response is now correct when it
+is sent, and clients adopt it.
+
+A count that still looks wrong is worth a `recount`; it is no longer explained
+by a worker being down.
 
 Genuine drift is repaired by `counters.reconcile`, which walks a slice every
 ten minutes and wraps. To repair something now rather than within ten minutes:

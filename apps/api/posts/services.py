@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from config import broadcast
+from counters import services as counter_services
 from counters.models import Counter
 from counters.tasks import adjust
 from links import services as link_services
@@ -35,7 +36,20 @@ class NotAllowedError(Exception):
 
 def _bump(entity_type: str, entity_id: int, metric: str, delta: int) -> None:
     """Enqueue a counter move once the surrounding transaction commits."""
-    transaction.on_commit(lambda: adjust.delay(entity_type, entity_id, metric, delta))
+
+    def move() -> None:
+        # Visible now, durable shortly. See `counters.services.apply_now`
+        # — the cache is the read path, so this is what makes the count
+        # in the response the count the client should render.
+        counter_services.apply_now(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            metric=metric,
+            delta=delta,
+        )
+        adjust.delay(entity_type, entity_id, metric, delta)
+
+    transaction.on_commit(move)
 
 
 @transaction.atomic

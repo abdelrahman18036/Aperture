@@ -204,6 +204,9 @@ def send_message(
         # Counted once per message rather than once per recipient: "shared 3
         # times" should mean three acts of sharing, not the size of the rooms
         # they landed in.
+        # `increment` rather than the queue, so this one needs no `apply_now`:
+        # it writes the row in this request and deletes the cache key, and the
+        # next read gets the new number from the table.
         counter_services.increment(
             entity_type=Counter.EntityType.POST,
             entity_id=shared_post.pk,
