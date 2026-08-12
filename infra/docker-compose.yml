@@ -15,6 +15,10 @@ name: aperture
 services:
   postgres:
     image: postgres:18-alpine
+    # Docker Desktop stopping should not take the whole stack with it —
+    # it did that three times while this project was being built, and each
+    # time every dev server had to be restarted by hand.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: devpassword
@@ -34,6 +38,10 @@ services:
 
   redis:
     image: redis:8-alpine
+    # Docker Desktop stopping should not take the whole stack with it —
+    # it did that three times while this project was being built, and each
+    # time every dev server had to be restarted by hand.
+    restart: unless-stopped
     # Celery broker, feed cache, and the pub/sub bus between Django and the
     # realtime gateway — all three.
     command: redis-server --appendonly yes
@@ -45,6 +53,10 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # Docker Desktop stopping should not take the whole stack with it —
+    # it did that three times while this project was being built, and each
+    # time every dev server had to be restarted by hand.
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -57,6 +69,8 @@ services:
 
   minio-init:
     image: minio/mc
+    # No restart policy: this is a one-shot job that creates buckets and
+    # exits. `unless-stopped` would loop it forever.
     # §4 says `depends_on: [minio]`, which only waits for the container to
     # start, not to be listening — so every bucket creation raced ahead and
     # failed with connection refused. Gate on the healthcheck instead.
@@ -73,6 +87,10 @@ services:
 
   typesense:
     image: typesense/typesense:28.0
+    # Docker Desktop stopping should not take the whole stack with it —
+    # it did that three times while this project was being built, and each
+    # time every dev server had to be restarted by hand.
+    restart: unless-stopped
     environment:
       TYPESENSE_API_KEY: devkey
       TYPESENSE_DATA_DIR: /data
@@ -86,6 +104,10 @@ services:
 
   livekit:
     image: livekit/livekit-server:v1.13.5
+    # Docker Desktop stopping should not take the whole stack with it —
+    # it did that three times while this project was being built, and each
+    # time every dev server had to be restarted by hand.
+    restart: unless-stopped
     profiles: ["calls"]
     command: --config /etc/livekit.yaml --node-ip=127.0.0.1
     ports: ["7880:7880", "7881:7881", "50000-50100:50000-50100/udp"]
@@ -93,6 +115,10 @@ services:
 
   coturn:
     image: coturn/coturn:4.17.2
+    # Docker Desktop stopping should not take the whole stack with it —
+    # it did that three times while this project was being built, and each
+    # time every dev server had to be restarted by hand.
+    restart: unless-stopped
     profiles: ["calls"]
     # 01-ARCHITECTURE.md §4 uses `network_mode: host`, which is right on Linux
     # and does nothing useful here: on Docker Desktop for Windows "host" is the

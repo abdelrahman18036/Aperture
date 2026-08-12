@@ -22,6 +22,24 @@ import { useFeed } from "./use-feed";
 export function Feed() {
   const { posts, loading, initialised, error, hasMore, loadMore } = useFeed();
   const sentinel = useRef<HTMLDivElement | null>(null);
+  /** Guards the mount fetch against a second run in development. */
+  const started = useRef(false);
+
+  /**
+   * The first page loads because the page opened, not because a sentinel was
+   * seen.
+   *
+   * Deriving both from one observer is tidy and makes first paint depend on
+   * the browser actually compositing — an observer computes nothing in a tab
+   * that is not being rendered, and the feed then sits on skeletons forever
+   * with no error to explain it. Explore hit exactly this; the feed had the
+   * same shape and had simply not been looked at in that state.
+   */
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    loadMore();
+  }, [loadMore]);
 
   useEffect(() => {
     const node = sentinel.current;
