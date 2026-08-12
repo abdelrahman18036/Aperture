@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from django.db.models import Prefetch, QuerySet
 
+from posts import cache
 from posts.models import Comment, Like, Post, PostMedia
 from users.models import User
 from users.selectors import accepted_followee_ids, exclude_blocked
@@ -81,6 +82,10 @@ def feed(
     comparison and no tie-breaking: ids are time-ordered, so `id < cursor` *is*
     "older than that post", and the partial index on
     `(id DESC) WHERE deleted_at IS NULL` serves the ordering directly.
+
+    **This function is still the source of truth.** `cached_feed` below layers
+    Redis over it; every path through that layer ends up here on a miss, and
+    the visibility rules are applied to the rows either way.
     """
     posts = live().filter(
         author_id__in=accepted_followee_ids(viewer),
@@ -94,6 +99,57 @@ def feed(
         posts = posts.filter(id__lt=cursor)
 
     return _with_media(posts).order_by("-id")[: min(limit, MAX_PAGE_SIZE)]
+
+
+def cached_feed(
+    *, viewer: User, cursor: int | None = None, limit: int = DEFAULT_PAGE_SIZE
+) -> list[Post]:
+    """The feed, through the Redis cache — §7 phase 2.
+
+    Returns a list rather than a queryset, deliberately. A cache hit is a set
+    of ids and a fetch; there is no queryset that means both that and the
+    uncached query, and pretending otherwise would hand callers something that
+    silently changes shape depending on Redis.
+
+    **A hit still re-applies every visibility rule.** The ids come from Redis
+    and the rows come from `live()` with the block filter over them, so a post
+    deleted, or an author suspended, or a block created since the set was
+    written all take effect on this read. That is the property that makes
+    caching ids safe where caching posts would not be.
+
+    A hit that comes back short is treated as the end of the cached range and
+    falls through to Postgres, because a cache holds `MAX_ENTRIES` and a feed
+    does not — the alternative is a scroll that mysteriously stops.
+    """
+    ids = cache.get_page(user_id=viewer.pk, cursor=cursor, limit=limit)
+
+    if ids is not None and len(ids) >= limit:
+        rows = _with_media(
+            exclude_blocked(
+                live().filter(
+                    id__in=ids,
+                    visibility__in=[
+                        Post.Visibility.PUBLIC,
+                        Post.Visibility.FOLLOWERS,
+                    ],
+                ),
+                viewer,
+                author_field="author_id",
+            )
+        )
+        by_id = {post.pk: post for post in rows}
+        # Redis decided the order; rebuild it rather than re-sorting, so the
+        # cached page and the uncached one cannot disagree about sequence.
+        return [by_id[pk] for pk in ids if pk in by_id]
+
+    posts = list(feed(viewer=viewer, cursor=cursor, limit=limit))
+
+    # Only the first page is cached. See `cache.store` for why a deep page
+    # would leave a hole the sorted set cannot express.
+    if cursor is None:
+        cache.store(user_id=viewer.pk, post_ids=[post.pk for post in posts])
+
+    return posts
 
 
 def explore(

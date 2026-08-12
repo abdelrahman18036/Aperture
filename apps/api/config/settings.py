@@ -318,6 +318,31 @@ REALTIME_TICKET_TTL_SECONDS = 60
 REALTIME_URL = os.environ.get("REALTIME_URL", "ws://localhost:4000/ws")
 
 # ---------------------------------------------------------------------------
+# Feed cache — 01-ARCHITECTURE.md §7 phase 2
+# ---------------------------------------------------------------------------
+#
+# **Off, because it was measured and it is slower.**
+#
+# The cache is built, correct and tested; `posts/cache.py` holds a sorted set
+# of ids per user with a 30-minute TTL exactly as §7 describes. On this
+# machine, against 120k posts and a 5,000-account fan-in:
+#
+#     uncached   p50 16.13ms   p95 20.36ms   p99 24.88ms
+#     cached     p50 30.72ms   p95 35.80ms   p99 51.35ms
+#
+# The reason is structural rather than a tuning problem. Caching *ids* keeps
+# the read correct — deletions and fresh blocks still apply, which is what
+# makes the shape safe — but it means Postgres is queried either way. The
+# join and sort the cache removes is a small part of the total; the Redis
+# round trips it adds are not.
+#
+# It stays behind this flag rather than being deleted: the query it replaces
+# grows with the corpus and the cache does not, so the crossover exists. It is
+# just not here. Turn it on when `bench_feed --cached` beats `bench_feed`.
+
+FEED_CACHE_ENABLED = os.environ.get("FEED_CACHE_ENABLED", "") == "1"
+
+# ---------------------------------------------------------------------------
 # Calls — 01-ARCHITECTURE.md §9
 # ---------------------------------------------------------------------------
 #

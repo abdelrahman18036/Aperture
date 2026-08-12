@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.conf import settings
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import NotFound
@@ -115,8 +116,14 @@ class FeedView(APIView):
     def get(self, request: Request) -> Response:
         viewer = current_user(request)
         limit = _limit_of(request)
-        posts = list(
-            selectors.feed(viewer=viewer, cursor=_cursor_of(request), limit=limit)
+        cursor = _cursor_of(request)
+
+        # Off by default, and measured rather than assumed — see
+        # `FEED_CACHE_ENABLED` in settings for the numbers that decided it.
+        posts = (
+            selectors.cached_feed(viewer=viewer, cursor=cursor, limit=limit)
+            if settings.FEED_CACHE_ENABLED
+            else list(selectors.feed(viewer=viewer, cursor=cursor, limit=limit))
         )
         return Response(_page(posts, viewer, limit))
 

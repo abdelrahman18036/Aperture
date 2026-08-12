@@ -35,6 +35,52 @@ class Command(BaseCommand):
         parser.add_argument("--username", default="seed000")
         parser.add_argument("--runs", type=int, default=200)
         parser.add_argument("--limit", type=int, default=30)
+        parser.add_argument(
+            "--cached",
+            action="store_true",
+            help=(
+                "Measure `cached_feed` instead of `feed`, so the Redis layer "
+                "is compared against the query it is meant to save rather "
+                "than assumed to help."
+            ),
+        )
+        parser.add_argument(
+            "--follows",
+            type=int,
+            default=None,
+            help=(
+                "Rewire the viewer to follow exactly this many accounts before "
+                "measuring. Fan-in is the variable 01-ARCHITECTURE.md §7 says "
+                "decides whether a pull feed holds, so it is the one worth "
+                "sweeping: 'someone following 5,000 accounts triggers a brutal "
+                "fan-in on every scroll'. Destructive to that user's follow "
+                "graph, which is why it is opt-in and named."
+            ),
+        )
+
+    def _rewire(self, viewer: User, count: int) -> None:
+        """Point the viewer at exactly `count` accepted follows.
+
+        The point of the sweep is to hold everything else still — same posts,
+        same indexes, same machine — and move only the fan-in, so a change in
+        the timings has one possible cause.
+        """
+        from users.models import Follow
+
+        Follow.objects.filter(follower=viewer).delete()
+
+        followees = list(
+            User.objects.exclude(pk=viewer.pk).values_list("pk", flat=True)[:count]
+        )
+        Follow.objects.bulk_create(
+            [
+                Follow(follower=viewer, followee_id=pk, status=Follow.Status.ACCEPTED)
+                for pk in followees
+            ],
+            batch_size=1000,
+            ignore_conflicts=True,
+        )
+        self.stdout.write(f"viewer now follows {len(followees)} accounts")
 
     def handle(self, *args: Any, **options: Any) -> None:
         viewer = User.objects.filter(username=options["username"]).first()
@@ -42,11 +88,14 @@ class Command(BaseCommand):
             self.stderr.write(f"no such user: {options['username']}")
             return
 
+        if options["follows"] is not None:
+            self._rewire(viewer, options["follows"])
+
         limit = options["limit"]
 
         self._plan(viewer, limit)
         self._query_count(viewer, limit)
-        self._timings(viewer, limit, options["runs"])
+        self._timings(viewer, limit, options["runs"], cached=options["cached"])
 
     # -- the plan ---------------------------------------------------------
 
@@ -96,11 +145,17 @@ class Command(BaseCommand):
 
     # -- timings ----------------------------------------------------------
 
-    def _timings(self, viewer: User, limit: int, runs: int) -> None:
+    def _timings(
+        self, viewer: User, limit: int, runs: int, *, cached: bool = False
+    ) -> None:
         samples: list[float] = []
         for _ in range(runs):
             started = time.perf_counter()
-            posts = list(selectors.feed(viewer=viewer, limit=limit))
+            posts = (
+                selectors.cached_feed(viewer=viewer, limit=limit)
+                if cached
+                else list(selectors.feed(viewer=viewer, limit=limit))
+            )
             post_ids = [post.pk for post in posts]
             get_many(
                 entity_type=Counter.EntityType.POST,

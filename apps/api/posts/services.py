@@ -13,6 +13,7 @@ from django.utils import timezone
 from counters.models import Counter
 from counters.tasks import adjust
 from media.models import Media
+from posts import cache
 from posts.models import Comment, Like, Post, PostMedia
 from users.models import User
 from users.selectors import can_view_posts
@@ -83,7 +84,38 @@ def create_post(
     )
 
     _bump(Counter.EntityType.USER, author.pk, Counter.Metric.POSTS, 1)
+
+    # §7: "invalidated on a followee's new post". After commit, never inside
+    # it — rule 11 is about socket events but the reasoning is identical here.
+    # A cache updated inside a transaction that then rolls back is a feed
+    # holding a post that does not exist, and it holds it for thirty minutes.
+    transaction.on_commit(lambda: _fan_out_to_feeds(post))
+
     return post
+
+
+def _fan_out_to_feeds(post: Post) -> None:
+    """Put a new post into the feed caches that already exist.
+
+    Synchronous, and that is a decision with a limit on it. Reading the
+    follower ids and pushing one id into each sorted set is cheap for the
+    accounts this product has; for an account with a million followers it is
+    not, and that is precisely the case §7 answers with hybrid push — "except
+    accounts over ~10k followers, which stay pull and merge in at read time".
+    That threshold is not implemented, because the instrumentation says it is
+    not needed yet; when it is, this is the function it changes.
+
+    `push` only touches feeds that already exist, so this costs nothing for
+    followers who have not read recently.
+    """
+    from users.models import Follow
+
+    follower_ids = list(
+        Follow.objects.filter(
+            followee_id=post.author_id, status=Follow.Status.ACCEPTED
+        ).values_list("follower_id", flat=True)
+    )
+    cache.push(user_ids=follower_ids, post_id=post.pk)
 
 
 @transaction.atomic

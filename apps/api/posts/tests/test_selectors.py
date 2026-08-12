@@ -250,3 +250,152 @@ class TestExplore:
         second = list(selectors.explore(viewer=viewer, cursor=first[-1].pk, limit=2))
         assert [p.caption for p in second] == ["p2", "p1"]
         assert posts[0].pk not in {p.pk for p in second}
+
+
+# ---------------------------------------------------------------------------
+# The feed cache — 01-ARCHITECTURE.md §7 phase 2
+# ---------------------------------------------------------------------------
+
+
+class TestFeedCache:
+    """What has to stay true once a cache sits over the feed.
+
+    Every test here is about *correctness*, not speed. A cache that is fast
+    and occasionally wrong is worse than the query it replaced, and §7 chose
+    the pull feed precisely because it has "no invalidation bugs" — so these
+    pin the ways this layer could introduce some.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean(self) -> None:
+        from posts import cache
+
+        try:
+            from posts.cache import _client
+
+            client = _client()
+            for found in client.scan_iter("feed:*"):
+                client.delete(found)
+        except Exception:
+            pytest.skip("Redis is unavailable and the cache fails open without it")
+        assert cache.TTL_SECONDS == 30 * 60
+
+    def test_a_second_read_matches_the_first(self, user: User, author: User) -> None:
+        """The whole point: a hit and a miss return the same page."""
+        _follow(user, author)
+        for index in range(5):
+            _post(author, f"p{index}")
+
+        first = [p.pk for p in selectors.cached_feed(viewer=user)]
+        second = [p.pk for p in selectors.cached_feed(viewer=user)]
+
+        assert first == second
+        assert len(first) == 5
+
+    def test_a_hit_still_hides_a_deleted_post(self, user: User, author: User) -> None:
+        """The reason ids are cached and posts are not.
+
+        Caching serialised posts would need invalidating on every deletion;
+        caching ids means the rows are re-read and `live()` does its job.
+        """
+        _follow(user, author)
+        posts = [_post(author, f"p{i}") for i in range(3)]
+        selectors.cached_feed(viewer=user)  # warm
+
+        services.soft_delete_post(post=posts[1])
+
+        assert posts[1].pk not in {p.pk for p in selectors.cached_feed(viewer=user)}
+
+    def test_a_hit_still_filters_a_new_block(self, user: User, author: User) -> None:
+        """Rule 8 survives the cache, which is the same property as above.
+
+        A block created after the set was written must take effect on the very
+        next read — the Phase 4 verification, now with a cache in the way.
+        """
+        _follow(user, author)
+        _post(author, "theirs")
+        selectors.cached_feed(viewer=user)  # warm
+
+        Block.objects.create(blocker=user, blocked=author)
+
+        assert list(selectors.cached_feed(viewer=user)) == []
+
+    def test_a_new_post_reaches_a_warm_feed(self, user: User, author: User) -> None:
+        """§7: "invalidated on a followee's new post"."""
+        _follow(user, author)
+        _post(author, "first")
+        selectors.cached_feed(viewer=user)  # warm
+
+        fresh = _post(author, "second")
+
+        assert selectors.cached_feed(viewer=user)[0].pk == fresh.pk
+
+    def test_following_someone_drops_the_cached_feed(
+        self, user: User, author: User
+    ) -> None:
+        """A follow changes *which* accounts the feed draws from, so the whole
+        set is wrong rather than merely incomplete."""
+        from posts import cache
+
+        _post(author, "theirs")
+        selectors.cached_feed(viewer=user)  # warm, and empty
+
+        _follow(user, author)
+
+        assert cache.get_page(user_id=user.pk, cursor=None, limit=30) is None
+        assert len(selectors.cached_feed(viewer=user)) == 1
+
+    def test_an_empty_feed_is_not_mistaken_for_a_cold_cache(self, user: User) -> None:
+        """`[]` and `None` mean different things.
+
+        Collapsing them would make a new account's empty feed indistinguishable
+        from a cache miss forever.
+        """
+        from posts import cache
+
+        assert cache.get_page(user_id=user.pk, cursor=None, limit=30) is None
+        cache.store(user_id=user.pk, post_ids=[])
+        # Storing nothing must not create a set that reads as an empty feed.
+        assert cache.get_page(user_id=user.pk, cursor=None, limit=30) is None
+
+    def test_a_push_never_invents_a_feed(self, user: User) -> None:
+        """A cache that creates a page it never got from the database would
+        serve one post and claim it was the whole feed."""
+        from posts import cache
+
+        cache.push(user_ids=[user.pk], post_id=80_000_000_000_000_001)
+
+        assert cache.get_page(user_id=user.pk, cursor=None, limit=30) is None
+
+    def test_the_cursor_walks_backwards_through_a_hit(
+        self, user: User, author: User
+    ) -> None:
+        posts = []
+        _follow(user, author)
+        for index in range(6):
+            posts.append(_post(author, f"p{index}"))
+
+        first = selectors.cached_feed(viewer=user, limit=2)
+        assert [p.caption for p in first] == ["p5", "p4"]
+
+        second = selectors.cached_feed(viewer=user, cursor=first[-1].pk, limit=2)
+        assert [p.caption for p in second] == ["p3", "p2"]
+
+    def test_the_feed_survives_redis_being_gone(
+        self, user: User, author: User, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Fail open. A feed cache that takes the site down when Redis blinks
+        is worse than no feed cache."""
+        import redis
+
+        from posts import cache
+
+        _follow(user, author)
+        _post(author, "still here")
+
+        def broken() -> None:
+            raise redis.ConnectionError("redis is down")
+
+        monkeypatch.setattr(cache, "_client", broken)
+
+        assert [p.caption for p in selectors.cached_feed(viewer=user)] == ["still here"]

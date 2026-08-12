@@ -116,6 +116,24 @@ def _bump(entity_type: str, entity_id: int, metric: str, delta: int) -> None:
 
 
 @transaction.atomic
+def _forget_feed(*users: User) -> None:
+    """Drop these users' cached feeds after the transaction commits.
+
+    Anything that changes *which* accounts a feed draws from invalidates the
+    whole set — a follow, an unfollow, a block. Rebuilding it correctly would
+    mean running the query the cache exists to avoid, so it is dropped and the
+    next read pays one miss.
+
+    After commit, not inside it: a feed dropped for a transaction that then
+    rolls back is a free cache miss, but a feed *rebuilt* mid-transaction
+    would be built from rows nobody else can see yet.
+    """
+    from posts import cache
+
+    ids = [user.pk for user in users]
+    transaction.on_commit(lambda: cache.drop(user_ids=ids))
+
+
 def follow(*, follower: User, followee: User) -> Follow:
     """Follow, or request to follow a private account.
 
@@ -150,6 +168,7 @@ def follow(*, follower: User, followee: User) -> Follow:
     if status == Follow.Status.ACCEPTED:
         _bump(Counter.EntityType.USER, followee.pk, Counter.Metric.FOLLOWERS, 1)
         _bump(Counter.EntityType.USER, follower.pk, Counter.Metric.FOLLOWING, 1)
+        _forget_feed(follower)
 
     return edge
 
@@ -167,6 +186,7 @@ def unfollow(*, follower: User, followee: User) -> None:
     if was_accepted:
         _bump(Counter.EntityType.USER, followee.pk, Counter.Metric.FOLLOWERS, -1)
         _bump(Counter.EntityType.USER, follower.pk, Counter.Metric.FOLLOWING, -1)
+        _forget_feed(follower)
 
 
 @transaction.atomic
@@ -190,6 +210,9 @@ def respond_to_request(*, followee: User, follower: User, accept: bool) -> None:
     edge.save(update_fields=["status"])
     _bump(Counter.EntityType.USER, followee.pk, Counter.Metric.FOLLOWERS, 1)
     _bump(Counter.EntityType.USER, follower.pk, Counter.Metric.FOLLOWING, 1)
+    # Accepting is when the edge starts feeding a timeline, so it is the
+    # moment the requester's cached feed becomes wrong.
+    _forget_feed(follower)
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +238,11 @@ def block(*, blocker: User, blocked: User) -> Block:
     for follower, followee in ((blocker, blocked), (blocked, blocker)):
         unfollow(follower=follower, followee=followee)
 
+    # Both sides. A block hides each from the other, so both cached feeds are
+    # now wrong — and `unfollow` above only drops the ones where an edge
+    # actually existed.
+    _forget_feed(blocker, blocked)
+
     return edge
 
 
@@ -226,6 +254,9 @@ def unblock(*, blocker: User, blocked: User) -> None:
     deliberately cut off. If they want to follow again, they can.
     """
     Block.objects.filter(blocker=blocker, blocked=blocked).delete()
+    # No follows come back, but both feeds were filtered by the block and are
+    # no longer filtered — the *contents* change even though the edges do not.
+    _forget_feed(blocker, blocked)
 
 
 # ---------------------------------------------------------------------------
