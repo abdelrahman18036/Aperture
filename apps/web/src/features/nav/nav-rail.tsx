@@ -1,11 +1,12 @@
 "use client";
 
 import {
+  Aperture,
   Bell,
-  Camera,
   Compass,
   House,
   MessageCircle,
+  PlusSquare,
   Search,
   Settings,
   UserPlus,
@@ -17,69 +18,22 @@ import { usePathname } from "next/navigation";
 import { cn } from "@repo/ui";
 
 import { useCompose } from "@/features/composer/compose-dialog";
-
-/**
- * The nav rail — 72px collapsed, 240px expanded.
- *
- * The widths are from `02-DESIGN-SYSTEM.md` and they are not suggestions: the
- * feed column is fixed at 640px and centred, so the rails are what absorb the
- * window instead of the photographs reflowing.
- *
- * Expanded above 1280px, collapsed to icons below it, and gone entirely on
- * mobile where it becomes a bottom bar.
- */
+import { ThemeControl } from "@/features/theme/theme-control";
 
 interface Destination {
   href: string;
   label: string;
   icon: typeof House;
-  /** Shown as a daylight pip when non-zero. A queue waiting on you. */
-  count?: number;
 }
 
 const DESTINATIONS: Destination[] = [
-  { href: "/", label: "Feed", icon: House },
-  { href: "/explore", label: "Explore", icon: Compass },
+  { href: "/", label: "Home", icon: House },
   { href: "/search", label: "Search", icon: Search },
+  { href: "/explore", label: "Explore", icon: Compass },
   { href: "/messages", label: "Messages", icon: MessageCircle },
   { href: "/notifications", label: "Activity", icon: Bell },
+  { href: "/requests", label: "Requests", icon: UserPlus },
 ];
-
-/** Not a destination. Composing happens over the page, not instead of it. */
-const COMPOSE: Destination = {
-  href: "/compose",
-  label: "New post",
-  icon: Camera,
-};
-
-/**
- * Places that only exist when they have something in them.
- *
- * A permanent "Requests" entry reading zero on an account that is not
- * private is a door to an empty room. It appears with a count and goes away
- * when the queue is empty — which also makes the pip mean something, because
- * it is never showing a nought.
- *
- * **Unread was in here and should never have been.** It was a second entry
- * labelled "Unread" pointing at `/messages` — the same href as Messages
- * directly above it, so the rail offered two doors into one room and the
- * count sat on the one nobody would have looked for. A count belongs on the
- * thing it counts.
- */
-function queues(counts: NavCounts): Destination[] {
-  return [
-    ...(counts.requests > 0
-      ? [
-          {
-            href: "/requests",
-            label: "Requests",
-            icon: UserPlus,
-            count: counts.requests,
-          },
-        ]
-      : []),
-  ];
-}
 
 export interface NavCounts {
   requests: number;
@@ -87,22 +41,25 @@ export interface NavCounts {
   activity: number;
 }
 
-/**
- * The counts that belong to a permanent destination rather than to a queue.
- *
- * Activity and Messages are always there — unlike Requests, which only exists
- * when it has something in it — so their numbers ride on the entry instead of
- * conjuring a second one beside it.
- */
-function withCounts(items: Destination[], counts: NavCounts): Destination[] {
-  const on: Record<string, number> = {
-    "/notifications": counts.activity,
-    "/messages": counts.unread,
-  };
-  return items.map((item) => {
-    const count = on[item.href] ?? 0;
-    return count > 0 ? { ...item, count } : item;
-  });
+function countFor(href: string, counts: NavCounts): number {
+  if (href === "/messages") return counts.unread;
+  if (href === "/notifications") return counts.activity;
+  if (href === "/requests") return counts.requests;
+  return 0;
+}
+
+function isActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/" || pathname.startsWith("/p/");
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function Badge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="ml-auto min-w-5 rounded-full bg-commit px-1.5 text-center text-[11px] font-semibold leading-5 text-commit-ink">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
 }
 
 export function NavRail({
@@ -112,127 +69,99 @@ export function NavRail({
   username: string | null;
   counts: NavCounts;
 }) {
-  const { start: onCompose } = useCompose();
   const pathname = usePathname();
-
-  const items: Destination[] = [
-    ...withCounts(DESTINATIONS, counts),
-    ...queues(counts),
-    ...(username
-      ? [
-          { href: `/u/${username}`, label: "Profile", icon: UserRound },
-          { href: "/settings", label: "Settings", icon: Settings },
-        ]
-      : []),
-  ];
+  const { start } = useCompose();
+  const profileHref = username ? `/u/${username}` : "/settings";
 
   return (
-    <nav
-      aria-label="Primary"
-      className={cn(
-        // Fixed rather than sticky: the feed scrolls, the rail does not move.
-        "fixed inset-y-0 left-0 z-20 hidden flex-col gap-1 border-r border-line",
-        "bg-base px-3 py-6 sm:flex",
-        "w-nav-rail xl:w-nav-rail-open",
-      )}
-    >
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-seam bg-panel px-4 py-6 text-ink lg:flex">
       <Link
         href="/"
-        className="mb-6 flex h-9 items-center gap-3 px-2 text-ink"
-        aria-label="Aperture, home"
+        aria-label="Aperture home"
+        className="flex items-center gap-3 px-2"
       >
-        <span
-          aria-hidden="true"
-          className="size-4 shrink-0 rounded-full ring-2 ring-safelight"
-        />
-        <span className="hidden font-display text-title xl:inline">Aperture</span>
+        <span className="grid size-11 place-items-center rounded-[14px] bg-commit text-commit-ink shadow-key">
+          <Aperture className="size-7" strokeWidth={1.7} aria-hidden="true" />
+        </span>
+        <span>
+          <span className="block text-xl font-bold tracking-[-0.03em]">
+            Aperture
+          </span>
+          <span className="block text-xs text-ink-dim">
+            Your work, in focus.
+          </span>
+        </span>
       </Link>
+
+      <nav aria-label="Primary" className="mt-10 grid gap-1.5">
+        {DESTINATIONS.map(({ href, label, icon: Icon }) => {
+          const active = isActive(pathname, href);
+          const count = countFor(href, counts);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              aria-label={count ? `${label}, ${String(count)}` : label}
+              className={cn(
+                "flex min-h-12 items-center gap-4 rounded-control px-4 text-[15px] font-medium transition-colors",
+                active
+                  ? "bg-key-active text-commit"
+                  : "text-ink-dim hover:bg-key hover:text-ink",
+              )}
+            >
+              <Icon
+                className="size-5"
+                strokeWidth={active ? 2.35 : 1.8}
+                aria-hidden="true"
+              />
+              <span>{label}</span>
+              <Badge count={count} />
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="my-5 h-px bg-seam" />
 
       <button
         type="button"
-        onClick={() => {
-          onCompose("post");
-        }}
-        aria-label={COMPOSE.label}
-        title={COMPOSE.label}
-        className={cn(
-          "flex h-10 w-full items-center gap-3 rounded-control px-2",
-          "text-label text-ink-dim transition-colors duration-[var(--duration-hover)]",
-          "hover:text-ink",
-        )}
+        onClick={() => start("post")}
+        className="flex min-h-12 items-center gap-4 rounded-control px-4 text-[15px] font-medium text-ink-dim transition-colors hover:bg-key-active hover:text-commit"
       >
-        <COMPOSE.icon className="size-5 shrink-0" aria-hidden="true" />
-        <span aria-hidden="true" className="hidden xl:inline">
-          {COMPOSE.label}
-        </span>
+        <PlusSquare className="size-5" strokeWidth={1.8} aria-hidden="true" />
+        Create post
       </button>
+      <Link
+        href="/settings"
+        className="flex min-h-12 items-center gap-4 rounded-control px-4 text-[15px] font-medium text-ink-dim transition-colors hover:bg-key hover:text-ink"
+      >
+        <Settings className="size-5" strokeWidth={1.8} aria-hidden="true" />
+        Settings
+      </Link>
 
-      {items.map(({ href, label, icon: Icon, count }) => {
-        const active = pathname === href;
-        return (
-          <Link
-            key={label}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            // The label below is `hidden` under 1280px, and `display: none`
-            // removes it from the accessibility tree as well as the screen —
-            // so seven of these eight links had no accessible name at all,
-            // and a screen reader announced "link" eight times. `aria-label`
-            // is unconditional for that reason. `title` gives a sighted
-            // person the same word on hover, which is the whole difference
-            // between a rail of icons and a rail of guesses.
-            aria-label={count ? `${label}, ${String(count)}` : label}
-            title={label}
-            className={cn(
-              "flex h-10 items-center gap-3 rounded-control px-2",
-              "text-label transition-colors duration-[var(--duration-hover)]",
-              active ? "text-ink" : "text-ink-dim hover:text-ink",
-            )}
-          >
-            <span className="relative shrink-0">
-              <Icon
-                className={cn("size-5", active && "text-safelight")}
-                aria-hidden="true"
-              />
-              {/* Daylight, and a dot rather than a number at this width —
-                  the count is in the accessible name and spelled out beside
-                  the label once the rail expands. */}
-              {/* The number, not a dot. "You have messages" is what a dot
-                  says; "you have four" is what somebody actually wants, and
-                  it fits. */}
-              {count ? (
-                <span
-                  aria-hidden="true"
-                  className="absolute -right-2 -top-1.5 min-w-4 rounded-full bg-daylight px-1 text-center text-[10px] font-semibold leading-4 text-base ring-2 ring-base xl:hidden"
-                >
-                  {count > 9 ? "9+" : count}
-                </span>
-              ) : null}
+      <div className="mt-auto border-t border-seam pt-5">
+        <div className="flex items-center gap-3 rounded-control px-2 py-2">
+          <span className="grid size-10 place-items-center rounded-full bg-key text-ink-dim">
+            <UserRound className="size-5" aria-hidden="true" />
+          </span>
+          <Link href={profileHref} className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">
+              {username ?? "Loading profile"}
             </span>
-            <span aria-hidden="true" className="hidden xl:inline">
-              {label}
-            </span>
-            {count ? (
-              <span
-                aria-hidden="true"
-                className="ml-auto hidden rounded-full px-1.5 meta text-daylight ring-1 ring-daylight-dim tabular-nums xl:inline"
-              >
-                {count > 99 ? "99+" : count}
-              </span>
-            ) : null}
+            <span className="block text-xs text-ink-dim">View profile</span>
           </Link>
-        );
-      })}
-    </nav>
+          <ThemeControl
+            compact
+            label="Appearance"
+            className="border-0 bg-transparent p-0 shadow-none"
+          />
+        </div>
+      </div>
+    </aside>
   );
 }
 
-/**
- * The same destinations as a bottom bar, below the rail's breakpoint.
- *
- * Quality floor: responsive to 375px. The rails collapse; the feed becomes
- * fluid. Nothing here reflows a photograph mid-scroll.
- */
 export function NavBar({
   username,
   counts,
@@ -241,59 +170,86 @@ export function NavBar({
   counts: NavCounts;
 }) {
   const pathname = usePathname();
-  // No queue entries here. The bar is six wide at 375px already, and a
-  // seventh target would be under the 24px floor — the pip on Messages
-  // carries the same information in the room that exists.
-  const items: Destination[] = [
-    ...DESTINATIONS,
-    ...(username
-      ? [{ href: `/u/${username}`, label: "Profile", icon: UserRound }]
-      : []),
-  ];
-  // Requests has no entry down here, so its count rides on Messages
-  // alongside unread — both are one tap away through it. Activity has its
-  // own entry now, so its pip belongs there rather than piled onto the same
-  // dot, where "you have something" would stop saying where.
-  const waitingAt: Record<string, number> = {
-    "/messages": counts.requests + counts.unread,
-    "/notifications": counts.activity,
+  const { start } = useCompose();
+  const profile: Destination = {
+    href: username ? `/u/${username}` : "/settings",
+    label: username ? "Profile" : "Profile loading",
+    icon: UserRound,
   };
+  const items = [...DESTINATIONS, profile];
 
   return (
-    <nav
-      aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-base sm:hidden"
-    >
-      {items.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href;
-        const waiting = waitingAt[href] ?? 0;
-        const pip = waiting > 0;
-        return (
-          <Link
-            key={label}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            aria-label={pip ? `${label}, ${String(waiting)} waiting` : label}
-            className="flex h-14 flex-1 items-center justify-center"
-          >
-            <span className="relative">
-              <Icon
-                className={cn(
-                  "size-5 transition-colors duration-[var(--duration-hover)]",
-                  active ? "text-safelight" : "text-ink-dim",
-                )}
-                aria-hidden="true"
-              />
-              {pip ? (
-                <span
+    <>
+      <header className="sticky top-0 z-30 flex h-[calc(4.25rem+env(safe-area-inset-top))] items-center border-b border-seam bg-panel/95 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-lg lg:hidden">
+        <Link
+          href="/"
+          aria-label="Aperture home"
+          className="mr-auto flex items-center gap-2 text-ink"
+        >
+          <Aperture className="size-7 text-commit" aria-hidden="true" />
+          <span className="text-lg font-bold">Aperture</span>
+        </Link>
+        <Link
+          href="/search"
+          aria-label="Search"
+          className="grid size-11 place-items-center rounded-full text-ink-dim hover:bg-key hover:text-ink"
+        >
+          <Search className="size-5" aria-hidden="true" />
+        </Link>
+        <button
+          type="button"
+          onClick={() => start("post")}
+          aria-label="Create post"
+          className="grid size-11 place-items-center rounded-full text-ink-dim hover:bg-key-active hover:text-commit"
+        >
+          <PlusSquare className="size-5" aria-hidden="true" />
+        </button>
+        <ThemeControl
+          compact
+          label="Appearance"
+          className="border-0 bg-transparent p-0 shadow-none"
+        />
+      </header>
+
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-seam bg-panel/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg lg:hidden"
+      >
+        {items.map(({ href, label, icon: Icon }) => {
+          const active = isActive(pathname, href);
+          const count = countFor(href, counts);
+          const unavailable = label === "Profile loading";
+          return (
+            <Link
+              key={label}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              aria-disabled={unavailable || undefined}
+              tabIndex={unavailable ? -1 : undefined}
+              onClick={(event) => unavailable && event.preventDefault()}
+              aria-label={count ? `${label}, ${String(count)}` : label}
+              className={cn(
+                "relative flex min-h-14 items-center justify-center rounded-control text-ink-dim transition-colors",
+                active && "bg-key-active text-commit",
+                unavailable && "opacity-45",
+              )}
+            >
+              <span className="relative">
+                <Icon
+                  className="size-5"
+                  strokeWidth={active ? 2.3 : 1.8}
                   aria-hidden="true"
-                  className="absolute -right-1 -top-0.5 size-2 rounded-full bg-daylight ring-2 ring-base"
                 />
-              ) : null}
-            </span>
-          </Link>
-        );
-      })}
-    </nav>
+                {count > 0 ? (
+                  <span className="absolute -right-2.5 -top-2 min-w-4 rounded-full bg-commit px-1 text-center text-[9px] font-bold leading-4 text-commit-ink">
+                    {count > 9 ? "9+" : count}
+                  </span>
+                ) : null}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+    </>
   );
 }

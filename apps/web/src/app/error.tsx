@@ -1,22 +1,13 @@
 "use client";
 
+import { RotateCcw, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import { useEffect } from "react";
 
-import { Button } from "@repo/ui";
+import { Button, InstrumentPanel } from "@repo/ui";
 
-/**
- * The error boundary.
- *
- * Without one, a thrown render error in a client component blanks the page —
- * the user gets nothing at all, which is strictly worse than a message and a
- * button. React requires this to be a client component, which is why it is
- * the only file in `app/` that says so.
- *
- * **The message is not shown.** A rendering error's text is written for
- * whoever wrote the code and routinely contains a stack, a query, or the
- * shape of something internal. It goes to the console, where a developer
- * looks, and the person reading the screen gets a sentence and a way out.
- */
+import { ThemeControl } from "@/features/theme/theme-control";
+
 export default function Error({
   error,
   reset,
@@ -29,20 +20,50 @@ export default function Error({
   }, [error]);
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-      <p className="font-display text-display-l text-ink">Something broke</p>
-      <p className="mt-4 max-w-sm text-body text-ink-dim">
-        This is on us, not on you. Trying again often works — the failure is
-        usually a request that did not come back.
-      </p>
-      {/* The digest is the one identifier that ties this screen to a server
-          log, so it is worth showing even though the message is not. */}
-      {error.digest !== undefined && (
-        <p className="mt-4 meta">reference {error.digest}</p>
-      )}
-      <div className="mt-8">
-        <Button onClick={reset}>Try again</Button>
-      </div>
+    <main className="flex min-h-dvh items-center justify-center bg-chassis p-3 sm:p-6">
+      <InstrumentPanel
+        tone="raised"
+        className="w-full max-w-xl overflow-hidden"
+      >
+        <header className="flex items-center justify-between border-b border-seam px-4 py-3 sm:px-6">
+          <Link
+            href="/"
+            className="font-display text-sm tracking-[0.2em] text-ink"
+          >
+            APERTURE
+          </Link>
+          <ThemeControl />
+        </header>
+        <div className="px-5 py-10 text-center sm:px-10 sm:py-14">
+          <div className="mx-auto grid size-14 place-items-center rounded-[12px] border border-danger/40 bg-danger/10 text-danger">
+            <TriangleAlert className="size-6" aria-hidden="true" />
+          </div>
+          <p className="mt-5 text-sm font-medium text-danger">
+            Something went wrong
+          </p>
+          <h1 className="mt-2 font-display text-display-l text-ink">
+            This view could not load
+          </h1>
+          <p className="mx-auto mt-4 max-w-md text-body text-ink-dim">
+            Your account and content are unchanged. Retry the view, or return to
+            the feed if the problem continues.
+          </p>
+          {error.digest !== undefined ? (
+            <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-faint">
+              Reference {error.digest}
+            </p>
+          ) : null}
+          <div className="mt-7 flex flex-wrap justify-center gap-2">
+            <Button onClick={reset}>
+              <RotateCcw className="size-4" aria-hidden="true" />
+              Retry view
+            </Button>
+            <Button variant="secondary" render={<Link href="/" />}>
+              Return to feed
+            </Button>
+          </div>
+        </div>
+      </InstrumentPanel>
     </main>
   );
 }

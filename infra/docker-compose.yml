@@ -87,6 +87,9 @@ services:
 
   typesense:
     image: typesense/typesense:28.0
+    # Search currently uses Postgres. Keep the production-scale replacement
+    # reproducible without paying for an idle service during everyday work.
+    profiles: ["search"]
     # Docker Desktop stopping should not take the whole stack with it —
     # it did that three times while this project was being built, and each
     # time every dev server had to be restarted by hand.
@@ -186,4 +189,3 @@ volumes:
   redisdata:
   miniodata:
   typesensedata:
-

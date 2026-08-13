@@ -35,7 +35,14 @@ function firstUnwatched(entry: TrayEntry | undefined): number {
  * on its own list, because the emoji rides through to the author's activity
  * feed and an unbounded field there is a place to put anything at all.
  */
-const REACTIONS = ["\u2764\ufe0f", "\ud83d\udd25", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude22", "\ud83d\udc4f"] as const;
+const REACTIONS = [
+  "\u2764\ufe0f",
+  "\ud83d\udd25",
+  "\ud83d\ude02",
+  "\ud83d\ude2e",
+  "\ud83d\ude22",
+  "\ud83d\udc4f",
+] as const;
 
 /** Narrowed by the generated client, which carries the same list. */
 type Reaction = (typeof REACTIONS)[number];
@@ -74,6 +81,8 @@ export function StoryViewer({
   viewerId: string | null;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [authorIndex, setAuthorIndex] = useState(startAt);
   /**
    * Start on the first frame they have not watched, then wrap.
@@ -102,7 +111,9 @@ export function StoryViewer({
    * `enteredAt` is 0 for a rewatch, which makes the wrap a no-op: there is
    * nothing before frame zero to come back for.
    */
-  const [enteredAt, setEnteredAt] = useState(() => firstUnwatched(entries[startAt]));
+  const [enteredAt, setEnteredAt] = useState(() =>
+    firstUnwatched(entries[startAt]),
+  );
   const [wrapped, setWrapped] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -236,6 +247,20 @@ export function StoryViewer({
     }
   }, [authorIndex, entries, frameIndex]);
 
+  useEffect(() => {
+    restoreFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      restoreFocusRef.current?.focus();
+    };
+  }, []);
+
   // Mark it watched as soon as it is on screen. The endpoint is idempotent,
   // so a re-render or a second tab costs one 204.
   const marked = useRef(new Set<string>());
@@ -310,6 +335,27 @@ export function StoryViewer({
       if (event.key === "Escape") onClose();
       if (event.key === "ArrowRight") next();
       if (event.key === "ArrowLeft") previous();
+      if (event.key === "Tab") {
+        const focusable = Array.from(
+          dialogRef.current?.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+          ) ?? [],
+        ).filter((node) => !node.hasAttribute("aria-hidden"));
+        if (focusable.length === 0) {
+          event.preventDefault();
+          dialogRef.current?.focus();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => {
@@ -323,13 +369,15 @@ export function StoryViewer({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={`${entry.author.username}'s story`}
-      className="fixed inset-0 z-50 flex flex-col bg-base"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col bg-black/75 p-2 backdrop-blur-lg sm:p-4"
     >
       {/* One segment per frame. Filled behind, filling now, empty ahead. */}
-      <div className="flex gap-1 px-3 pt-3">
+      <div className="mx-auto flex w-full max-w-[32rem] gap-1 px-3 pt-3">
         {entry.stories.map((frame, index) => (
           <span
             key={frame.id}
@@ -351,7 +399,7 @@ export function StoryViewer({
         ))}
       </div>
 
-      <header className="flex items-center gap-3 px-4 py-3">
+      <header className="mx-auto flex w-full max-w-[32rem] items-center gap-3 rounded-t-[22px] border border-b-0 border-seam bg-panel px-4 py-3">
         <UserAvatar user={entry.author} className="size-8" />
         <span className="min-w-0 flex-1 truncate text-label text-ink">
           {entry.author.username}
@@ -409,13 +457,18 @@ export function StoryViewer({
             }
           />
         )}
-        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClose}
+          aria-label="Close"
+        >
           <X aria-hidden="true" />
         </Button>
       </header>
 
       {showViewers ? (
-        <div className="border-b border-line px-4 pb-3">
+        <div className="mx-auto w-full max-w-[32rem] border-x border-b border-seam bg-panel px-4 pb-3">
           {viewers.length === 0 ? (
             <p className="meta">nobody yet</p>
           ) : (
@@ -432,11 +485,13 @@ export function StoryViewer({
       ) : null}
 
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+        className="relative mx-auto flex min-h-0 w-full max-w-[32rem] flex-1 items-center justify-center overflow-hidden border-x border-seam bg-black/95"
         // A text story is words on a ground, so the ground is the frame.
         // The CSS comes from the server resolved, which is what lets a new
         // background ship without touching this file.
-        style={media === null ? { background: story.background_css } : undefined}
+        style={
+          media === null ? { background: story.background_css } : undefined
+        }
       >
         {/* Words, centred, with room to breathe — the whole content rather
             than a caption under something else. It scales down as it gets
@@ -459,7 +514,7 @@ export function StoryViewer({
                 ? "text-body"
                 : story.text.length > 90
                   ? "text-title"
-                  : "font-display text-display-l",
+                  : "text-3xl font-semibold sm:text-4xl",
             )}
           >
             <Linkify text={story.text} />
@@ -537,13 +592,13 @@ export function StoryViewer({
       </div>
 
       {story.link_preview ? (
-        <div className="px-4 pt-3">
+        <div className="mx-auto w-full max-w-[32rem] bg-panel px-4 pt-3">
           <LinkCard preview={story.link_preview} />
         </div>
       ) : null}
 
       {story.caption ? (
-        <p className="px-4 pb-3 pt-3 text-center text-body text-ink">
+        <p className="mx-auto w-full max-w-[32rem] bg-panel px-4 pb-3 pt-3 text-center text-body text-ink">
           <Linkify text={story.caption} />
         </p>
       ) : null}
@@ -555,9 +610,9 @@ export function StoryViewer({
           sends. The reply goes into the direct conversation — there is no
           second inbox for story replies and no second unread count. */}
       {mine ? (
-        <div className="pb-6" />
+        <div className="mx-auto w-full max-w-[32rem] rounded-b-[22px] bg-panel pb-6" />
       ) : (
-        <div className="flex flex-col gap-2 px-4 pb-6 pt-3">
+        <div className="mx-auto flex w-full max-w-[32rem] flex-col gap-2 rounded-b-[22px] border border-t-0 border-seam bg-panel px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">
           <div className="flex justify-center gap-1">
             {REACTIONS.map((emoji) => {
               const chosen =

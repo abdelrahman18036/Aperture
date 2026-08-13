@@ -54,6 +54,7 @@ export function Notifications() {
   const [hasMore, setHasMore] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const inFlight = useRef(false);
   const started = useRef(false);
@@ -62,6 +63,7 @@ export function Notifications() {
     if (inFlight.current || !hasMore) return;
     inFlight.current = true;
     setBusy(true);
+    setError(null);
 
     const from = cursor;
     void api
@@ -73,13 +75,20 @@ export function Notifications() {
         setBusy(false);
         setLoaded(true);
         if (response.data === undefined) {
-          setHasMore(false);
+          setError(
+            "Activity could not be synchronized. Try again when you are ready.",
+          );
           return;
         }
         const page = response.data;
-        setItems((current) =>
-          from === null ? page.notifications : [...current, ...page.notifications],
-        );
+        setItems((current) => {
+          if (from === null) return page.notifications;
+          const known = new Set(current.map((item) => item.id));
+          return [
+            ...current,
+            ...page.notifications.filter((item) => !known.has(item.id)),
+          ];
+        });
         setCursor(page.next_cursor);
         setHasMore(page.next_cursor !== null);
       });
@@ -123,11 +132,30 @@ export function Notifications() {
   );
 
   return (
-    <div data-wide className="py-6">
-      <header className="flex flex-col gap-2 px-4 pb-4">
-        <h1 className="font-display text-display-l text-ink">Activity</h1>
-        <p className="meta">what other people did</p>
+    <div
+      data-wide
+      className="overflow-hidden rounded-instrument border border-seam bg-panel shadow-instrument"
+    >
+      <header className="flex flex-col gap-1 border-b border-seam px-5 py-6">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+          Activity
+        </h1>
+        <p className="text-sm text-ink-dim">
+          Reactions, replies, mentions, and new connections in one live stream.
+        </p>
       </header>
+
+      {error === null ? null : (
+        <div
+          role="alert"
+          className="mx-4 my-4 flex flex-wrap items-center justify-between gap-3 border border-danger/30 bg-danger/5 p-3"
+        >
+          <p className="text-body text-danger">{error}</p>
+          <Button variant="secondary" disabled={busy} onClick={loadMore}>
+            Try again
+          </Button>
+        </div>
+      )}
 
       {!loaded ? (
         <ul className="flex flex-col">
@@ -149,13 +177,15 @@ export function Notifications() {
             <Link
               href={item.href}
               className={cn(
-                "flex items-center gap-4 border-b border-line px-4 py-3",
-                "transition-colors duration-[var(--duration-hover)] hover:bg-raise",
+                "flex items-center gap-4 border-b border-seam px-5 py-4",
+                "transition-colors hover:bg-key",
               )}
             >
               <UserAvatar user={item.actor} />
-              <p className="min-w-0 flex-1 text-body text-ink-dim">
-                <span className="text-ink">{item.actor.username}</span>{" "}
+              <p className="min-w-0 flex-1 text-sm text-ink-dim">
+                <span className="font-semibold text-ink">
+                  {item.actor.username}
+                </span>{" "}
                 {phrase(item)}{" "}
                 <span className="meta">{relativeTime(item.created_at)}</span>
               </p>
@@ -173,10 +203,13 @@ export function Notifications() {
               )}
 
               {item.read_at === null ? (
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 shrink-0 rounded-full bg-daylight"
-                />
+                <>
+                  <span className="sr-only">Unread. </span>
+                  <span
+                    aria-hidden="true"
+                    className="size-2 shrink-0 rounded-full bg-commit"
+                  />
+                </>
               ) : null}
             </Link>
           </li>
@@ -194,10 +227,12 @@ export function Notifications() {
         </div>
       ) : null}
 
-      {loaded && items.length === 0 ? (
+      {loaded && error === null && items.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-24 text-center">
           <p className="font-display text-display-l text-ink">Nothing yet</p>
-          <p className="meta">likes, comments and follows land here</p>
+          <p className="text-body text-ink-dim">
+            Likes, comments, and follows will appear here.
+          </p>
         </div>
       ) : null}
     </div>

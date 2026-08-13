@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { Button, cn } from "@repo/ui";
+import { Button, InstrumentPanel, cn } from "@repo/ui";
 
 import { api } from "@/lib/api";
 
@@ -28,10 +28,26 @@ type Background = Schemas["BackgroundEnum"];
  */
 
 const BACKGROUNDS: { id: Background; label: string; css: string }[] = [
-  { id: "slate", label: "Slate", css: "linear-gradient(160deg, #1B1E28, #0B0B0E)" },
-  { id: "moss", label: "Moss", css: "linear-gradient(160deg, #16241C, #0B0F0C)" },
-  { id: "plum", label: "Plum", css: "linear-gradient(160deg, #241823, #100B10)" },
-  { id: "clay", label: "Clay", css: "linear-gradient(160deg, #2A1E17, #120C09)" },
+  {
+    id: "slate",
+    label: "Slate",
+    css: "linear-gradient(160deg, #1B1E28, #0B0B0E)",
+  },
+  {
+    id: "moss",
+    label: "Moss",
+    css: "linear-gradient(160deg, #16241C, #0B0F0C)",
+  },
+  {
+    id: "plum",
+    label: "Plum",
+    css: "linear-gradient(160deg, #241823, #100B10)",
+  },
+  {
+    id: "clay",
+    label: "Clay",
+    css: "linear-gradient(160deg, #2A1E17, #120C09)",
+  },
   { id: "ink", label: "Ink", css: "linear-gradient(160deg, #14141A, #000000)" },
 ];
 
@@ -51,32 +67,40 @@ export function TextStory({ onPosted }: { onPosted: () => void }) {
     setBusy(true);
     setError(null);
 
-    const response = await api.POST("/api/stories/create", {
-      // `caption` is a required key in the generated type — the serializer
-      // gives it a default, which drf-spectacular renders as
-      // present-with-a-value rather than omittable. Sending "" is honest and
-      // keeps the contract single-sourced.
-      body: { text, background, caption: "" },
-    });
+    try {
+      const response = await api.POST("/api/stories/create", {
+        // `caption` is a required key in the generated type — the serializer
+        // gives it a default, which drf-spectacular renders as
+        // present-with-a-value rather than omittable. Sending "" is honest and
+        // keeps the contract single-sourced.
+        body: { text, background, caption: "" },
+      });
 
-    setBusy(false);
-    if (response.data === undefined) {
-      const detail = (response.error as { detail?: string } | undefined)?.detail;
-      setError(detail ?? "That did not post. Try again.");
-      return;
+      if (response.data === undefined) {
+        const detail = (response.error as { detail?: string } | undefined)
+          ?.detail;
+        setError(detail ?? "That did not post. Try again.");
+        return;
+      }
+      onPosted();
+    } catch {
+      setError(
+        "The story could not be published. Check your connection and try again.",
+      );
+    } finally {
+      setBusy(false);
     }
-    onPosted();
   }, [text, background, onPosted]);
 
   return (
-    <div className="flex flex-col gap-5">
+    <InstrumentPanel className="grid gap-5 p-3 sm:p-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
       {/* The editor *is* the preview. A separate preview pane would be the
           same words twice and half the room for either. */}
       <label className="flex flex-col gap-2">
         <span className="sr-only">Your story</span>
         <div
           style={{ background: css }}
-          className="flex aspect-[4/5] items-center justify-center rounded-image p-8"
+          className="flex aspect-[4/5] max-h-[62dvh] items-center justify-center overflow-hidden rounded-[8px] border border-seam p-8 shadow-[0_8px_22px_rgba(0,0,0,0.18)]"
         >
           <textarea
             value={text}
@@ -102,50 +126,52 @@ export function TextStory({ onPosted }: { onPosted: () => void }) {
         </div>
       </label>
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="meta">background</legend>
-        <div className="flex gap-2">
-          {BACKGROUNDS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => {
-                setBackground(option.id);
-              }}
-              aria-label={option.label}
-              aria-pressed={background === option.id}
-              style={{ background: option.css }}
-              className={cn(
-                "size-8 rounded-full transition-all duration-[var(--duration-hover)]",
-                background === option.id
-                  ? "ring-2 ring-safelight ring-offset-2 ring-offset-base"
-                  : "ring-1 ring-line",
-              )}
-            />
-          ))}
-        </div>
-      </fieldset>
+      <div className="flex flex-col gap-5 rounded-[8px] border border-seam bg-panel-raised p-4">
+        <fieldset className="flex flex-col gap-2">
+          <legend className="meta">background</legend>
+          <div className="grid grid-cols-5 gap-2">
+            {BACKGROUNDS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  setBackground(option.id);
+                }}
+                aria-label={option.label}
+                aria-pressed={background === option.id}
+                style={{ background: option.css }}
+                className={cn(
+                  "size-11 rounded-[8px] border border-seam transition-all duration-[var(--duration-hover)]",
+                  background === option.id
+                    ? "ring-2 ring-accent ring-offset-2 ring-offset-panel-raised"
+                    : "ring-1 ring-line",
+                )}
+              />
+            ))}
+          </div>
+        </fieldset>
 
-      <p className="meta">
-        {text.length} / {MAX_LENGTH} · gone in 24 hours
-      </p>
-
-      {error !== null ? (
-        <p className="text-body text-danger" role="alert">
-          {error}
+        <p className="meta">
+          {text.length} / {MAX_LENGTH} · gone in 24 hours
         </p>
-      ) : null}
 
-      <div>
-        <Button
-          disabled={busy || text.trim() === ""}
-          onClick={() => {
-            void post();
-          }}
-        >
-          {busy ? "Posting…" : "Add to story"}
-        </Button>
+        {error !== null ? (
+          <p className="text-body text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <div>
+          <Button
+            disabled={busy || text.trim() === ""}
+            onClick={() => {
+              void post();
+            }}
+          >
+            {busy ? "Posting…" : "Add to story"}
+          </Button>
+        </div>
       </div>
-    </div>
+    </InstrumentPanel>
   );
 }

@@ -4,7 +4,7 @@ import { Flag } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { Button, DialogTrigger, Skeleton } from "@repo/ui";
+import { Button, DialogTrigger, Skeleton, SurfaceState } from "@repo/ui";
 
 import { ReportDialog } from "@/features/moderation/report-dialog";
 import { UserAvatar } from "@/features/profile/user-avatar";
@@ -25,10 +25,6 @@ import { ContactSheet } from "./contact-sheet";
  * is uppercased `meta` so it is impossible to miss. "following" is left alone
  * — it does not inflect.
  */
-function plural(count: number, noun: string): string {
-  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 /**
  * The generated type, not a hand-written copy of it.
  *
@@ -55,6 +51,8 @@ export function ProfileScreen({ username }: { username: string }) {
   const [blocked, setBlocked] = useState(false);
   const [stories, setStories] = useState<Story[]>([]);
   const [watching, setWatching] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const { viewerId } = useRealtimeApi();
 
   useEffect(() => {
@@ -74,7 +72,8 @@ export function ProfileScreen({ username }: { username: string }) {
       if (cancelled) return;
 
       if (profileResponse.data === undefined) {
-        setMissing(true);
+        if (profileResponse.response.status === 404) setMissing(true);
+        else setFailed(true);
         return;
       }
       setProfile(profileResponse.data);
@@ -85,7 +84,7 @@ export function ProfileScreen({ username }: { username: string }) {
     return () => {
       cancelled = true;
     };
-  }, [username]);
+  }, [username, reloadKey]);
 
   const toggleFollow = useCallback(async () => {
     if (!profile) return;
@@ -131,10 +130,34 @@ export function ProfileScreen({ username }: { username: string }) {
 
   if (missing) {
     return (
-      <div className="flex flex-col items-center gap-3 py-24 text-center">
-        <p className="font-display text-display-l text-ink">No such account</p>
-        <p className="meta">it may never have existed</p>
-      </div>
+      <SurfaceState
+        variant="empty"
+        title="Account unavailable"
+        description="This account may have been removed or the address may be incorrect."
+        className="my-8"
+      />
+    );
+  }
+
+  if (failed) {
+    return (
+      <SurfaceState
+        variant="error"
+        title="Profile did not load"
+        description="We couldn’t load this profile."
+        action={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setFailed(false);
+              setReloadKey((value) => value + 1);
+            }}
+          >
+            Try again
+          </Button>
+        }
+        className="my-8"
+      />
     );
   }
 
@@ -166,105 +189,139 @@ export function ProfileScreen({ username }: { username: string }) {
     // a third of the window empty beside it. The feed column exists so a
     // photograph never changes size mid-scroll; nothing on this page is that
     // photograph.
-    <div data-wide className="flex flex-col gap-10 px-4 py-10">
-      <header className="flex flex-col gap-5">
-        <div className="flex items-center gap-6">
-          {/* A live story turns the avatar into a way in — the ring is the
+    <div data-wide className="flex flex-col gap-6 px-3 py-5 sm:px-6 sm:py-8">
+      <section className="rounded-instrument border border-seam bg-panel p-5 shadow-instrument sm:p-7">
+        <header className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            {/* A live story turns the avatar into a way in — the ring is the
               same one the tray uses, so the two surfaces agree about what a
               warm ring means. `GET /api/stories/by/{username}` had no caller
               at all until this. */}
-          {stories.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => {
-                setWatching(true);
-              }}
-              aria-label={`Watch ${profile.user.username}'s story`}
-              className="rounded-full p-[2px] ring-2 ring-safelight"
-            >
-              <UserAvatar user={profile.user} className="size-14" />
-            </button>
-          ) : (
-            <UserAvatar user={profile.user} className="size-14" />
-          )}
+            {stories.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setWatching(true);
+                }}
+                aria-label={`Watch ${profile.user.username}'s story`}
+                className="rounded-full p-[3px] ring-2 ring-safelight ring-offset-2 ring-offset-panel"
+              >
+                <UserAvatar user={profile.user} className="size-20" />
+              </button>
+            ) : (
+              <UserAvatar user={profile.user} className="size-20" />
+            )}
 
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="font-display text-display-l text-ink">
-              {profile.user.username}
-            </h1>
-            {profile.user.display_name ? (
-              <p className="text-body text-ink-dim">{profile.user.display_name}</p>
-            ) : null}
-          </div>
+            <div className="flex min-w-0 flex-col gap-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+                {profile.user.username}
+              </h1>
+              {profile.user.display_name ? (
+                <p className="text-body text-ink-dim">
+                  {profile.user.display_name}
+                </p>
+              ) : null}
+            </div>
 
-          {profile.is_self ? (
-            <Link
-              href="/settings"
-              className="ml-auto flex h-9 items-center rounded-control border border-line px-4 text-label text-ink hover:border-ink-dim"
-            >
-              Edit profile
-            </Link>
-          ) : (
-            <Button
-              className="ml-auto"
-              variant={profile.follow_state === "none" ? "primary" : "secondary"}
-              disabled={busy}
-              onClick={() => {
-                void toggleFollow();
-              }}
-            >
-              {label}
-            </Button>
-          )}
-
-          {!profile.is_self && (
-            <>
+            {profile.is_self ? (
+              <Link
+                href="/settings"
+                className="ml-auto flex min-h-11 items-center rounded-full border border-seam bg-raised px-5 text-sm font-semibold text-ink transition-colors hover:border-safelight/50 hover:text-safelight"
+              >
+                Edit profile
+              </Link>
+            ) : (
               <Button
-                variant="secondary"
+                className="ml-auto"
+                variant={
+                  profile.follow_state === "none" ? "primary" : "secondary"
+                }
                 disabled={busy}
                 onClick={() => {
-                  void toggleBlock();
+                  void toggleFollow();
                 }}
               >
-                {blocked ? "Unblock" : "Block"}
+                {label}
               </Button>
+            )}
 
-              {/* Reporting an *account* rather than one of its posts is the
+            {!profile.is_self && (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    void toggleBlock();
+                  }}
+                >
+                  {blocked ? "Unblock" : "Block"}
+                </Button>
+
+                {/* Reporting an *account* rather than one of its posts is the
                   case that matters when the problem is the person: the API
                   has taken `user` since Phase 5 with nothing sending it. */}
-              <ReportDialog
-                subjectType="user"
-                subjectId={profile.user.id}
-                trigger={
-                  <DialogTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Report ${profile.user.username}`}
-                      />
-                    }
-                  >
-                    <Flag aria-hidden="true" />
-                  </DialogTrigger>
-                }
-              />
-            </>
-          )}
-        </div>
+                <ReportDialog
+                  subjectType="user"
+                  subjectId={profile.user.id}
+                  trigger={
+                    <DialogTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Report ${profile.user.username}`}
+                        />
+                      }
+                    >
+                      <Flag aria-hidden="true" />
+                    </DialogTrigger>
+                  }
+                />
+              </>
+            )}
+          </div>
 
-        {/* The meta strip again — counts are metadata, so they are set in it. */}
-        <p className="meta">
-          {plural(profile.post_count, "post")} ·{" "}
-          {plural(profile.follower_count, "follower")} ·{" "}
-          {profile.following_count} following
-          {profile.user.is_private ? " · private" : ""}
-        </p>
+          <dl className="flex flex-wrap gap-x-8 gap-y-3 border-y border-seam py-4 text-sm">
+            <div>
+              <dt className="sr-only">Posts</dt>
+              <dd>
+                <strong className="font-semibold text-ink">
+                  {profile.post_count}
+                </strong>{" "}
+                <span className="text-ink-dim">posts</span>
+              </dd>
+            </div>
+            <div>
+              <dt className="sr-only">Followers</dt>
+              <dd>
+                <strong className="font-semibold text-ink">
+                  {profile.follower_count}
+                </strong>{" "}
+                <span className="text-ink-dim">followers</span>
+              </dd>
+            </div>
+            <div>
+              <dt className="sr-only">Following</dt>
+              <dd>
+                <strong className="font-semibold text-ink">
+                  {profile.following_count}
+                </strong>{" "}
+                <span className="text-ink-dim">following</span>
+              </dd>
+            </div>
+            {profile.user.is_private ? (
+              <div>
+                <dt className="sr-only">Visibility</dt>
+                <dd className="text-ink-dim">Private account</dd>
+              </div>
+            ) : null}
+          </dl>
 
-        {profile.user.bio ? (
-          <p className="max-w-prose text-body text-ink">{profile.user.bio}</p>
-        ) : null}
-      </header>
+          {profile.user.bio ? (
+            <p className="max-w-prose text-body text-ink">{profile.user.bio}</p>
+          ) : null}
+        </header>
+      </section>
 
       {watching ? (
         <StoryViewer
@@ -293,10 +350,11 @@ export function ProfileScreen({ username }: { username: string }) {
       {profile.can_view_posts ? (
         <ContactSheet posts={posts} />
       ) : (
-        <div className="flex flex-col items-center gap-3 border-t border-line py-24 text-center">
-          <p className="font-display text-display-l text-ink">This account is private</p>
-          <p className="meta">follow to see the contact sheet</p>
-        </div>
+        <SurfaceState
+          variant="empty"
+          title="This account is private"
+          description="Follow this creator to see their work."
+        />
       )}
     </div>
   );

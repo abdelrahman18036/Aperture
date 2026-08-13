@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowRight, Search } from "lucide-react";
+import Link from "next/link";
 
 import type { Schemas } from "@repo/api-client";
-import { Button, Skeleton, Spinner, cn } from "@repo/ui";
+import { Button, Skeleton, Spinner, SurfaceState, cn } from "@repo/ui";
 
 import { useInfiniteScroll } from "@/features/shared/use-infinite-scroll";
 import { api } from "@/lib/api";
@@ -38,6 +40,7 @@ export function Explore() {
   const [hasMore, setHasMore] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
 
   const inFlight = useRef(false);
   /** Guards the mount fetch against a second run in development. */
@@ -47,6 +50,7 @@ export function Explore() {
     if (inFlight.current || !hasMore) return;
     inFlight.current = true;
     setBusy(true);
+    setError(false);
 
     const from = cursor;
     void api
@@ -58,7 +62,7 @@ export function Explore() {
         setBusy(false);
         setLoaded(true);
         if (response.data === undefined) {
-          setHasMore(false);
+          setError(true);
           return;
         }
         const page = response.data;
@@ -67,6 +71,12 @@ export function Explore() {
         );
         setCursor(page.next_cursor);
         setHasMore(page.next_cursor !== null);
+      })
+      .catch(() => {
+        inFlight.current = false;
+        setBusy(false);
+        setLoaded(true);
+        setError(true);
       });
   }, [cursor, hasMore]);
 
@@ -96,20 +106,55 @@ export function Explore() {
    */
   const { sentinel } = useInfiniteScroll(loadMore, { rootMargin: 600 });
 
-  if (loaded && posts.length === 0) {
+  if (loaded && posts.length === 0 && !error) {
     return (
-      <div className="py-16 text-center">
-        <p className="font-display text-display-l text-ink-faint">
-          Nothing to explore
+      <div className="rounded-[22px] border border-seam bg-panel px-6 py-16 text-center">
+        <p className="text-xl font-semibold text-ink">Nothing to explore</p>
+        <p className="mt-2 text-sm text-ink-dim">
+          Every public post is already in your feed.
         </p>
-        <p className="mt-2 meta">every public post is already in your feed</p>
       </div>
     );
   }
 
+  if (error && posts.length === 0) {
+    return (
+      <SurfaceState
+        variant="error"
+        title="Explore did not load"
+        description="We couldn’t load discovery right now."
+        action={
+          <Button variant="secondary" onClick={loadMore}>
+            Try again
+          </Button>
+        }
+        className="my-8"
+      />
+    );
+  }
+
   return (
-    <div data-wide className="py-6">
-      <h1 className="px-4 pb-4 font-display text-display-l text-ink">Explore</h1>
+    <div data-wide className="px-1 py-3 sm:px-2 sm:py-6">
+      <header className="mb-7 flex flex-col gap-5 border-b border-seam pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">
+            Explore
+          </h1>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-ink-dim sm:text-base">
+            Browse public work with the creator, story, and response visible
+            before you open it.
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          nativeButton={false}
+          render={<Link href="/search" />}
+        >
+          <Search className="size-4" aria-hidden="true" />
+          Find creators
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </Button>
+      </header>
 
       {/* Three on a phone, more once there is room — the cells stay square
           and the grid stops being a 640px ribbon on a 1920px screen.
@@ -121,30 +166,37 @@ export function Explore() {
           `grid-flow-dense` so the gap a large tile leaves beside it is filled
           by the next small one rather than left as a hole. */}
       <ul
-        className={cn(
-          "grid grid-cols-3 gap-[2px] px-4 md:grid-cols-4 xl:grid-cols-5",
-          "grid-flow-dense auto-rows-[1fr]",
-          // Every seventh, from `md` up. A CSS selector rather than a prop,
-          // because the rhythm is a property of the grid rather than of any
-          // one post — and a JS `index % 7` would have to be recomputed
-          // against a column count this stylesheet already knows.
-          "md:[&>li:nth-child(7n+1)]:col-span-2 md:[&>li:nth-child(7n+1)]:row-span-2",
-        )}
+        aria-busy={!loaded}
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
       >
-        {posts.map((post) => (
-          <PostTile key={post.id} post={post} />
+        {posts.map((post, index) => (
+          <PostTile key={post.id} post={post} featured={index === 0} />
         ))}
 
         {!loaded &&
           Array.from({ length: 9 }, (_, index) => (
-            <li key={`skeleton-${String(index)}`} className="aspect-square">
+            <li
+              key={`skeleton-${String(index)}`}
+              className="overflow-hidden rounded-instrument border border-seam bg-panel"
+            >
               {/* `still` here and nowhere else: nine sweeps running at once
                   in a tight grid is worse than none, which is the case the
                   design system's no-shimmer rule was actually about. */}
-              <Skeleton still className="size-full rounded-none" />
+              <Skeleton still className="aspect-square w-full rounded-none" />
+              <div className="space-y-3 p-4">
+                <Skeleton still className="h-9 w-40" />
+                <Skeleton still className="h-4 w-full" />
+                <Skeleton still className="h-4 w-2/3" />
+              </div>
             </li>
           ))}
       </ul>
+
+      {!loaded ? (
+        <p className="sr-only" role="status">
+          Loading public posts
+        </p>
+      ) : null}
 
       {/* A button, not just a spinner — see `features/requests` for why.
           Infinite scroll stays the primary path; this is what makes the rest
@@ -158,8 +210,24 @@ export function Explore() {
         </div>
       ) : null}
 
+      {error && posts.length > 0 ? (
+        <SurfaceState
+          variant="error"
+          title="More work could not be loaded"
+          action={
+            <Button variant="secondary" onClick={loadMore}>
+              Try again
+            </Button>
+          }
+          compact
+          className="my-6"
+        />
+      ) : null}
+
       {loaded && !hasMore && posts.length > 0 ? (
-        <p className="meta py-10 text-center">that is everything</p>
+        <p className="py-10 text-center text-sm text-ink-dim">
+          You’ve seen everything.
+        </p>
       ) : null}
 
       <div

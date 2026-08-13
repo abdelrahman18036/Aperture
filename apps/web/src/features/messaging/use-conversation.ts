@@ -61,7 +61,13 @@ export interface ConversationState {
   /** Seed presence from the inbox payload. */
   setOnline: (ids: string[] | undefined) => void;
   loading: boolean;
-  send: (body: string, mediaId?: string | null, replyToSeq?: number | null) => void;
+  loadError: string | null;
+  retryLoad: () => void;
+  send: (
+    body: string,
+    mediaId?: string | null,
+    replyToSeq?: number | null,
+  ) => void;
   retry: (clientId: string) => void;
   /** Withdraw one of your own messages. Yours only — the service checks. */
   unsend: (seq: number) => void;
@@ -106,6 +112,7 @@ export function useConversation(
     new Map(),
   );
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   /** user id -> how far they have read. Seeded by the API, kept by the socket. */
   const [othersRead, setOthersRead] = useState<Map<string, number>>(new Map());
   /** Who else is connected. Same shape: seeded by the API, kept by the socket. */
@@ -158,16 +165,27 @@ export function useConversation(
    * one index scan, no clock, no guesswork about what was missed.
    */
   const sync = useCallback(() => {
-    void api
-      .GET("/api/messaging/conversations/{conversation_id}/messages", {
-        params: {
-          path: { conversation_id: conversationId },
-          query: { after: lastSeq.current },
-        },
+    void Promise.resolve()
+      .then(() => {
+        setLoadError(null);
+        return api.GET(
+          "/api/messaging/conversations/{conversation_id}/messages",
+          {
+            params: {
+              path: { conversation_id: conversationId },
+              query: { after: lastSeq.current },
+            },
+          },
+        );
       })
       .then((response) => {
         setLoading(false);
-        if (response.data === undefined) return;
+        if (response.data === undefined) {
+          setLoadError(
+            "Messages could not be loaded. Try the connection again.",
+          );
+          return;
+        }
         absorb(response.data.messages);
       });
   }, [absorb, conversationId]);
@@ -201,7 +219,8 @@ export function useConversation(
         if (event.user_id === viewerId) return;
         setTypingUntil((current) => {
           const next = new Map(current);
-          if (event.is_typing) next.set(event.user_id, Date.now() + TYPING_TTL_MS);
+          if (event.is_typing)
+            next.set(event.user_id, Date.now() + TYPING_TTL_MS);
           else next.delete(event.user_id);
           return next;
         });
@@ -331,6 +350,9 @@ export function useConversation(
   // delivery path, never a source of truth, so a drop costs one `?after=`.
   useRealtimeReady(sync);
 
+  // REST history should not depend on the realtime socket being available.
+  useEffect(sync, [sync]);
+
   // Point the shared socket at this thread's ephemeral channel while it is on
   // screen, and let it go when it is not.
   useEffect(() => {
@@ -416,7 +438,13 @@ export function useConversation(
       const clientId = newClientId();
       setPending((current) => [
         ...current,
-        { client_id: clientId, body: trimmed, mediaId, replyToSeq, failed: false },
+        {
+          client_id: clientId,
+          body: trimmed,
+          mediaId,
+          replyToSeq,
+          failed: false,
+        },
       ]);
       post(clientId, trimmed, mediaId, replyToSeq);
       sendTyping(conversationId, false);
@@ -487,6 +515,8 @@ export function useConversation(
     connection,
     typing,
     loading,
+    loadError,
+    retryLoad: sync,
     send,
     retry,
     unsend,

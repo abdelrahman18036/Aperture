@@ -1,7 +1,7 @@
 # The three deployables, containerised.
 #
-# `docker-compose.yml` is the *backing services* — Postgres, Redis, MinIO,
-# Typesense, and the two behind the `calls` profile. This file is the code:
+# `docker-compose.yml` is the *backing services* — Postgres, Redis and MinIO,
+# plus optional `search` and `calls` profiles. This file is the code:
 # Django, the Celery worker and beat, the socket gateway, and Next.js. They
 # are separate files because they are used at different times. Day to day you
 # run the backing services in Docker and the three processes on the host with
@@ -56,13 +56,19 @@ services:
     environment: *django-env
     ports: ["8000:8000"]
     depends_on:
-      postgres: {condition: service_healthy}
-      redis: {condition: service_healthy}
-      minio: {condition: service_healthy}
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
     healthcheck:
       # The same check the README curls, and it exercises all three
       # dependencies rather than merely proving a socket is open.
-      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
       interval: 10s
       start_period: 20s
 
@@ -73,7 +79,7 @@ services:
     environment: *django-env
     command: ["python", "manage.py", "migrate", "--noinput"]
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres: { condition: service_healthy }
     # Runs once and exits. `restart` is deliberately absent — a migration
     # container that restarts on exit 0 is an infinite loop.
 
@@ -87,8 +93,8 @@ services:
     # the default prefork pool is the right one and is what production runs.
     command: ["celery", "-A", "config", "worker", "--loglevel=info"]
     depends_on:
-      redis: {condition: service_healthy}
-      minio: {condition: service_healthy}
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
 
   beat:
     build:
@@ -100,7 +106,7 @@ services:
     # these, ever: two beats means every scheduled task runs twice.
     command: ["celery", "-A", "config", "beat", "--loglevel=info"]
     depends_on:
-      redis: {condition: service_healthy}
+      redis: { condition: service_healthy }
 
   realtime:
     build:
@@ -115,9 +121,15 @@ services:
       PORT: "4000"
     ports: ["4000:4000"]
     depends_on:
-      redis: {condition: service_healthy}
+      redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
       interval: 10s
       start_period: 10s
 
@@ -134,4 +146,4 @@ services:
     restart: unless-stopped
     ports: ["3000:3000"]
     depends_on:
-      api: {condition: service_healthy}
+      api: { condition: service_healthy }

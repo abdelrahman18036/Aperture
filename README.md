@@ -5,12 +5,12 @@ A photo and video social platform. Web only.
 **Django owns the data and the API. Node owns the sockets. Next.js owns the
 UI.** Three deployables, one repo.
 
-| Doc | Owns |
-|---|---|
-| [`01-ARCHITECTURE.md`](01-ARCHITECTURE.md) | stack, schema, data flow, scaling path |
-| [`02-DESIGN-SYSTEM.md`](02-DESIGN-SYSTEM.md) | color, type, layout, motion |
-| [`03-AGENT-BRIEF.md`](03-AGENT-BRIEF.md) | process, phases, standing rules |
-| [`docs/VERSIONS.md`](docs/VERSIONS.md) | pinned versions and this machine's quirks |
+| Doc                                          | Owns                                      |
+| -------------------------------------------- | ----------------------------------------- |
+| [`01-ARCHITECTURE.md`](01-ARCHITECTURE.md)   | stack, schema, data flow, scaling path    |
+| [`02-DESIGN-SYSTEM.md`](02-DESIGN-SYSTEM.md) | color, type, layout, motion               |
+| [`03-AGENT-BRIEF.md`](03-AGENT-BRIEF.md)     | process, phases, standing rules           |
+| [`docs/VERSIONS.md`](docs/VERSIONS.md)       | pinned versions and this machine's quirks |
 
 ---
 
@@ -35,7 +35,6 @@ flowchart TB
     PG[("Postgres")]
     REDIS[("Redis<br/>queue · cache · pub/sub · presence")]
     S3[("MinIO / S3")]
-    TS[("Typesense")]
     LK["LiveKit SFU"]
     TURN["coturn"]
 
@@ -48,7 +47,6 @@ flowchart TB
     API --> PG
     API --> REDIS
     API --> S3
-    API --> TS
     API -->|"signs join tokens"| LK
     API -->|"mints credentials"| TURN
     WORKER --> PG
@@ -73,12 +71,12 @@ Postgres would become a second application fighting over one schema.
 
 **Where a change goes:**
 
-| If it… | it belongs in |
-|---|---|
-| must survive a restart | Django — HTTP up, Redis pub/sub down, socket delivers |
-| must not (typing, presence, call signalling) | the Node gateway; it never reaches Postgres |
-| is a shape the browser reads | a DRF serializer, then `pnpm generate` |
-| is pure arithmetic or a rule | `apps/api/core/`, which imports no Django |
+| If it…                                       | it belongs in                                         |
+| -------------------------------------------- | ----------------------------------------------------- |
+| must survive a restart                       | Django — HTTP up, Redis pub/sub down, socket delivers |
+| must not (typing, presence, call signalling) | the Node gateway; it never reaches Postgres           |
+| is a shape the browser reads                 | a DRF serializer, then `pnpm generate`                |
+| is pure arithmetic or a rule                 | `apps/api/core/`, which imports no Django             |
 
 ---
 
@@ -99,9 +97,16 @@ Postgres would become a second application fighting over one schema.
 cd infra && docker compose up -d
 ```
 
-Brings up Postgres (host port **5433**), Redis, MinIO with its two buckets,
-and Typesense. Wait for `docker compose ps` to show postgres, redis and minio
-as `healthy`.
+Brings up Postgres (host port **5433**), Redis, and MinIO with its two buckets.
+Wait for `docker compose ps` to show postgres, redis and minio as `healthy`.
+
+Typesense is reserved for the 100k→1M scaling stage and is not used by the
+current Postgres-backed search. Its pinned image is available without making
+it an idle everyday dependency:
+
+```bash
+cd infra && docker compose --profile search up -d typesense
+```
 
 Calls need two more, behind a profile so the everyday case stays small.
 coturn needs a certificate first, and it must be one the **browser** trusts —
@@ -241,18 +246,18 @@ cd apps/api && uv run manage.py bench_feed --follows 5000
 Measured on the development machine at 6,004 users / 120,000 posts / 200,000
 follow edges:
 
-| followees | p50 | p95 | p99 |
-|---|---|---|---|
-| 200 | 6.23 ms | 9.01 ms | 10.10 ms |
-| 1,000 | 6.32 ms | 9.45 ms | 10.41 ms |
-| 3,000 | 6.31 ms | 8.05 ms | 10.47 ms |
-| 5,000 | 6.10 ms | 8.50 ms | 10.21 ms |
+| followees | p50     | p95     | p99      |
+| --------- | ------- | ------- | -------- |
+| 200       | 6.23 ms | 9.01 ms | 10.10 ms |
+| 1,000     | 6.32 ms | 9.45 ms | 10.41 ms |
+| 3,000     | 6.31 ms | 8.05 ms | 10.47 ms |
+| 5,000     | 6.10 ms | 8.50 ms | 10.21 ms |
 
 Flat across a 25× change in fan-in. §7 puts the trigger for hybrid push
 fanout at p99 above ~200 ms, so **it is not built** — and that is a
 measurement rather than a preference.
 
-The Redis feed cache from §7 phase 2 *is* built, and is off. Compare the two
+The Redis feed cache from §7 phase 2 _is_ built, and is off. Compare the two
 before turning it on:
 
 ```bash
@@ -284,10 +289,19 @@ backend, and it is what keeps the browser on one origin so Django's session
 cookie stays same-site. All three dependencies should report `ok`:
 
 ```json
-{"status":"ok","checks":[
-  {"name":"postgres","status":"ok","latency_ms":22.1,"detail":""},
-  {"name":"redis","status":"ok","latency_ms":27.95,"detail":""},
-  {"name":"object_storage","status":"ok","latency_ms":157.22,"detail":""}]}
+{
+  "status": "ok",
+  "checks": [
+    { "name": "postgres", "status": "ok", "latency_ms": 22.1, "detail": "" },
+    { "name": "redis", "status": "ok", "latency_ms": 27.95, "detail": "" },
+    {
+      "name": "object_storage",
+      "status": "ok",
+      "latency_ms": 157.22,
+      "detail": ""
+    }
+  ]
+}
 ```
 
 ```bash
@@ -329,11 +343,11 @@ cat docs/verify-call-media.js
 Measured on the development machine, two `RTCPeerConnection`s and the ICE
 servers from a live `POST /api/calls/start`:
 
-| ICE servers offered | policy | selected pair | video | audio |
-|---|---|---|---|---|
-| all | default | `host` / udp | 590 frames, 239 KB | 79 KB |
-| all | `relay` | `relay` / udp | 356 frames, 45 KB | 48 KB |
-| **`turns:` only** | **`relay`** | **`relay` / tls** | **416 frames, 52 KB** | **56 KB** |
+| ICE servers offered | policy      | selected pair     | video                 | audio     |
+| ------------------- | ----------- | ----------------- | --------------------- | --------- |
+| all                 | default     | `host` / udp      | 590 frames, 239 KB    | 79 KB     |
+| all                 | `relay`     | `relay` / udp     | 356 frames, 45 KB     | 48 KB     |
+| **`turns:` only**   | **`relay`** | **`relay` / tls** | **416 frames, 52 KB** | **56 KB** |
 
 The last row is the one §9 cares about. With only the `turns:` server offered
 and relay-only policy, nothing can connect unless coturn allocates **over TLS
@@ -353,7 +367,7 @@ cat docs/verify-sfu.js
 
 Measured on the development machine, a three-member group: `mode: "sfu"`, a
 409-byte token, and LiveKit answering the signalling socket with a 626-byte
-JoinResponse. That last part is the point — LiveKit sends *nothing* to a
+JoinResponse. That last part is the point — LiveKit sends _nothing_ to a
 socket whose token it rejects, so a response at all proves `LIVEKIT_API_SECRET`
 matches on both sides. A token signed with the wrong secret is well-formed,
 looks perfect from Django, and is refused at the door.
@@ -443,7 +457,7 @@ deprecated and renamed that convention — see `apps/web/AGENTS.md`.
 
 **It is not the security boundary and must not be read as one.** Django is:
 every endpoint sits behind `IsAuthenticated`, and that is what protects the
-data. The proxy only checks whether a session cookie is *present*, because
+data. The proxy only checks whether a session cookie is _present_, because
 only Django can say whether it is valid and asking would put a round trip in
 front of every navigation.
 
@@ -497,9 +511,18 @@ pnpm check-types
 pnpm test
 ```
 
+```bash
+pnpm build
+```
+
 Each fans out across both ecosystems: `ruff` and `mypy --strict` with
 `django-stubs` on the Python side, ESLint and `tsc --noEmit` on the
 TypeScript side, `pytest` and Vitest for tests.
+
+`pnpm build` produces the deployable Next.js artifact. Django and the realtime
+gateway run from source in their images, so their build-time gates are
+`pnpm check-types`, tests, and the assertions in their Dockerfiles rather than
+placeholder package builds.
 
 `pytest` discovers from the root rather than from a `testpaths` allowlist.
 There was one, and it silently excluded every app added after it was
@@ -520,16 +543,16 @@ Nothing in the product waits for a refresh. Six event types cross the wire,
 and the split between them is the whole design — if an event must survive a
 restart it goes through Django, and if it does not it stays in Node.
 
-| Event | Reaches | Carries |
-|---|---|---|
-| `message.created` / `.read` / `.deleted` | the room | the message, or a seq |
-| `post.created` | your followers | ids only |
-| `story.created` | your followers | ids only |
-| `notification.created` | one person | the verb |
+| Event                                    | Reaches        | Carries               |
+| ---------------------------------------- | -------------- | --------------------- |
+| `message.created` / `.read` / `.deleted` | the room       | the message, or a seq |
+| `post.created`                           | your followers | ids only              |
+| `story.created`                          | your followers | ids only              |
+| `notification.created`                   | one person     | the verb              |
 
 **The ones outside messaging carry ids rather than rows**, and that is
 deliberate: the feed, the tray and the activity list are the only places
-blocks, privacy and deleted accounts are applied, so the client is told *that*
+blocks, privacy and deleted accounts are applied, so the client is told _that_
 something arrived and fetches it through the path that already gets those
 right. A payload carrying the post would need every one of those checks
 re-implemented for the wire.
@@ -689,7 +712,7 @@ which frame it was about. No second inbox, no second unread count, and a block
 still stops it, because the reply path must not be a way around one.
 
 Links in a story are clickable. That sounds like nothing, and it was a real
-bug: the tap halves that advance a frame are siblings rendered *after* the
+bug: the tap halves that advance a frame are siblings rendered _after_ the
 text, so they were painted over every link — the words looked clickable and
 tapping them advanced the story. The text block is raised but transparent to
 pointers now, with only the links themselves taking them, so tapping the words
@@ -707,7 +730,7 @@ requests to somebody else's server for the same page.
 is the guard rather than a convenience. Somebody posts
 `http://169.254.169.254/latest/meta-data/` and a naive fetcher renders the
 cloud instance's credentials on a card. So: a scheme allowlist, DNS resolved
-*before* the request with every returned address checked, and the same check
+_before_ the request with every returned address checked, and the same check
 again on each redirect, because a public host is free to answer 302 with
 `127.0.0.1`. A name that resolves to several addresses must have all of them
 public — accepting on the first public answer leaves a round-robin with one
@@ -734,7 +757,7 @@ like that shows twice is worse than one that shows a minute late.
 was a real bug rather than a subtlety: the read path is Redis-first, so with no
 worker running — or one a few seconds behind — a like that had definitely been
 recorded came back with the old number. Every client then had to do its own
-arithmetic and deliberately *not* trust the count in the response, which is the
+arithmetic and deliberately _not_ trust the count in the response, which is the
 kind of rule that gets forgotten. The repost button trusted it and visibly
 snapped back to the old number a moment after being pressed.
 
@@ -774,10 +797,10 @@ down when Redis hiccups has done more damage than the abuse it prevented.
 Two integrations are seams rather than implementations, both off by default
 and both raising rather than silently passing if switched on unwired:
 
-| Setting | Provider | What it needs |
-|---|---|---|
-| `CSAM_SCANNING_ENABLED` | `CSAM_HASH_BACKEND` | a hash-matching provider (PhotoDNA, Cloudflare CSAM Scanning) |
-| `NCMEC_REPORTING_ENABLED` | `NCMEC_BACKEND` | a registered ESP account and CyberTipline access |
+| Setting                   | Provider            | What it needs                                                 |
+| ------------------------- | ------------------- | ------------------------------------------------------------- |
+| `CSAM_SCANNING_ENABLED`   | `CSAM_HASH_BACKEND` | a hash-matching provider (PhotoDNA, Cloudflare CSAM Scanning) |
+| `NCMEC_REPORTING_ENABLED` | `NCMEC_BACKEND`     | a registered ESP account and CyberTipline access              |
 
 Each provider is a dotted path, defaulting to a callable that **raises**.
 That matters more than it looks: a scanner returning `False` because nothing
@@ -811,7 +834,7 @@ every CSAM report from before the day a provider was configured is sitting
 correctly marked as having gone nowhere, and this is the command that files
 them.
 
-Making them settings is also what lets the code *around* them be tested —
+Making them settings is also what lets the code _around_ them be tested —
 that a match suspends the owner and files a report, that a report is stamped
 `escalated_at` only after delivery returns, that a retry after a successful
 filing does not file twice with a national clearinghouse. All of that is

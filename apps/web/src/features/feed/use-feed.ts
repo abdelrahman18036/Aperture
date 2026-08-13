@@ -81,6 +81,7 @@ export function useFeed(): {
     setCursor(null);
     setHasMore(true);
     setInitialised(false);
+    setError(null);
   }, []);
 
   return { posts, loading, initialised, error, hasMore, loadMore, refresh };

@@ -66,12 +66,12 @@ export function RepostButton({
       aria-pressed={reposted}
       aria-label={reposted ? "Undo your repost" : "Repost this"}
       className={cn(
-        "flex items-center gap-2 transition-colors duration-[var(--duration-hover)]",
+        "flex min-h-11 items-center gap-1.5 rounded-full px-3 transition-colors duration-[var(--duration-hover)] hover:bg-raised",
         reposted ? "text-safelight" : "text-ink-dim hover:text-ink",
       )}
     >
-      <Repeat2 className="size-6" aria-hidden="true" />
-      <span className="meta tabular-nums">{count}</span>
+      <Repeat2 className="size-5" aria-hidden="true" />
+      <span className="text-xs tabular-nums">{count}</span>
     </button>
   );
 }

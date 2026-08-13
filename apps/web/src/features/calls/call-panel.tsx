@@ -41,7 +41,12 @@ function Video({
   }, [stream]);
 
   return (
-    <div className={cn("relative min-w-0 bg-surface", className)}>
+    <div
+      className={cn(
+        "relative min-w-0 overflow-hidden rounded-[8px] border border-seam bg-black",
+        className,
+      )}
+    >
       <video
         ref={element}
         autoPlay
@@ -49,9 +54,11 @@ function Video({
         // Your own preview is always muted. Playing it back is a feedback
         // loop, and it is the first thing anyone notices.
         muted={muted}
-        className="size-full rounded-image object-cover"
+        className="size-full object-cover"
       />
-      <span className="absolute bottom-1 left-2 meta">{label}</span>
+      <span className="absolute bottom-2 left-2 rounded-[6px] bg-black/70 px-2 py-1 meta text-white">
+        {label}
+      </span>
     </div>
   );
 }
@@ -87,16 +94,19 @@ export function CallPanel({
   return (
     <section
       aria-label={`Call with ${peerName}`}
-      className="border-b border-line bg-base p-4"
+      className="bg-panel p-3 sm:p-4"
     >
       <header className="mb-3 flex items-center justify-between">
-        <h2 className="text-title text-ink">{peerName}</h2>
+        <div>
+          <p className="text-sm font-medium text-accent">Call in progress</p>
+          <h2 className="text-title text-ink">{peerName}</h2>
+        </div>
         <span className="flex items-center gap-2 meta" aria-live="polite">
           <span
             aria-hidden="true"
             className={cn(
               "size-1.5 rounded-full",
-              status === "Live" ? "bg-daylight" : "bg-ink-faint",
+              status === "Live" ? "bg-live" : "bg-ink-faint",
             )}
           />
           {status}
@@ -104,11 +114,11 @@ export function CallPanel({
               between a call that works everywhere and one that works at home,
               and it costs one word to show. */}
           {peer.transport !== null && !group && (
-            <span className="text-daylight">
+            <span className="text-accent">
               · {peer.transport === "relay" ? "Relayed" : "Direct"}
             </span>
           )}
-          {call.mode === "sfu" && <span className="text-daylight">· SFU</span>}
+          {call.mode === "sfu" && <span className="text-accent">· Group</span>}
           {/* Said plainly rather than left as a black rectangle. Someone
               wondering why they cannot be seen deserves the reason. */}
           {audioOnly && <span>· Audio only</span>}
@@ -124,7 +134,7 @@ export function CallPanel({
       <div
         className={cn(
           "grid gap-2",
-          group ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2",
+          group ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2",
         )}
       >
         <Video
@@ -151,7 +161,7 @@ export function CallPanel({
         )}
       </div>
 
-      <div className="mt-3 flex justify-center">
+      <div className="mt-3 flex justify-center border-t border-seam pt-3">
         <Button variant="destructive" onClick={onHangUp}>
           <PhoneOff className="size-4" aria-hidden="true" />
           Hang up

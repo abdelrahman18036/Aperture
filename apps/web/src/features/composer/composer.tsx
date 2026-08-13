@@ -3,7 +3,15 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
-import { Button, DevelopImage, Input, Skeleton, TabBar, cn } from "@repo/ui";
+import {
+  Button,
+  DevelopImage,
+  Input,
+  InstrumentPanel,
+  SurfaceState,
+  TabBar,
+  cn,
+} from "@repo/ui";
 import type { TabDefinition } from "@repo/ui";
 
 import { api } from "@/lib/api";
@@ -30,7 +38,8 @@ import { useUpload } from "./use-upload";
  * does not already give.
  */
 
-const ACCEPT = "image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/webm";
+const ACCEPT =
+  "image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/webm";
 
 type Visibility = "public" | "followers" | "private";
 
@@ -152,16 +161,36 @@ export function Composer({
     status.phase === "processing";
 
   return (
-    <div className="flex w-full max-w-feed flex-col gap-8">
+    <div className="flex w-full max-w-5xl flex-col gap-4 sm:gap-6">
+      <ol className="grid grid-cols-3 gap-2" aria-label="Publishing progress">
+        {["Select", "Prepare", "Publish"].map((label, index) => {
+          const active =
+            picked === null
+              ? index === 0
+              : status.phase === "ready"
+                ? index === 2
+                : index === 1;
+          return (
+            <li
+              key={label}
+              aria-current={active ? "step" : undefined}
+              className={cn(
+                "rounded-full border border-seam px-3 py-2 text-center text-sm",
+                active
+                  ? "border-accent bg-accent text-white"
+                  : "bg-panel text-ink-dim",
+              )}
+            >
+              {label}
+            </li>
+          );
+        })}
+      </ol>
       {/* Words or a picture. Only for a story: a post is a photograph by
           definition — this is a photo platform — while a story is a day, and
           a day is often just a sentence. */}
       {toStory && picked === null && status.phase === "idle" ? (
-        <TabBar
-          tabs={STORY_MODES}
-          active={storyMode}
-          onSelect={setStoryMode}
-        />
+        <TabBar tabs={STORY_MODES} active={storyMode} onSelect={setStoryMode} />
       ) : null}
 
       {toStory && storyMode === "text" && picked === null ? (
@@ -171,7 +200,8 @@ export function Composer({
           }}
         />
       ) : picked === null ? (
-        <div
+        <InstrumentPanel
+          tone="raised"
           onDragOver={(event) => {
             event.preventDefault();
             setDragging(true);
@@ -186,16 +216,20 @@ export function Composer({
             if (file) choose(file);
           }}
           className={cn(
-            "flex min-h-64 flex-col items-center justify-center gap-4 rounded-image",
-            "border border-dashed border-line px-6 py-16 text-center",
+            "flex min-h-72 flex-col items-center justify-center gap-4 border-dashed px-6 py-12 text-center sm:min-h-96",
             "transition-colors duration-[var(--duration-hover)]",
-            dragging && "border-safelight-dim bg-surface",
+            dragging && "border-accent bg-accent-soft",
           )}
         >
           <p className="font-display text-display-l text-ink">
-            Drop a photograph
+            Add photos or video
           </p>
-          <p className="meta">jpeg · png · webp · avif · mp4 · mov · webm</p>
+          <p className="max-w-md text-body text-ink-dim">
+            Drop a photograph or clip here, or choose one from this device.
+          </p>
+          <p className="text-sm text-ink-faint">
+            JPEG, PNG, WEBP, AVIF, MP4, MOV, or WEBM
+          </p>
           <Button
             variant="secondary"
             onClick={() => {
@@ -214,14 +248,14 @@ export function Composer({
               if (file) choose(file);
             }}
           />
-        </div>
+        </InstrumentPanel>
       ) : null}
 
       {picked !== null && status.phase !== "ready" ? (
-        <div className="flex flex-col gap-6">
+        <InstrumentPanel className="grid gap-5 p-3 sm:p-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
           {picked.kind === "image" ? (
             <>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 lg:col-span-2">
                 <span className="meta mr-1">crop</span>
                 {ASPECTS.map((option) => (
                   <Button
@@ -240,17 +274,18 @@ export function Composer({
                 src={picked.objectUrl}
                 ratio={ratio}
                 onChange={onCropChange}
+                className="min-w-0"
               />
             </>
           ) : (
             <video
               src={picked.objectUrl}
               controls
-              className="w-full rounded-image bg-surface"
+              className="min-h-64 w-full rounded-image bg-black object-contain lg:min-h-96"
             />
           )}
 
-          <label className="flex flex-col gap-2">
+          <label className="flex flex-col gap-2 rounded-[18px] border border-seam bg-panel-raised p-4">
             <span className="meta">
               alt text — describe it for someone who cannot see it
             </span>
@@ -265,8 +300,9 @@ export function Composer({
             <span className="meta">optional, but the field is always here</span>
           </label>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 lg:col-start-2">
             <Button
+              variant="primary"
               onClick={() => {
                 void start();
               }}
@@ -278,39 +314,62 @@ export function Composer({
               {busy ? "Cancel" : "Choose another"}
             </Button>
           </div>
-        </div>
+        </InstrumentPanel>
+      ) : null}
+
+      {status.phase === "requesting" ? (
+        <SurfaceState
+          variant="loading"
+          title="Preparing upload"
+          description="Preparing a secure upload for this file."
+          compact
+        />
       ) : null}
 
       {status.phase === "uploading" ? (
-        <div className="flex flex-col gap-2">
-          <div className="h-px w-full bg-line">
+        <InstrumentPanel
+          className="flex flex-col gap-3 p-4"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="h-2 w-full overflow-hidden rounded-full bg-seam"
+            role="progressbar"
+            aria-label="Upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(status.progress * 100)}
+          >
             <div
-              className="h-px bg-safelight transition-[width] duration-[var(--duration-hover)]"
+              className="h-full rounded-full bg-accent transition-[width] duration-[var(--duration-hover)] motion-reduce:transition-none"
               style={{ width: `${String(Math.round(status.progress * 100))}%` }}
             />
           </div>
           <span className="meta">
-            uploading {Math.round(status.progress * 100)}%
+            Uploading · {Math.round(status.progress * 100)}%
           </span>
-        </div>
+        </InstrumentPanel>
       ) : null}
 
       {status.phase === "processing" ? (
-        <div className="flex flex-col gap-3">
-          <span className="meta">developing — validating and deriving</span>
-          <Skeleton className="aspect-[4/5] w-full" />
-        </div>
+        <SurfaceState
+          variant="loading"
+          title="Developing media"
+          description="Validating the file and preparing display sizes. This may take a moment."
+        />
       ) : null}
 
       {status.phase === "failed" ? (
-        <div className="flex flex-col gap-3">
-          <p className="text-body text-danger">{status.message}</p>
-          <div>
+        <SurfaceState
+          variant="error"
+          title="Media could not be prepared"
+          description={status.message}
+          action={
             <Button variant="secondary" onClick={clear}>
-              Try another file
+              Choose another file
             </Button>
-          </div>
-        </div>
+          }
+        />
       ) : null}
 
       {status.phase === "ready" ? (
@@ -382,7 +441,15 @@ function PublishForm({
     // Alt text first. A post that exists with an unsaved description is
     // worse than a moment more waiting, and this is the only chance the
     // person has to write it.
-    await onSaveAltText(media.id);
+    try {
+      await onSaveAltText(media.id);
+    } catch {
+      setBusy(false);
+      setError(
+        "The media description could not be saved. Check your connection and try again.",
+      );
+      return;
+    }
 
     if (toStory) {
       const story = await api.POST("/api/stories/create", {
@@ -411,108 +478,128 @@ function PublishForm({
 
     setBusy(false);
     if (response.data === undefined) {
-      const detail = (response.error as { detail?: string } | undefined)?.detail;
+      const detail = (response.error as { detail?: string } | undefined)
+        ?.detail;
       setError(detail ?? "That did not publish. Try again.");
       return;
     }
     // Straight to the post. Landing back on an empty composer gives no
     // evidence that anything happened.
     onFinish(`/p/${response.data.id}`);
-  }, [caption, location, visibility, media.id, onSaveAltText, onFinish, toStory]);
+  }, [
+    caption,
+    location,
+    visibility,
+    media.id,
+    onSaveAltText,
+    onFinish,
+    toStory,
+  ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <span className="meta">
-        ready — {media.width}×{media.height}
-      </span>
+    <InstrumentPanel className="grid gap-5 p-3 sm:p-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
+      <div className="flex min-w-0 flex-col gap-3">
+        <span className="text-sm font-medium text-accent">
+          Ready · {media.width}×{media.height}
+        </span>
 
-      {preview && media.width && media.height ? (
-        <DevelopImage
-          src={preview}
-          sources={media.sources}
-          alt={altText}
-          width={media.width}
-          height={media.height}
-          blurhash={media.blurhash}
-          dominantColor={media.dominant_color}
-          priority
-        />
-      ) : null}
+        {preview && media.width && media.height ? (
+          <DevelopImage
+            src={preview}
+            sources={media.sources}
+            alt={altText}
+            width={media.width}
+            height={media.height}
+            blurhash={media.blurhash}
+            dominantColor={media.dominant_color}
+            priority
+            fit="contain"
+            className="max-h-[62dvh] w-full rounded-image bg-black"
+          />
+        ) : null}
+      </div>
 
-      <label className="flex flex-col gap-2">
-        <span className="meta">caption</span>
-        <textarea
-          value={caption}
-          maxLength={2200}
-          rows={3}
-          onChange={(event) => {
-            setCaption(event.target.value);
-          }}
-          className="w-full resize-none border-b border-line bg-transparent pb-2 text-body text-ink placeholder:text-ink-faint focus-visible:border-safelight"
-        />
-      </label>
-
-      {/* Neither belongs to a story. A story is one frame for one day —
-          it has no location line and no audience of its own, because who
-          sees it is already decided by who follows you. */}
-      {!toStory ? (
+      <div className="flex min-w-0 flex-col gap-5 rounded-instrument border border-seam bg-panel-raised p-4">
         <label className="flex flex-col gap-2">
-          <span className="meta">location</span>
-          <Input
-            value={location}
-            maxLength={120}
+          <span className="meta">caption</span>
+          <textarea
+            value={caption}
+            maxLength={2200}
+            rows={3}
             onChange={(event) => {
-              setLocation(event.target.value);
+              setCaption(event.target.value);
             }}
+            placeholder="Add the story behind this work"
+            className="min-h-24 w-full resize-y rounded-[14px] border border-seam bg-panel p-3 text-body text-ink placeholder:text-ink-faint focus-visible:border-accent"
           />
         </label>
-      ) : null}
 
-      <fieldset className={cn("flex flex-col gap-2", toStory && "hidden")}>
-        <legend className="meta">who can see it</legend>
-        <div className="flex gap-4">
-          {VISIBILITIES.map((option) => (
-            <label key={option.value} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="visibility"
-                checked={visibility === option.value}
-                onChange={() => {
-                  setVisibility(option.value);
-                }}
-                className="accent-safelight"
-              />
-              <span className="text-body text-ink">{option.label}</span>
-            </label>
-          ))}
+        {/* Neither belongs to a story. A story is one frame for one day —
+          it has no location line and no audience of its own, because who
+          sees it is already decided by who follows you. */}
+        {!toStory ? (
+          <label className="flex flex-col gap-2">
+            <span className="meta">location</span>
+            <Input
+              value={location}
+              maxLength={120}
+              onChange={(event) => {
+                setLocation(event.target.value);
+              }}
+            />
+          </label>
+        ) : null}
+
+        <fieldset className={cn("flex flex-col gap-2", toStory && "hidden")}>
+          <legend className="meta">who can see it</legend>
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+            {VISIBILITIES.map((option) => (
+              <label
+                key={option.value}
+                className="flex min-h-11 items-center gap-2 rounded-[14px] border border-seam bg-panel px-3"
+              >
+                <input
+                  type="radio"
+                  name="visibility"
+                  checked={visibility === option.value}
+                  onChange={() => {
+                    setVisibility(option.value);
+                  }}
+                  className="accent-accent"
+                />
+                <span className="text-body text-ink">{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {error !== null ? (
+          <p className="text-body text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-seam pt-4">
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() => {
+              void publish();
+            }}
+          >
+            {busy
+              ? toStory
+                ? "Posting…"
+                : "Publishing…"
+              : toStory
+                ? "Add to story"
+                : "Publish"}
+          </Button>
+          <Button variant="secondary" onClick={onDiscard}>
+            Discard
+          </Button>
         </div>
-      </fieldset>
-
-      {error !== null ? (
-        <p className="text-body text-danger" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="flex items-center gap-3">
-        <Button
-          disabled={busy}
-          onClick={() => {
-            void publish();
-          }}
-        >
-          {busy
-            ? toStory
-              ? "Posting…"
-              : "Publishing…"
-            : toStory
-              ? "Add to story"
-              : "Publish"}
-        </Button>
-        <Button variant="ghost" onClick={onDiscard}>
-          Discard
-        </Button>
       </div>
-    </div>
+    </InstrumentPanel>
   );
 }

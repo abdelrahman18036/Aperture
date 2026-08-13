@@ -14,52 +14,52 @@ A photo and video social platform. Web only. Local-first, scales without a rewri
 
 **Backend — Python / Django**
 
-| Concern | Package |
-|---|---|
-| Runtime | CPython |
-| Framework | Django |
-| API | Django REST Framework |
-| Schema / types | drf-spectacular (OpenAPI 3.1) |
-| Database | PostgreSQL via psycopg 3 |
-| ORM | Django ORM |
-| Auth | Django auth (session cookies, same-site) |
-| Queues | Celery + Redis broker |
-| Realtime | **publishes to Redis; does not hold sockets** |
-| ASGI server | uvicorn |
-| Images | Pillow → Cloudflare Images |
-| Video | ffmpeg subprocess → Mux |
-| Object storage | boto3 → MinIO → Cloudflare R2 |
-| SFU tokens | livekit-api |
-| Admin | Django admin + **django-unfold** — the Phase 5 moderation console |
-| Tests | pytest-django |
-| Lint / types | ruff + mypy + django-stubs |
-| Packages | uv |
+| Concern        | Package                                                           |
+| -------------- | ----------------------------------------------------------------- |
+| Runtime        | CPython                                                           |
+| Framework      | Django                                                            |
+| API            | Django REST Framework                                             |
+| Schema / types | drf-spectacular (OpenAPI 3.1)                                     |
+| Database       | PostgreSQL via psycopg 3                                          |
+| ORM            | Django ORM                                                        |
+| Auth           | Django auth (session cookies, same-site)                          |
+| Queues         | Celery + Redis broker                                             |
+| Realtime       | **publishes to Redis; does not hold sockets**                     |
+| ASGI server    | uvicorn                                                           |
+| Images         | Pillow → Cloudflare Images                                        |
+| Video          | ffmpeg subprocess → Mux                                           |
+| Object storage | boto3 → MinIO → Cloudflare R2                                     |
+| SFU tokens     | livekit-api                                                       |
+| Admin          | Django admin + **django-unfold** — the Phase 5 moderation console |
+| Tests          | pytest-django                                                     |
+| Lint / types   | ruff + mypy + django-stubs                                        |
+| Packages       | uv                                                                |
 
 **Realtime — TypeScript / Node**
 
-| Concern | Package |
-|---|---|
-| Runtime | Node.js (LTS) |
-| Sockets | `ws` |
-| Fanout | ioredis (pub/sub) |
-| Ticket verification | `jose` (HS256) |
-| Event schemas | Zod, shared with the browser |
+| Concern             | Package                      |
+| ------------------- | ---------------------------- |
+| Runtime             | Node.js (LTS)                |
+| Sockets             | `ws`                         |
+| Fanout              | ioredis (pub/sub)            |
+| Ticket verification | `jose` (HS256)               |
+| Event schemas       | Zod, shared with the browser |
 
 **Frontend — TypeScript / Next.js**
 
-| Concern | Package |
-|---|---|
-| Framework | Next.js (App Router, Turbopack) |
-| UI runtime | React + React Compiler |
-| Styling | Tailwind CSS (CSS-first `@theme`) |
-| Components | shadcn/ui on **Base UI** |
-| Motion | Motion (ex Framer Motion) |
+| Concern    | Package                                       |
+| ---------- | --------------------------------------------- |
+| Framework  | Next.js (App Router, Turbopack)               |
+| UI runtime | React + React Compiler                        |
+| Styling    | Tailwind CSS (CSS-first `@theme`)             |
+| Components | shadcn/ui on **Base UI**                      |
+| Motion     | Motion (ex Framer Motion)                     |
 | API client | openapi-typescript + openapi-fetch, generated |
-| Validation | Zod (forms and client-side only) |
-| Realtime | native WebSocket to `apps/realtime` |
-| Calls | livekit-client |
-| Tests | Vitest, plus flows walked in Chrome |
-| Packages | pnpm |
+| Validation | Zod (forms and client-side only)              |
+| Realtime   | native WebSocket to `apps/realtime`           |
+| Calls      | livekit-client                                |
+| Tests      | Vitest, plus flows walked in Chrome           |
+| Packages   | pnpm                                          |
 
 Two notes on shadcn. New projects scaffold on **Base UI** rather than Radix — take that default, it's where the registry is heading. And the registry ships **chat primitives** (`MessageScroller`, `Message`, `Bubble`, `Attachment`), which covers a real chunk of Phase 6.
 
@@ -94,7 +94,6 @@ flowchart TB
         PG[("Postgres")]
         REDIS[("Redis<br/>queue · cache · pub/sub · presence")]
         S3[("MinIO / S3")]
-        TS[("Typesense")]
     end
 
     subgraph media["Media transport"]
@@ -111,7 +110,6 @@ flowchart TB
     API --> PG
     API --> REDIS
     API --> S3
-    API --> TS
     API -->|"mints tokens for"| LK
     API -->|"mints credentials for"| TURN
 
@@ -170,11 +168,11 @@ aperture/
 
 **Three processes.** Two share the Django codebase; the third is a separate Node service.
 
-| Process | Command | Language | Scales on |
-|---|---|---|---|
-| API | `uvicorn config.asgi:application` | Python | request rate |
-| Worker | `celery -A config worker` | Python | queue depth |
-| Realtime | `node apps/realtime` | TypeScript | concurrent sockets |
+| Process  | Command                           | Language   | Scales on          |
+| -------- | --------------------------------- | ---------- | ------------------ |
+| API      | `uvicorn config.asgi:application` | Python     | request rate       |
+| Worker   | `celery -A config worker`         | Python     | queue depth        |
+| Realtime | `node apps/realtime`              | TypeScript | concurrent sockets |
 
 API and worker share models and settings but deploy independently. Realtime shares nothing but Redis — see §8.
 
@@ -243,15 +241,15 @@ Route groups do the work that a `Layout` boolean prop otherwise would: `(auth)` 
 
 Do not hand-write scaffolding that a generator produces. Canonical structure, current defaults, no invented boilerplate:
 
-| What | Command |
-|---|---|
-| Monorepo | `pnpm dlx create-turbo@latest` |
-| Django project | `uv init` → `uv add django` → `uv run django-admin startproject config .` |
-| Each Django app | `uv run manage.py startapp <name>` |
-| Next.js | `pnpm create next-app@latest` (TypeScript, Tailwind, App Router, `src/`) |
-| shadcn | `pnpm dlx shadcn@latest init` then `pnpm dlx shadcn@latest add <component>` |
-| Python deps | `uv add <pkg>` — never hand-edit `pyproject.toml` dependencies |
-| JS deps | `pnpm add <pkg>` — never hand-edit `package.json` dependencies |
+| What            | Command                                                                     |
+| --------------- | --------------------------------------------------------------------------- |
+| Monorepo        | `pnpm dlx create-turbo@latest`                                              |
+| Django project  | `uv init` → `uv add django` → `uv run django-admin startproject config .`   |
+| Each Django app | `uv run manage.py startapp <name>`                                          |
+| Next.js         | `pnpm create next-app@latest` (TypeScript, Tailwind, App Router, `src/`)    |
+| shadcn          | `pnpm dlx shadcn@latest init` then `pnpm dlx shadcn@latest add <component>` |
+| Python deps     | `uv add <pkg>` — never hand-edit `pyproject.toml` dependencies              |
+| JS deps         | `pnpm add <pkg>` — never hand-edit `package.json` dependencies              |
 
 **`pnpm dlx`, not `npx`** — npm is unreliable on this machine, see `docs/VERSIONS.md`.
 
@@ -278,7 +276,7 @@ Django models + DRF serializers
 
 This is the one thing the TypeScript-everywhere alternative gave for free. Automate it in Phase 1 and it stays cheap forever. Defer it and every phase after pays interest.
 
-**Socket payloads ride the same contract.** When Django publishes a message event, the payload is the output of *the same DRF serializer* the REST endpoint returns — so its type is already in the OpenAPI schema and already in the generated client. Only the envelope is hand-typed, and it is five fields:
+**Socket payloads ride the same contract.** When Django publishes a message event, the payload is the output of _the same DRF serializer_ the REST endpoint returns — so its type is already in the OpenAPI schema and already in the generated client. Only the envelope is hand-typed, and it is five fields:
 
 ```ts
 { v: 1, type: "message.created", conversation_id: string, seq: number, payload: unknown }
@@ -301,7 +299,7 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: devpassword
       POSTGRES_DB: aperture
-    ports: ["5433:5432"]        # host 5432 is taken by a native PG service — see docs/VERSIONS.md
+    ports: ["5433:5432"] # host 5432 is taken by a native PG service — see docs/VERSIONS.md
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app"]
@@ -346,16 +344,17 @@ services:
 
   typesense:
     image: typesense/typesense:28.0
+    profiles: ["search"]
     environment:
       TYPESENSE_API_KEY: devkey
       TYPESENSE_DATA_DIR: /data
     ports: ["8108:8108"]
     volumes: [typesensedata:/data]
 
-volumes: { pgdata:, redisdata:, miniodata:, typesensedata: }
+volumes: { pgdata, redisdata, miniodata, typesensedata }
 ```
 
-`docker compose up`, then `uv run manage.py runserver` and `pnpm dev` — full stack from a cold machine in about four minutes. Start Docker Desktop first; it does not auto-start on this machine.
+`docker compose up`, then `uv run manage.py runserver` and `pnpm dev` — the current stack from a cold machine in about four minutes. Start Docker Desktop first; it does not auto-start on this machine. Typesense stays behind `--profile search` until the 100k→1M stage where this document introduces it.
 
 ---
 
@@ -363,7 +362,7 @@ volumes: { pgdata:, redisdata:, miniodata:, typesensedata: }
 
 Django models and migrations. The table design below is the decision; the ORM is just how it's spelled.
 
-**Snowflake IDs, not UUIDv4.** 64-bit, time-sortable, generated in `core/`. `ORDER BY id` *is* `ORDER BY created_at`, cursor pagination is trivial, and index locality survives. Use a `BigIntegerField(primary_key=True)` with a default from `core.ids.snowflake` — **not** `BigAutoField`, because the point is that the application owns the value. If you must use UUID, use **v7** — never v4 as a primary key on a table heading for hundreds of millions of rows.
+**Snowflake IDs, not UUIDv4.** 64-bit, time-sortable, generated in `core/`. `ORDER BY id` _is_ `ORDER BY created_at`, cursor pagination is trivial, and index locality survives. Use a `BigIntegerField(primary_key=True)` with a default from `core.ids.snowflake` — **not** `BigAutoField`, because the point is that the application owns the value. If you must use UUID, use **v7** — never v4 as a primary key on a table heading for hundreds of millions of rows.
 
 ```
 users                                  -- extends AbstractUser
@@ -493,14 +492,14 @@ and this is where that is decided. The first sets `messages.deleted_at` and
 requires the message to be yours; the second writes a `message_hidden` row and
 works on anybody's, changing nothing that anybody else sees. They are two
 service functions and two controls, never one with a flag — a flag between two
-operations that differ in *who they affect* is a flag that eventually gets
+operations that differ in _who they affect_ is a flag that eventually gets
 passed wrong.
 
 A story reply is a direct message and nothing else: no second inbox, no second
 unread count, no second delivery path. `replied_story_id` is only the context
 that tells the author which of four frames was answered.
 
-That `seq` column and that `UNIQUE` constraint are the two most important lines in the entire schema. `seq` gives correct ordering without trusting browser clocks, plus cursor sync (*"send me everything after 4821"*) for free. The unique constraint makes a flaky-network retry a no-op instead of a duplicate message. Both are miserable to retrofit onto live conversations.
+That `seq` column and that `UNIQUE` constraint are the two most important lines in the entire schema. `seq` gives correct ordering without trusting browser clocks, plus cursor sync (_"send me everything after 4821"_) for free. The unique constraint makes a flaky-network retry a no-op instead of a duplicate message. Both are miserable to retrofit onto live conversations.
 
 Only Django writes these tables. `apps/realtime` reads none of them — it learns about a new message from Redis, not from Postgres.
 
@@ -536,7 +535,7 @@ Bytes never pass through your server. Not at any scale — develop against the s
 
 Presigned URLs: 5-minute expiry, constrained on content-length and content-type. An unconstrained presigned URL is a free file host for anyone who finds it.
 
-Validate the *file*, not the client's claim: `ffprobe` for video, Pillow's `Image.verify()` plus `python-magic` for images. A declared `image/jpeg` that is really something else is the first upload attack you'll see.
+Validate the _file_, not the client's claim: `ffprobe` for video, Pillow's `Image.verify()` plus `python-magic` for images. A declared `image/jpeg` that is really something else is the first upload attack you'll see.
 
 **Do not build a video transcoding pipeline.** One ffmpeg subprocess producing 720p H.264 is fine locally. In production, hand video to Mux. Adaptive bitrate ladders, HLS packaging, per-device codec selection — a genuine multi-quarter project, and not your product.
 
@@ -567,7 +566,7 @@ Express it with the ORM, but **read the generated SQL** — `.explain()` on this
 
 **Phase 2 — cache.** Redis sorted set per user, 30-min TTL, invalidated on a followee's new post.
 
-**Phase 3 — hybrid push.** Only when feed p99 crosses ~200ms. New post → Celery task → write into every follower's `timeline`, *except* accounts over ~10k followers, which stay pull and merge in at read time.
+**Phase 3 — hybrid push.** Only when feed p99 crosses ~200ms. New post → Celery task → write into every follower's `timeline`, _except_ accounts over ~10k followers, which stay pull and merge in at read time.
 
 The split is arithmetic, not taste: pure push means a 10M-follower account triggers 10M writes per post; pure pull means someone following 5,000 accounts triggers a brutal fan-in on every scroll. Instagram and Twitter both converged here. Don't build it speculatively — instrument, then act.
 
@@ -617,7 +616,7 @@ Browser ──POST /api/conversations/{id}/messages──> Django
 Browser <────── WSS ────── apps/realtime replica ◄───┘
 ```
 
-Writes go over HTTP because the write must be transactional — `seq` allocation and `client_id` idempotency happen in one Postgres transaction that only Django can run. Sending over the socket would mean Node forwarding to Django anyway: an extra hop for nothing. It also means *send message* is a typed call in the generated API client, and optimistic UI hides the round trip completely.
+Writes go over HTTP because the write must be transactional — `seq` allocation and `client_id` idempotency happen in one Postgres transaction that only Django can run. Sending over the socket would mean Node forwarding to Django anyway: an extra hop for nothing. It also means _send message_ is a typed call in the generated API client, and optimistic UI hides the round trip completely.
 
 **Ephemeral events** — typing, presence, call signaling. These go **up over the socket** and never reach Django or Postgres at all:
 
@@ -635,14 +634,14 @@ Two channel shapes. `conv.{id}` addresses a room; `user.{id}` addresses one
 person and is the one a client can neither name nor opt out of, so its
 membership is decided entirely by the publisher.
 
-| Type | Channel | Payload | Why not more |
-|---|---|---|---|
-| `message.created` | `conv.{id}` | the serialised message | it is the message; the client renders it directly |
-| `message.read` | `conv.{id}` | reader id, seq | |
-| `message.deleted` | `conv.{id}` | seq | |
-| `post.created` | `user.{id}` × followers | post id, author id | ids only — the feed applies visibility, blocks and privacy, and a payload carrying the post would need every one of those checks re-implemented for the wire |
-| `story.created` | `user.{id}` × followers | story id, author id | same |
-| `notification.created` | `user.{id}` | the verb | same; the client refetches the list, which is the only place blocks are applied |
+| Type                   | Channel                 | Payload                | Why not more                                                                                                                                                 |
+| ---------------------- | ----------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `message.created`      | `conv.{id}`             | the serialised message | it is the message; the client renders it directly                                                                                                            |
+| `message.read`         | `conv.{id}`             | reader id, seq         |                                                                                                                                                              |
+| `message.deleted`      | `conv.{id}`             | seq                    |                                                                                                                                                              |
+| `post.created`         | `user.{id}` × followers | post id, author id     | ids only — the feed applies visibility, blocks and privacy, and a payload carrying the post would need every one of those checks re-implemented for the wire |
+| `story.created`        | `user.{id}` × followers | story id, author id    | same                                                                                                                                                         |
+| `notification.created` | `user.{id}`             | the verb               | same; the client refetches the list, which is the only place blocks are applied                                                                              |
 
 **The list is closed on both sides.** `packages/realtime-events` holds the same
 enum the publisher does, and the client drops what it does not recognise — so a
@@ -682,9 +681,9 @@ Stateless, no database lookup on connect, and a leaked ticket expires in a minut
 
 Add replicas; Redis handles fanout. Comfortably 10k+ sockets per Node process, so a single replica covers a very large early user base. Past Redis pub/sub, move to Redis Streams or NATS — you'll know long before you get there.
 
-Reconnect: client sends `{conversation_id, last_seq}` over the socket, Node calls Django's internal delta endpoint on its behalf — or simpler, the client fetches the delta over HTTP itself and *then* opens the socket. Prefer the second: it keeps the gateway dumb. Either way it's correct because `seq` is monotonic, and that is the entire offline-sync story.
+Reconnect: client sends `{conversation_id, last_seq}` over the socket, Node calls Django's internal delta endpoint on its behalf — or simpler, the client fetches the delta over HTTP itself and _then_ opens the socket. Prefer the second: it keeps the gateway dumb. Either way it's correct because `seq` is monotonic, and that is the entire offline-sync story.
 
-**Deliver-then-persist is not allowed.** Django publishes to Redis only *after* the transaction commits. Publishing inside the transaction means a rollback still delivers a message that doesn't exist.
+**Deliver-then-persist is not allowed.** Django publishes to Redis only _after_ the transaction commits. Publishing inside the transaction means a rollback still delivers a message that doesn't exist.
 
 ---
 
@@ -702,13 +701,13 @@ Budget TURN bandwidth as a real line item. Every relayed call is full media thro
 
 ## 10. Scaling path
 
-| Stage | What changes |
-|---|---|
-| 0 → 10k | Nothing. One API process, one worker, one Postgres, pull feed. |
-| 10k → 100k | Read replica. Redis feed cache. More Celery workers. Video to Mux. |
-| 100k → 1M | Hybrid push. Partition `messages` by month. PgBouncer. Typesense. Second realtime replica. |
-| 1M → 10M | Conversations onto their own DB. Citus or app-level shard by user_id. |
-| 10M+ | You have a platform team; this document is obsolete. |
+| Stage      | What changes                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| 0 → 10k    | Nothing. One API process, one worker, one Postgres, pull feed.                             |
+| 10k → 100k | Read replica. Redis feed cache. More Celery workers. Video to Mux.                         |
+| 100k → 1M  | Hybrid push. Partition `messages` by month. PgBouncer. Typesense. Second realtime replica. |
+| 1M → 10M   | Conversations onto their own DB. Citus or app-level shard by user_id.                      |
+| 10M+       | You have a platform team; this document is obsolete.                                       |
 
 The most common failure in projects like this is building stage-3 infrastructure at stage 0 — Kafka, sharding, a service mesh for forty users. Each one multiplies the cost of every feature you ship between now and a scale you may never reach.
 
@@ -718,7 +717,7 @@ The most common failure in projects like this is building stage-3 infrastructure
 
 **Moderation.** Public image upload attracts CSAM, spam, and copyright claims within days of traction. This is a legal and ethical obligation from your first public user, not a Phase 9 feature. Minimum: CSAM scanning on the bucket, an NCMEC reporting path, a report queue with an admin view, hard upload rate limits. Build the report button before you build stories. Django admin with **django-unfold** gives you the queue, the row actions, and the permission gating cheaply — see `docs/vendor/django-unfold.md`. There is no excuse to defer this one.
 
-**Blocking.** Enforced at the query layer in *every* read path — feed, search, comments, DMs, notifications. Retrofitting means auditing every query you've ever written. It's in the Phase 1 feed query above for exactly this reason. Put it in a single reusable queryset method (`visible_to(user)`) so there is one place to audit rather than forty.
+**Blocking.** Enforced at the query layer in _every_ read path — feed, search, comments, DMs, notifications. Retrofitting means auditing every query you've ever written. It's in the Phase 1 feed query above for exactly this reason. Put it in a single reusable queryset method (`visible_to(user)`) so there is one place to audit rather than forty.
 
 **Deletion.** Real account deletion is a GDPR requirement. Soft-delete everywhere plus a scheduled hard-delete task, or you'll write a data-archaeology script under a deadline.
 

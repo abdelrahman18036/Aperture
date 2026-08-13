@@ -23,7 +23,7 @@ export default async function ComposePage({
   const toStory = (await searchParams).to === "story";
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-feed flex-col gap-10 px-6 py-16">
+    <section className="mx-auto flex min-h-dvh max-w-feed flex-col gap-10 px-6 py-16">
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-display-l text-ink">
           {toStory ? "New story" : "New post"}
@@ -35,6 +35,6 @@ export default async function ComposePage({
         </p>
       </header>
       <Composer />
-    </main>
+    </section>
   );
 }

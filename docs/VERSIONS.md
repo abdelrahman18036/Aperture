@@ -18,28 +18,27 @@ Pillow all support 3.14 fine, so revisit once Celery ships 3.14 classifiers.
 
 `uv python install 3.13.12` — this does not touch the system Python.
 
-| Package | Pin | Note |
-|---|---|---|
-| django | **6.1** | Requires Python ≥3.12. See LTS note below. |
-| djangorestframework | **3.18.0** | |
-| drf-spectacular | **0.30.0** | Generates the OpenAPI 3.1 schema — the type boundary. |
-| psycopg | **3.3.4** | psycopg **3**, not psycopg2. |
-| celery | **5.6.3** | Redis broker, not RabbitMQ. Pins the runtime to 3.13. |
-| django-celery-beat | **2.9.0** | Scheduled hard-delete job, Phase 5. |
-| django-unfold | **0.104.0** | Admin theme for the moderation console. Supports Django 5.2/6.0/6.1 ✓, Python ≥3.12 ✓. Only dep is `django>=5.2`. **See `docs/vendor/django-unfold.md`.** |
-| uvicorn | **0.52.1** | ASGI server for the API process. |
-| redis | **8.1.0** | Python client. |
-| boto3 | **1.43.68** | Presigned URLs against MinIO/R2. |
-| django-storages | **1.14.6** | |
-| pillow | **12.3.0** | `pyvips` 3.1.1 is the upgrade if the worker bottlenecks. |
-| blurhash-python | **1.2.2** | |
-| ~~python-magic~~ → **puremagic** | **2.2.0** | Real MIME detection. **Ruled 2026-08-11, see below.** |
-| livekit-api | **1.2.0** | Server-side token minting, Phase 7. |
-| django-cors-headers | **4.9.0** | Should be barely needed — Next.js rewrites make it same-origin. |
-| dj-database-url | **3.1.2** | |
-| pytest-django | **4.14.0** | |
-| ruff | **0.16.2** | Lint + format. |
-| mypy + django-stubs | **2.3.0** / **6.0.9** | Strict. The Python-side equivalent of rule 2. |
+| Package                          | Pin                   | Note                                                                                                                                                      |
+| -------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| django                           | **6.1**               | Requires Python ≥3.12. See LTS note below.                                                                                                                |
+| djangorestframework              | **3.18.0**            |                                                                                                                                                           |
+| drf-spectacular                  | **0.30.0**            | Generates the OpenAPI 3.1 schema — the type boundary.                                                                                                     |
+| psycopg                          | **3.3.4**             | psycopg **3**, not psycopg2.                                                                                                                              |
+| celery                           | **5.6.3**             | Redis broker and built-in beat schedule. Pins the runtime to 3.13. `django-celery-beat` 2.9.0 excludes Django 6.1, and the schedules are static.          |
+| django-unfold                    | **0.104.0**           | Admin theme for the moderation console. Supports Django 5.2/6.0/6.1 ✓, Python ≥3.12 ✓. Only dep is `django>=5.2`. **See `docs/vendor/django-unfold.md`.** |
+| uvicorn                          | **0.52.1**            | ASGI server for the API process.                                                                                                                          |
+| redis                            | **8.1.0**             | Python client.                                                                                                                                            |
+| boto3                            | **1.43.68**           | Presigned URLs against MinIO/R2.                                                                                                                          |
+| django-storages                  | **1.14.6**            |                                                                                                                                                           |
+| pillow                           | **12.3.0**            | `pyvips` 3.1.1 is the upgrade if the worker bottlenecks.                                                                                                  |
+| blurhash-python                  | **1.2.2**             |                                                                                                                                                           |
+| ~~python-magic~~ → **puremagic** | **2.2.0**             | Real MIME detection. **Ruled 2026-08-11, see below.**                                                                                                     |
+| livekit-api                      | **1.2.0**             | Server-side token minting, Phase 7.                                                                                                                       |
+| django-cors-headers              | **4.9.0**             | Should be barely needed — Next.js rewrites make it same-origin.                                                                                           |
+| dj-database-url                  | **3.1.2**             |                                                                                                                                                           |
+| pytest-django                    | **4.14.0**            |                                                                                                                                                           |
+| ruff                             | **0.16.2**            | Lint + format.                                                                                                                                            |
+| mypy + django-stubs              | **2.3.0** / **6.0.9** | Strict. The Python-side equivalent of rule 2.                                                                                                             |
 
 ### `python-magic` → `puremagic` — ruled 2026-08-11 (Phase 3)
 
@@ -53,17 +52,17 @@ CPython only makes work by accident of small-int caching. That is the code that 
 inspecting hostile uploads.
 
 **Ruled: `puremagic` 2.2.0 everywhere.** Pure Python, maintained, `requires_python >= 3.12`,
-no native dependency, and therefore *identical* on Windows and in the Linux image — which is
+no native dependency, and therefore _identical_ on Windows and in the Linux image — which is
 more consistent than the alternative, not less.
 
 Compared head-to-head on this machine before ruling:
 
-| payload | libmagic | puremagic |
-|---|---|---|
-| jpeg, gif, webp, mp4, svg, html | correct | **identical** |
-| png (header only) | `application/octet-stream` | `image/png` |
-| ELF binary | `application/octet-stream` | `(ELF executable)` |
-| PE executable | `application/x-dosexec` | *(mis-names it)* |
+| payload                         | libmagic                   | puremagic          |
+| ------------------------------- | -------------------------- | ------------------ |
+| jpeg, gif, webp, mp4, svg, html | correct                    | **identical**      |
+| png (header only)               | `application/octet-stream` | `image/png`        |
+| ELF binary                      | `application/octet-stream` | `(ELF executable)` |
+| PE executable                   | `application/x-dosexec`    | _(mis-names it)_   |
 
 They agree on every real media type. They differ only on non-media payloads, and there what
 matters is that **neither returns `image/*`** — which is the check we actually make. The
@@ -86,35 +85,35 @@ Ruled: **6.1**. Current LTS is 5.2.17 (supported to ~April 2028); the next LTS i
 
 ### `apps/realtime` — the socket gateway
 
-| Package | Pin | Note |
-|---|---|---|
-| ws | **8.21.3** | The socket server. |
-| ioredis | **6.0.0** | Redis pub/sub for cross-replica fanout. |
-| jose | **6.2.8** | Verifies the HS256 ticket Django mints. Verify-only — this service never signs. |
-| tsx | **4.23.12** | Dev runner. |
+| Package | Pin         | Note                                                                            |
+| ------- | ----------- | ------------------------------------------------------------------------------- |
+| ws      | **8.21.3**  | The socket server.                                                              |
+| ioredis | **6.0.0**   | Redis pub/sub for cross-replica fanout.                                         |
+| jose    | **6.2.8**   | Verifies the HS256 ticket Django mints. Verify-only — this service never signs. |
+| tsx     | **4.23.12** | Dev runner.                                                                     |
 
 No ORM, no database driver, no Postgres client. If one appears in this package's `package.json`,
 something has gone wrong — see `01-ARCHITECTURE.md` §8.
 
 ### `apps/web` — the frontend
 
-| Package | Pin | Note |
-|---|---|---|
-| next | **16.3.0** | |
-| react / react-dom | **19.2.8** | |
-| babel-plugin-react-compiler | **1.0.0** | Compiler is 1.0 stable. |
-| eslint-plugin-react-hooks | **7.1.1** | Carries the compiler lint rules. |
-| tailwindcss + @tailwindcss/postcss | **4.3.3** | CSS-first `@theme`. |
-| shadcn (CLI) | **4.16.2** | ⚠️ Verify it still scaffolds on **Base UI** — the design spec depends on it. |
-| motion | **13.1.0** | ⚠️ Check v12→v13 breaking changes before Phase 2. |
-| openapi-typescript | **7.13.0** | Generates `packages/api-client` from Django's schema. |
-| openapi-fetch | **0.17.0** | Typed fetch client. Chosen over `orval` — smaller, no codegen runtime. |
-| zod | **4.4.3** | **Frontend forms only.** Does not restate the API contract — see `01-ARCHITECTURE.md` §3. |
-| livekit-client | **2.21.0** | |
-| blurhash | **2.0.5** | Client-side decode. |
-| typescript | **5.9.3** | ⚠️ Deliberately behind. `latest` is 7.0.2 (the native port); 6.0.0-beta and 7.0.1-rc also exist. Revisit after Phase 4. |
-| turbo | **2.10.9** | Orchestrates both ecosystems. |
-| vitest | **4.1.10** | |
+| Package                            | Pin        | Note                                                                                                                    |
+| ---------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| next                               | **16.3.0** |                                                                                                                         |
+| react / react-dom                  | **19.2.8** |                                                                                                                         |
+| babel-plugin-react-compiler        | **1.0.0**  | Compiler is 1.0 stable.                                                                                                 |
+| eslint-plugin-react-hooks          | **7.1.1**  | Carries the compiler lint rules.                                                                                        |
+| tailwindcss + @tailwindcss/postcss | **4.3.3**  | CSS-first `@theme`.                                                                                                     |
+| shadcn (CLI)                       | **4.16.2** | ⚠️ Verify it still scaffolds on **Base UI** — the design spec depends on it.                                            |
+| motion                             | **13.1.0** | ⚠️ Check v12→v13 breaking changes before Phase 2.                                                                       |
+| openapi-typescript                 | **7.13.0** | Generates `packages/api-client` from Django's schema.                                                                   |
+| openapi-fetch                      | **0.17.0** | Typed fetch client. Chosen over `orval` — smaller, no codegen runtime.                                                  |
+| zod                                | **4.4.3**  | **Frontend forms only.** Does not restate the API contract — see `01-ARCHITECTURE.md` §3.                               |
+| livekit-client                     | **2.21.0** |                                                                                                                         |
+| blurhash                           | **2.0.5**  | Client-side decode.                                                                                                     |
+| typescript                         | **5.9.3**  | ⚠️ Deliberately behind. `latest` is 7.0.2 (the native port); 6.0.0-beta and 7.0.1-rc also exist. Revisit after Phase 4. |
+| turbo                              | **2.10.9** | Orchestrates both ecosystems.                                                                                           |
+| vitest                             | **4.1.10** |                                                                                                                         |
 
 **Playwright is not in the stack.** Flows are verified through Claude's Chrome access. Do not add
 `@playwright/test`, `playwright-cli`, or `webapp-testing`.
@@ -130,15 +129,15 @@ something has gone wrong — see `01-ARCHITECTURE.md` §8.
 All tags confirmed to exist on Docker Hub 2026-08-11. Floating `latest` tags were replaced with
 concrete ones — a compose file that pulls `latest` is not reproducible.
 
-| Service | Pin | Note |
-|---|---|---|
-| postgres | `postgres:18-alpine` | Host port **5433**, not 5432. |
-| redis | `redis:8-alpine` | Celery broker, feed cache, **and** the pub/sub bus between Django and the realtime gateway. |
-| minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | was `latest` |
-| minio-init | `minio/mc` | bootstrap only, floating is fine |
-| livekit | `livekit/livekit-server:v1.13.5` | was `latest` |
-| coturn | `coturn/coturn:4.17.2` | was `latest`; spec assumed 4.6.x — current line is 4.17 |
-| typesense | `typesense/typesense:28.0` | |
+| Service    | Pin                                        | Note                                                                                                        |
+| ---------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| postgres   | `postgres:18-alpine`                       | Host port **5433**, not 5432.                                                                               |
+| redis      | `redis:8-alpine`                           | Celery broker, feed cache, **and** the pub/sub bus between Django and the realtime gateway.                 |
+| minio      | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | was `latest`                                                                                                |
+| minio-init | `minio/mc`                                 | bootstrap only, floating is fine                                                                            |
+| livekit    | `livekit/livekit-server:v1.13.5`           | was `latest`                                                                                                |
+| coturn     | `coturn/coturn:4.17.2`                     | was `latest`; spec assumed 4.6.x — current line is 4.17                                                     |
+| typesense  | `typesense/typesense:28.0`                 | Reserved behind Compose's `search` profile for the 100k→1M scaling stage; the current app does not call it. |
 
 Not yet pulled — the daemon was stopped at check time.
 
@@ -146,18 +145,18 @@ Not yet pulled — the daemon was stopped at check time.
 
 ## Toolchain state on this machine (verified 2026-08-11)
 
-| Tool | State |
-|---|---|
-| Python | **3.14.7** at `C:\Python314` (system). Project pins **3.13.12** via uv — see above. |
-| uv | **0.10.11**, at `~/.local/bin/uv.exe`. This is the Python package manager for the project. |
-| pip / poetry / pipx | Not on PATH. Not needed — uv covers it. |
-| Node | **24.19.0**, via `pnpm env use --global`. At `%LOCALAPPDATA%\pnpm\node.exe`. |
-| pnpm | **10.17.0** (11.21.0 available, not required). Store: `D:\.pnpm-store\v10`. Verified working. |
-| npm / npx | **Unreliable — do not use.** Repaired 2026-08-11, regressed within the hour. Use `pnpm` / `pnpm dlx`. |
-| Docker | Desktop **29.2.1** / Compose **v5.0.2** installed, **daemon stopped**. Start manually. |
-| ffmpeg | **7.1.1** on PATH. Phase 3's worker has what it needs. |
-| git | 2.50.1. Repo on `main`. |
-| Disk | ~184 GB free on D:. |
+| Tool                | State                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------------- |
+| Python              | **3.14.7** at `C:\Python314` (system). Project pins **3.13.12** via uv — see above.                   |
+| uv                  | **0.10.11**, at `~/.local/bin/uv.exe`. This is the Python package manager for the project.            |
+| pip / poetry / pipx | Not on PATH. Not needed — uv covers it.                                                               |
+| Node                | **24.19.0**, via `pnpm env use --global`. At `%LOCALAPPDATA%\pnpm\node.exe`.                          |
+| pnpm                | **10.17.0** (11.21.0 available, not required). Store: `D:\.pnpm-store\v10`. Verified working.         |
+| npm / npx           | **Unreliable — do not use.** Repaired 2026-08-11, regressed within the hour. Use `pnpm` / `pnpm dlx`. |
+| Docker              | Desktop **29.2.1** / Compose **v5.0.2** installed, **daemon stopped**. Start manually.                |
+| ffmpeg              | **7.1.1** on PATH. Phase 3's worker has what it needs.                                                |
+| git                 | 2.50.1. Repo on `main`.                                                                               |
+| Disk                | ~184 GB free on D:.                                                                                   |
 
 ### `npm` / `npx` — broken, repaired, regressed. Don't use them.
 
@@ -170,17 +169,17 @@ nothing; `pnpm dlx <pkg>` replaces `npx <pkg>` everywhere.
 
 `%LOCALAPPDATA%\npm-cache` and `%LOCALAPPDATA%\pip` are junctions into `D:\cache`. Both had been
 created in January 2026; the `D:\cache` targets were later deleted. Recreating the targets did not
-help, because the *junctions themselves* had gone bad.
+help, because the _junctions themselves_ had gone bad.
 
 The signature was distinctive and worth recognising again:
 
-| Operation through the junction | Result |
-|---|---|
-| Read / list | worked |
-| Create a **file** | worked |
-| Create a **directory** | **`EEXIST` for a name that did not exist** |
-| `mkdir -p` (nested) | `ENOENT` |
-| Same directory create written **direct to `D:\…`** | worked |
+| Operation through the junction                     | Result                                     |
+| -------------------------------------------------- | ------------------------------------------ |
+| Read / list                                        | worked                                     |
+| Create a **file**                                  | worked                                     |
+| Create a **directory**                             | **`EEXIST` for a name that did not exist** |
+| `mkdir -p` (nested)                                | `ENOENT`                                   |
+| Same directory create written **direct to `D:\…`** | worked                                     |
 
 Directory creation failing with "already exists" for a random unused name, while file creation
 through the same path succeeds, means the reparse point is defective — not the target, not the ACL,
@@ -230,14 +229,14 @@ disk, resolves in `manage.py shell`, and 404s over HTTP after a restart.
 
 **Windows let three `uvicorn` processes bind `127.0.0.1:8000` simultaneously.** `netstat -ano`
 showed two `LISTENING` rows for the port with different PIDs; requests were answered by the
-*oldest* one, which had been running since before the code existed. Killing "the" server by port
+_oldest_ one, which had been running since before the code existed. Killing "the" server by port
 owner killed one of them and left the others serving.
 
 Two things make it hard to see:
 
 - `Get-CimInstance Win32_Process | Where CommandLine -like '*uvicorn*'` returns **nothing** for
   these — the command line is not readable, so a search by command line finds no server at all
-  while one is plainly answering. Search by process *name* instead: `Get-Process python`.
+  while one is plainly answering. Search by process _name_ instead: `Get-Process python`.
 - `--reload` uses `StatReload` here, which polls mtimes and has been observed to miss edits
   entirely. A restart that appears to work can leave the old URLconf loaded.
 

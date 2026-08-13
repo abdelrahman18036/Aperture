@@ -38,6 +38,16 @@ export { Spinner } from "./primitives/spinner";
 export { TabBar } from "./primitives/tab-bar";
 export type { TabDefinition } from "./primitives/tab-bar";
 export { Grain } from "./primitives/grain";
+export { InstrumentPanel } from "./primitives/instrument-panel";
+export type {
+  InstrumentPanelProps,
+  InstrumentPanelTone,
+} from "./primitives/instrument-panel";
+export { SurfaceState } from "./primitives/surface-state";
+export type {
+  SurfaceStateProps,
+  SurfaceStateVariant,
+} from "./primitives/surface-state";
 
 export { AmbientGlow } from "./media/ambient-glow";
 export { DevelopImage } from "./media/develop-image";

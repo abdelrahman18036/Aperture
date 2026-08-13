@@ -4,7 +4,20 @@ import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Button, Input, cn } from "@repo/ui";
+import {
+  Button,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  Input,
+  Spinner,
+  cn,
+} from "@repo/ui";
 
 import type { Schemas } from "@repo/api-client";
 
@@ -36,21 +49,41 @@ export function NewConversation() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [people, setPeople] = useState<Person[]>([]);
+  const [searchState, setSearchState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
 
   // Refetched as the field changes, so the list narrows rather than sitting
   // there as a static fifty. The endpoint caps and orders; nothing here does.
   useEffect(() => {
     if (!open) return;
+    let current = true;
     const timer = setTimeout(() => {
+      setSearchState("loading");
       void api
         .GET("/api/users/connections", {
           params: { query: draft.trim() ? { q: draft.trim() } : {} },
         })
         .then((response) => {
+          if (!current) return;
+          if (response.data === undefined) {
+            setPeople([]);
+            setSearchState("error");
+            return;
+          }
           setPeople(response.data?.users ?? []);
+          setSearchState("ready");
+        })
+        .catch(() => {
+          if (!current) return;
+          setPeople([]);
+          setSearchState("error");
         });
     }, 200);
-    return () => clearTimeout(timer);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
   }, [open, draft]);
 
   // Already-picked names drop out of the list rather than appearing chosen.
@@ -77,7 +110,7 @@ export function NewConversation() {
     // last name before the button works is a trap people fall into once and
     // resent every time after.
     const pending = draft.trim().replace(/^@/, "");
-    const names = pending === "" ? usernames : [...usernames, pending];
+    const names = [...new Set([...usernames, pending].filter(Boolean))];
     if (names.length === 0) {
       setError("Name at least one person.");
       return;
@@ -101,151 +134,214 @@ export function NewConversation() {
           return;
         }
         router.push(`/messages/${response.data.id}`);
+        setOpen(false);
+      })
+      .catch(() => {
+        setBusy(false);
+        setError("That conversation could not be started. Try again.");
       });
   }
 
-  if (!open) {
-    return (
-      <div className="px-4 pb-4">
-        <Button variant="ghost" onClick={() => setOpen(true)}>
-          <Plus className="size-4" aria-hidden="true" />
-          New conversation
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <form onSubmit={submit} className="border-b border-line px-4 pb-4">
-      <fieldset disabled={busy}>
-        <legend className="sr-only">Start a conversation</legend>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) {
+          setSearchState("loading");
+          return;
+        }
+        setUsernames([]);
+        setDraft("");
+        setTitle("");
+        setError(null);
+        setPeople([]);
+        setSearchState("idle");
+      }}
+    >
+      <DialogTrigger render={<Button variant="secondary" />}>
+        <Plus className="size-4" aria-hidden="true" />
+        New message
+      </DialogTrigger>
 
-        {usernames.length > 0 && (
-          <ul className="mb-2 flex flex-wrap gap-2">
-            {usernames.map((name) => (
-              <li key={name}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setUsernames((current) =>
-                      current.filter((n) => n !== name),
-                    )
-                  }
-                  className={cn(
-                    "flex items-center gap-1 rounded-control px-2 py-1 meta",
-                    "text-ink ring-1 ring-line hover:ring-safelight-dim",
-                  )}
-                  aria-label={`Remove ${name}`}
-                >
-                  {name}
-                  <X className="size-3" aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+      <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>New conversation</DialogTitle>
+          <DialogDescription>
+            Choose one person for a direct message or several for a group.
+          </DialogDescription>
+        </DialogHeader>
 
-        <label htmlFor="new-conversation-name" className="sr-only">
-          Username
-        </label>
-        <Input
-          id="new-conversation-name"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            // Enter adds a name rather than submitting, so a group is built by
-            // typing rather than by finding a second control.
-            if (event.key === "Enter") {
-              event.preventDefault();
-              addName();
-            }
-          }}
-          placeholder="Search the people you follow"
-          autoComplete="off"
-        />
+        <form onSubmit={submit}>
+          <fieldset disabled={busy}>
+            <legend className="sr-only">Conversation recipients</legend>
 
-        {/* The people you follow, mutuals first, filtered as you type.
+            {usernames.length > 0 ? (
+              <ul
+                aria-label="Selected recipients"
+                className="mb-3 flex flex-wrap gap-2"
+              >
+                {usernames.map((name) => (
+                  <li key={name}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsernames((current) =>
+                          current.filter((item) => item !== name),
+                        );
+                      }}
+                      className={cn(
+                        "flex min-h-11 items-center gap-2 rounded-control px-3 text-label",
+                        "border border-seam bg-key text-key-ink shadow-key",
+                        "hover:bg-key-active",
+                      )}
+                      aria-label={`Remove ${name}`}
+                    >
+                      {name}
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <label
+              htmlFor="new-conversation-name"
+              className="text-label text-ink"
+            >
+              Add people
+            </label>
+            <Input
+              id="new-conversation-name"
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setSearchState("loading");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  addName();
+                }
+              }}
+              placeholder="Search people you follow"
+              autoComplete="off"
+              className="mt-2"
+              aria-describedby="recipient-search-status"
+            />
+
+            {/* The people you follow, mutuals first, filtered as you type.
             Typing a username from memory still works — but requiring it
             meant knowing how somebody spells themselves before you could
             message them. */}
-        {suggestions.length > 0 && (
-          <ul className="mt-2 flex max-h-56 flex-col overflow-y-auto no-scrollbar">
-            {suggestions.map((person) => (
-              <li key={person.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsernames((current) =>
-                      current.includes(person.username)
-                        ? current
-                        : [...current, person.username],
-                    );
-                    setDraft("");
-                  }}
-                  className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left hover:bg-surface"
-                >
-                  <UserAvatar user={person} className="size-8 shrink-0" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-body text-ink">
-                      {person.username}
-                    </span>
-                    {person.display_name ? (
-                      <span className="block truncate meta">
-                        {person.display_name}
+            <div
+              id="recipient-search-status"
+              aria-live="polite"
+              className="min-h-6"
+            >
+              {searchState === "loading" ? (
+                <p className="mt-2 flex items-center gap-2 text-body text-ink-dim">
+                  <Spinner label="Searching people" />
+                  Searching
+                </p>
+              ) : searchState === "error" ? (
+                <p className="mt-2 text-body text-danger" role="alert">
+                  People could not be loaded. You can still enter an exact
+                  username.
+                </p>
+              ) : searchState === "ready" && suggestions.length === 0 ? (
+                <p className="mt-2 text-body text-ink-dim">
+                  No matching connections.
+                </p>
+              ) : null}
+            </div>
+
+            {suggestions.length > 0 ? (
+              <ul
+                aria-label="People you follow"
+                className="mt-2 grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2"
+              >
+                {suggestions.map((person) => (
+                  <li key={person.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsernames((current) =>
+                          current.includes(person.username)
+                            ? current
+                            : [...current, person.username],
+                        );
+                        setDraft("");
+                      }}
+                      className="flex min-h-14 w-full items-center gap-3 rounded-control px-3 py-2 text-left hover:bg-key-active"
+                    >
+                      <UserAvatar user={person} className="size-8 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-body text-ink">
+                          {person.username}
+                        </span>
+                        {person.display_name ? (
+                          <span className="block truncate text-label text-ink-dim">
+                            {person.display_name}
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
-        {usernames.length > 0 && (
-          <>
-            <label htmlFor="new-conversation-title" className="sr-only">
-              Group name
-            </label>
-            <Input
-              id="new-conversation-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Group name (optional)"
-              className="mt-2"
-              autoComplete="off"
-            />
-          </>
-        )}
+            {usernames.length > 1 ? (
+              <div className="mt-3">
+                <label
+                  htmlFor="new-conversation-title"
+                  className="text-label text-ink"
+                >
+                  Group name <span className="text-ink-dim">(optional)</span>
+                </label>
+                <Input
+                  id="new-conversation-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className="mt-2"
+                  autoComplete="off"
+                />
+              </div>
+            ) : null}
 
-        {error !== null && (
-          <p className="mt-2 text-body text-danger" role="alert">
-            {error}
-          </p>
-        )}
+            {error !== null ? (
+              <p className="mt-3 text-body text-danger" role="alert">
+                {error}
+              </p>
+            ) : null}
 
-        <p className="mt-2 meta">
-          {usernames.length + (draft.trim() === "" ? 0 : 1) > 1
-            ? "Three or more people run through the SFU"
-            : "One name starts a direct message"}
-        </p>
+            <p className="mt-3 text-body text-ink-dim">
+              {usernames.length + (draft.trim() === "" ? 0 : 1) > 1
+                ? "Multiple recipients create one group conversation."
+                : "One recipient opens a direct conversation."}
+            </p>
 
-        <div className="mt-3 flex gap-2">
-          <Button type="submit">Start</Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setOpen(false);
-              setUsernames([]);
-              setDraft("");
-              setTitle("");
-              setError(null);
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      </fieldset>
-    </form>
+            <DialogFooter className="mt-4">
+              <DialogClose render={<Button type="button" variant="ghost" />}>
+                Cancel
+              </DialogClose>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={
+                  busy ||
+                  (usernames.length === 0 &&
+                    draft.trim().replace(/^@/, "") === "")
+                }
+              >
+                {busy ? <Spinner label="Starting conversation" /> : null}
+                {busy ? "Starting" : "Start conversation"}
+              </Button>
+            </DialogFooter>
+          </fieldset>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

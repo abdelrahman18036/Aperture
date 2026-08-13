@@ -31,9 +31,9 @@ function Spinner({
       <span
         aria-hidden="true"
         className={cn(
-          "size-4 rounded-full border-2 border-safelight-dim",
+          "size-4 rounded-full border-2 border-commit/35",
           // One transparent edge is what makes the rotation visible at all.
-          "border-t-safelight animate-revolve",
+          "border-t-commit animate-revolve",
         )}
       />
       <span className="sr-only">{label}</span>

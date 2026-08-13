@@ -35,12 +35,38 @@ def _follow(follower: User, followee: User) -> None:
 
 
 class TestFeed:
+    def test_shows_your_own_posts_without_a_self_follow(self, user: User) -> None:
+        post = _post(user, "mine")
+
+        assert list(selectors.feed(viewer=user)) == [post]
+
+    def test_shows_your_own_private_posts(self, user: User) -> None:
+        post = Post.objects.create(
+            author=user,
+            caption="only mine",
+            visibility=Post.Visibility.PRIVATE,
+        )
+
+        assert list(selectors.feed(viewer=user)) == [post]
+
     def test_shows_posts_from_accounts_you_follow(
         self, user: User, author: User
     ) -> None:
         _follow(user, author)
         post = _post(author)
         assert list(selectors.feed(viewer=user)) == [post]
+
+    def test_hides_a_followed_accounts_private_post(
+        self, user: User, author: User
+    ) -> None:
+        _follow(user, author)
+        Post.objects.create(
+            author=author,
+            caption="not shared",
+            visibility=Post.Visibility.PRIVATE,
+        )
+
+        assert list(selectors.feed(viewer=user)) == []
 
     def test_hides_posts_from_accounts_you_do_not_follow(
         self, user: User, author: User
@@ -292,6 +318,33 @@ class TestFeedCache:
         assert first == second
         assert len(first) == 5
 
+    def test_a_hit_keeps_your_own_private_post(self, user: User) -> None:
+        from posts import cache
+
+        post = Post.objects.create(
+            author=user,
+            caption="only mine",
+            visibility=Post.Visibility.PRIVATE,
+        )
+        cache.store(user_id=user.pk, post_ids=[post.pk])
+
+        assert selectors.cached_feed(viewer=user, limit=1) == [post]
+
+    def test_a_hit_drops_a_followed_accounts_private_post(
+        self, user: User, author: User
+    ) -> None:
+        from posts import cache
+
+        _follow(user, author)
+        post = Post.objects.create(
+            author=author,
+            caption="not shared",
+            visibility=Post.Visibility.PRIVATE,
+        )
+        cache.store(user_id=user.pk, post_ids=[post.pk])
+
+        assert selectors.cached_feed(viewer=user, limit=1) == []
+
     def test_a_hit_still_hides_a_deleted_post(self, user: User, author: User) -> None:
         """The reason ids are cached and posts are not.
 
@@ -366,6 +419,24 @@ class TestFeedCache:
         cache.push(user_ids=[user.pk], post_id=80_000_000_000_000_001)
 
         assert cache.get_page(user_id=user.pk, cursor=None, limit=30) is None
+
+    def test_a_new_post_pushes_into_the_authors_warm_feed(
+        self, user: User, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from posts import cache
+
+        pushed_to: list[int] = []
+
+        def record_push(*, user_ids: list[int], post_id: int) -> None:
+            pushed_to.extend(user_ids)
+            assert post_id == post.pk
+
+        monkeypatch.setattr(cache, "push", record_push)
+        post = _post(user, "mine")
+
+        services._fan_out_to_feeds(post)
+
+        assert user.pk in pushed_to
 
     def test_the_cursor_walks_backwards_through_a_hit(
         self, user: User, author: User

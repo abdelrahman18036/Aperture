@@ -49,7 +49,7 @@ export function TabBar<T extends string>({
     <div
       role="tablist"
       aria-label="Settings sections"
-      className={cn("flex gap-6 border-b border-line", className)}
+      className={cn("flex gap-1 rounded-control bg-key p-1", className)}
       onKeyDown={(event) => {
         if (event.key === "ArrowRight") {
           event.preventDefault();
@@ -79,10 +79,10 @@ export function TabBar<T extends string>({
               onSelect(tab.id);
             }}
             className={cn(
-              "-mb-px flex items-center gap-2 border-b py-3 text-label",
+              "flex min-h-11 items-center gap-2 rounded-[10px] border px-3 py-2 text-label",
               "transition-colors duration-[var(--duration-hover)]",
               selected
-                ? "border-safelight text-ink"
+                ? "border-seam bg-panel-raised text-commit shadow-key"
                 : "border-transparent text-ink-dim hover:text-ink",
             )}
           >
@@ -90,7 +90,7 @@ export function TabBar<T extends string>({
             {count > 0 ? (
               // Daylight: a queue waiting on you is something happening now,
               // and the design system puts that on the cool side.
-              <span className="rounded-full px-1.5 meta text-daylight ring-1 ring-daylight-dim tabular-nums">
+              <span className="rounded-full px-1.5 meta text-live ring-1 ring-live-muted tabular-nums">
                 {count > 99 ? "99+" : count}
               </span>
             ) : null}

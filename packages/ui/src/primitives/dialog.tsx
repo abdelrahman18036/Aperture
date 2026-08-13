@@ -33,14 +33,17 @@ function DialogClose(props: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
-function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
+function DialogOverlay({
+  className,
+  ...props
+}: DialogPrimitive.Backdrop.Props) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
         "fixed inset-0 isolate z-50",
-        "bg-[color-mix(in_oklch,var(--color-base)_70%,transparent)]",
-        "supports-backdrop-filter:backdrop-blur-[8px]",
+        "bg-[color-mix(in_oklch,var(--color-chassis)_78%,transparent)]",
+        "supports-backdrop-filter:backdrop-blur-[6px]",
         "duration-[var(--duration-route)]",
         "data-open:animate-in data-open:fade-in-0",
         "data-closed:animate-out data-closed:fade-out-0",
@@ -63,10 +66,10 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)]",
-          "-translate-x-1/2 -translate-y-1/2 gap-4 p-5 sm:max-w-md",
-          "rounded-dialog bg-raised text-body text-ink",
-          "border border-line outline-none",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-1rem)]",
+          "-translate-x-1/2 -translate-y-1/2 gap-5 p-5 sm:max-w-2xl sm:p-7",
+          "rounded-dialog bg-panel-raised text-body text-ink shadow-dialog",
+          "border border-seam outline-none",
           // 150ms opacity, matching the route-change budget. No slide.
           "duration-[var(--duration-route)]",
           "data-open:animate-in data-open:fade-in-0",
@@ -129,7 +132,10 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("font-sans text-title text-ink", className)}
+      className={cn(
+        "font-display text-title tracking-[-0.02em] text-ink",
+        className,
+      )}
       {...props}
     />
   );

@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ImagePlus, Phone, SendHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
 import { Button, Spinner, cn } from "@repo/ui";
@@ -57,6 +57,8 @@ export function Conversation({
     connection,
     typing,
     loading,
+    loadError,
+    retryLoad,
     send,
     retry,
     unsend,
@@ -85,19 +87,19 @@ export function Conversation({
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<Media | null>(null);
   const [attaching, setAttaching] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const attachInput = useRef<HTMLInputElement | null>(null);
   const { uploadMedia } = useMediaUpload();
   const scroller = useRef<HTMLDivElement | null>(null);
   const wasAtBottom = useRef(true);
 
-  // Before the DOM paints, note whether they were reading the bottom.
-  useLayoutEffect(() => {
+  const noteScrollPosition = useCallback(() => {
     const element = scroller.current;
     if (element === null) return;
     const distance =
       element.scrollHeight - element.scrollTop - element.clientHeight;
     wasAtBottom.current = distance < STICK_THRESHOLD_PX;
-  });
+  }, []);
 
   useEffect(() => {
     const element = scroller.current;
@@ -126,8 +128,14 @@ export function Conversation({
     0,
   );
 
+  const messagesBySeq = useMemo(
+    () => new Map(messages.map((message) => [message.seq, message])),
+    [messages],
+  );
+
   const attach = useCallback(
     async (file: File) => {
+      setAttachError(null);
       setAttaching(true);
       const media = await uploadMedia(file);
       setAttaching(false);
@@ -135,6 +143,10 @@ export function Conversation({
       // stays empty, which is the state the person can act on. An error
       // about object storage is not.
       if (media !== null) setAttachment(media);
+      else
+        setAttachError(
+          "That file could not be attached. Check the format and try again.",
+        );
     },
     [uploadMedia],
   );
@@ -160,10 +172,10 @@ export function Conversation({
     <section
       // Fills the viewport minus the mobile bottom bar, so the composer sits
       // on the bottom edge rather than below the fold.
-      className="flex h-[calc(100dvh-5rem)] flex-col sm:h-dvh"
+      className="flex h-[calc(100dvh-9rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[28rem] flex-col bg-panel xl:h-full xl:min-h-0"
       aria-label={`Conversation with ${title}`}
     >
-      <header className="flex items-center justify-between border-b border-line px-4 py-3">
+      <header className="flex min-h-20 items-center justify-between border-b border-seam bg-panel px-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
           {/* There was no way out of a thread except the browser's back
               button, and on mobile the rail is a bottom bar that does not
@@ -171,11 +183,11 @@ export function Conversation({
           <Link
             href="/messages"
             aria-label="Back to messages"
-            className="-ml-1 flex size-8 shrink-0 items-center justify-center rounded-control text-ink-dim hover:text-ink sm:hidden"
+            className="-ml-1 flex size-11 shrink-0 items-center justify-center rounded-full text-ink-dim hover:bg-key hover:text-ink xl:hidden"
           >
             <ChevronLeft className="size-5" aria-hidden="true" />
           </Link>
-          <h1 className="truncate text-title text-ink">{title}</h1>
+          <h1 className="truncate text-lg font-semibold text-ink">{title}</h1>
         </div>
         <div className="flex items-center gap-4">
           <PresencePip
@@ -196,7 +208,34 @@ export function Conversation({
         </div>
       </header>
 
-      <div ref={scroller} className="flex-1 overflow-y-auto py-4">
+      {connection === "open" ? null : (
+        <p
+          role="status"
+          className="border-b border-seam bg-key-active px-4 py-2 text-center text-xs text-commit"
+        >
+          {connection === "connecting"
+            ? "Live updates are reconnecting. Failed sends remain available to retry."
+            : "Live updates are offline. Failed sends remain available to retry."}
+        </p>
+      )}
+
+      {loadError === null ? null : (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 border-b border-danger/30 px-4 py-3"
+        >
+          <p className="text-body text-danger">{loadError}</p>
+          <Button variant="secondary" onClick={retryLoad}>
+            Try again
+          </Button>
+        </div>
+      )}
+
+      <div
+        ref={scroller}
+        onScroll={noteScrollPosition}
+        className="flex-1 overflow-y-auto bg-panel-raised py-5"
+      >
         {hasOlder && messages.length > 0 && (
           <div className="flex justify-center pb-4">
             <Button variant="ghost" onClick={loadOlder}>
@@ -207,10 +246,17 @@ export function Conversation({
 
         {loading ? (
           <p className="px-4 meta">Loading</p>
-        ) : messages.length === 0 && pending.length === 0 ? (
-          <p className="px-4 py-12 text-center font-display text-display-l text-ink-faint">
-            No messages yet
-          </p>
+        ) : loadError === null &&
+          messages.length === 0 &&
+          pending.length === 0 ? (
+          <div className="px-6 py-14 text-center">
+            <p className="text-2xl font-semibold tracking-[-0.025em] text-ink">
+              Start the conversation
+            </p>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-dim">
+              Send a message, share a photograph, or begin a call.
+            </p>
+          </div>
         ) : null}
 
         <ul className="flex flex-col gap-3">
@@ -225,9 +271,11 @@ export function Conversation({
               // What it answers, when we still hold it. `seq` is dense and
               // sorted, so this is a lookup rather than a scan — and
               // undefined is a fine answer: the row falls back to the number.
-              quoted={messages.find(
-                (candidate) => candidate.seq === message.reply_to_seq,
-              )}
+              quoted={
+                message.reply_to_seq === null
+                  ? undefined
+                  : messagesBySeq.get(message.reply_to_seq)
+              }
               // Only the last of your own messages carries it. A "Seen"
               // under every line is noise; under the newest one it is the
               // single fact you wanted.
@@ -258,8 +306,9 @@ export function Conversation({
           it, so the quote does not fight the text being typed. */}
       {replyTo === null ? null : (
         <div className="flex items-center gap-3 border-t border-line px-4 py-2">
-          <span className="min-w-0 flex-1 truncate border-l-2 border-safelight pl-2 meta">
-            replying to {replyTo.sender.username}: {replyTo.body || "attachment"}
+          <span className="min-w-0 flex-1 truncate border-l border-safelight pl-2 meta">
+            replying to {replyTo.sender.username}:{" "}
+            {replyTo.body || "attachment"}
           </span>
           <Button
             variant="ghost"
@@ -280,7 +329,9 @@ export function Conversation({
       {attachment !== null ? (
         <div className="flex items-center gap-3 border-t border-line px-4 pt-3">
           <span className="meta text-safelight">
-            {attachment.kind === "video" ? "clip attached" : "photograph attached"}
+            {attachment.kind === "video"
+              ? "clip attached"
+              : "photograph attached"}
           </span>
           <Button
             variant="ghost"
@@ -295,9 +346,28 @@ export function Conversation({
         </div>
       ) : null}
 
+      {attachError === null ? null : (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 border-t border-danger/30 px-4 py-2 text-body text-danger"
+        >
+          <span>{attachError}</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Dismiss attachment error"
+            onClick={() => {
+              setAttachError(null);
+            }}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+      )}
+
       <form
         onSubmit={submit}
-        className="flex items-end gap-2 border-t border-line px-4 py-3"
+        className="flex items-end gap-2 border-t border-seam bg-panel p-3 sm:px-4 sm:py-4"
       >
         <label htmlFor="message-body" className="sr-only">
           Message
@@ -306,7 +376,7 @@ export function Conversation({
         <Button
           type="button"
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           disabled={attaching}
           aria-label="Attach a photograph or clip"
           onClick={() => {
@@ -343,7 +413,11 @@ export function Conversation({
           onKeyDown={(event) => {
             // Enter sends, shift+enter breaks the line. The other way round
             // is correct for a document and wrong for a conversation.
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
               event.preventDefault();
               send(draft, attachment?.id, replyTo?.seq ?? null);
               setDraft("");
@@ -353,18 +427,18 @@ export function Conversation({
           }}
           placeholder="Write a message"
           className={cn(
-            "min-h-9 flex-1 resize-none bg-transparent py-2 text-body text-ink",
+            "min-h-11 max-h-32 flex-1 resize-y rounded-control border border-seam bg-panel-raised px-4 py-2.5 text-body text-ink",
             // No `outline-none`. It was here, and it silently overrode the
             // global `:focus-visible` ring on the control this whole screen
             // is built around — the same mistake `Input` already had removed
             // once. The bottom border going safelight is *in addition to* the
             // ring, never instead of it.
-            "border-b border-line placeholder:text-ink-faint",
-            "focus-visible:border-safelight",
+            "placeholder:text-ink-faint focus-visible:border-focus",
           )}
         />
         <Button
           type="submit"
+          variant="primary"
           disabled={draft.trim() === "" && attachment === null}
           aria-label="Send"
         >

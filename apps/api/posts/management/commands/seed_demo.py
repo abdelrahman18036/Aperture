@@ -136,15 +136,15 @@ class Command(BaseCommand):
     # -- users ------------------------------------------------------------
 
     def _seed_users(self, count: int, password: str, rng: random.Random) -> list[User]:
-        existing = list(User.objects.filter(username__startswith="seed"))
-        if len(existing) >= count:
-            self.stdout.write(f"reusing {len(existing)} seeded users")
-            return existing[:count]
-
-        created: list[User] = []
+        usernames = [f"seed{index:03d}" for index in range(count)]
+        existing = {
+            user.username: user for user in User.objects.filter(username__in=usernames)
+        }
+        users: list[User] = []
+        password_updates: list[User] = []
         for index in range(count):
             username = f"seed{index:03d}"
-            user = User.objects.filter(username=username).first()
+            user = existing.get(username)
             if user is None:
                 user = User.objects.create_user(
                     email=f"{username}@aperture.local",
@@ -156,10 +156,20 @@ class Command(BaseCommand):
                     # something to exercise.
                     is_private=index % 9 == 0,
                 )
-            created.append(user)
+            else:
+                # The command promises a shared development password in its
+                # output. Keep that promise on repeat runs as well as the
+                # first one; otherwise a previously seeded database becomes
+                # impossible to enter with the documented credentials.
+                user.set_password(password)
+                password_updates.append(user)
+            users.append(user)
 
-        self.stdout.write(f"users: {len(created)}")
-        return created
+        if password_updates:
+            User.objects.bulk_update(password_updates, ["password"])
+
+        self.stdout.write(f"users: {len(users)}")
+        return users
 
     # -- follows ----------------------------------------------------------
 

@@ -31,7 +31,7 @@ function AmbientGlow({
       aria-hidden="true"
       data-slot="ambient-glow"
       className={cn(
-        "pointer-events-none absolute -inset-[60px] -z-10 opacity-[0.08] blur-[40px]",
+        "pointer-events-none absolute inset-0 -z-10 opacity-[0.035] blur-[40px]",
         className,
       )}
       style={{

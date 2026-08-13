@@ -8,16 +8,6 @@ import { Button, Input } from "@repo/ui";
 
 import { api } from "@/lib/api";
 
-/**
- * Sign in.
- *
- * Minimal on purpose: Phase 4 owns the real auth screens. This exists because
- * the composer needs a session, and Phase 1 shipped Django's session auth and
- * the same-origin rewrite without any way for a browser to obtain a cookie
- * through it.
- *
- * Email is the credential; the username is for profile URLs.
- */
 export function SignInForm() {
   const router = useRouter();
   const next = useSearchParams().get("next") ?? "/";
@@ -31,24 +21,15 @@ export function SignInForm() {
       event.preventDefault();
       setBusy(true);
       setError(null);
-
-      // Seeds the CSRF cookie if this is a cold page. The endpoint sets it on
-      // every response, so one round trip covers both.
       await api.GET("/api/users/me");
-
       const response = await api.POST("/api/users/session", {
         body: { email, password },
       });
-
       setBusy(false);
       if (response.data === undefined) {
         setError("Email or password is incorrect.");
         return;
       }
-      // Back where they were headed before the wall, or the feed. Only a
-      // path is accepted — `next` comes from the query string, and honouring
-      // a full URL there would make this an open redirect: a crafted link
-      // that signs somebody in and bounces them somewhere else entirely.
       router.push(next.startsWith("/") && !next.startsWith("//") ? next : "/");
     },
     [email, password, router, next],
@@ -56,66 +37,72 @@ export function SignInForm() {
 
   return (
     <form
-      onSubmit={(event) => {
-        void submit(event);
-      }}
-      className="flex w-full max-w-sm flex-col gap-8"
+      onSubmit={(event) => void submit(event)}
+      aria-busy={busy}
+      className="mx-auto flex w-full max-w-md flex-col gap-7"
     >
-      <div className="flex flex-col gap-2">
-        <h1 className="font-display text-display-l text-ink">Aperture</h1>
-        <p className="meta">sign in to upload</p>
+      <div className="flex flex-col gap-3">
+        <h1 className="font-display text-display-l text-ink">Welcome back</h1>
+        <p className="text-body text-ink-dim">
+          Sign in to publish, respond, and continue your conversations.
+        </p>
       </div>
 
-      <label className="flex flex-col gap-2">
-        <span className="meta">email</span>
+      <label className="flex flex-col gap-2" htmlFor="signin-email">
+        <span className="text-label text-ink">Email</span>
         <Input
+          id="signin-email"
           type="email"
           autoComplete="email"
           required
           value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-          }}
+          aria-invalid={error !== null}
+          onChange={(event) => setEmail(event.target.value)}
         />
       </label>
 
-      <label className="flex flex-col gap-2">
-        <span className="meta">password</span>
+      <label className="flex flex-col gap-2" htmlFor="signin-password">
+        <span className="text-label text-ink">Password</span>
         <Input
+          id="signin-password"
           type="password"
           autoComplete="current-password"
           required
           value={password}
-          onChange={(event) => {
-            setPassword(event.target.value);
-          }}
+          aria-invalid={error !== null}
+          onChange={(event) => setPassword(event.target.value)}
         />
       </label>
 
-      {error !== null ? <p className="text-body text-danger">{error}</p> : null}
-
-      <div>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
-        </Button>
-      </div>
-      <p className="text-body text-ink-dim">
-        <Link
-          href="/reset"
-          className="text-safelight underline underline-offset-4"
+      {error !== null ? (
+        <p
+          className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-body text-danger"
+          role="alert"
         >
-          Forgot your password?
+          {error}
+        </p>
+      ) : null}
+
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={busy}
+        className="w-full"
+      >
+        {busy ? "Signing in..." : "Sign in"}
+      </Button>
+
+      <div className="flex flex-col gap-2 border-t border-seam pt-5 text-body text-ink-dim sm:flex-row sm:items-center sm:justify-between">
+        <Link href="/reset" className="min-h-11 content-center hover:text-ink">
+          Forgot password?
         </Link>
-      </p>
-      <p className="text-body text-ink-dim">
-        No account yet?{" "}
         <Link
           href="/signup"
-          className="text-safelight underline underline-offset-4"
+          className="min-h-11 content-center text-ink hover:text-ink-dim"
         >
-          Create one
+          Create account
         </Link>
-      </p>
+      </div>
     </form>
   );
 }

@@ -27,7 +27,11 @@ function Skeleton({
     <div
       data-slot="skeleton"
       aria-hidden="true"
-      className={cn("rounded-image bg-surface", !still && "animate-sheen", className)}
+      className={cn(
+        "rounded-image bg-panel-raised",
+        !still && "animate-sheen",
+        className,
+      )}
       {...props}
     />
   );

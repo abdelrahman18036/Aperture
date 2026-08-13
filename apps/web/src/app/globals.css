@@ -24,6 +24,10 @@
  * scroller keeps its keyboard behaviour.
  * --------------------------------------------------------------------- */
 html {
+  /* Ambient media glows intentionally escape their cards. Clip only where
+     they reach the viewport so they cannot create a horizontally pannable
+     document on narrow screens. */
+  overflow-x: clip;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }

@@ -67,6 +67,8 @@ interface DevelopImageProps {
   priority?: boolean;
   sizes?: string;
   className?: string;
+  /** Preserve the whole frame on a media stage, or crop inside grid cells. */
+  fit?: "cover" | "contain";
 }
 
 function DevelopImage({
@@ -80,6 +82,7 @@ function DevelopImage({
   priority = false,
   sizes = "(max-width: 640px) 100vw, 640px",
   className,
+  fit = "cover",
 }: DevelopImageProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -166,7 +169,7 @@ function DevelopImage({
     >
       <AmbientGlow color={dominantColor} />
 
-      <div className="relative size-full overflow-hidden rounded-image">
+      <div className="relative size-full overflow-hidden rounded-[20px] bg-surface">
         {blurhash ? (
           <canvas
             ref={canvasRef}
@@ -190,7 +193,10 @@ function DevelopImage({
           decoding="async"
           fetchPriority={priority ? "high" : "auto"}
           onLoad={onLoad}
-          className="absolute inset-0 size-full object-cover"
+          className={cn(
+            "absolute inset-0 size-full",
+            fit === "contain" ? "object-contain" : "object-cover",
+          )}
           style={{
             opacity: developed ? 1 : 0,
             // Reduced motion gets a plain cross-fade: no blur, no desaturation.

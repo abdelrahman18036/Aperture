@@ -2,6 +2,23 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# pnpm 10.17 uses the two legacy lists below. Newer pnpm releases use this
+# explicit map instead. Keep both because Codex's runtime verifies dependency
+# state with a newer policy engine before it runs the workspace's pinned pnpm.
+allowBuilds:
+  esbuild: true
+  sharp: false
+  unrs-resolver: false
+
+# The bundled Windows runtime misclassifies this valid mixed-version workspace
+# as stale because pnpm 10.17 records the legacy build-policy keys while its
+# newer verifier reads `allowBuilds`. Disable that pre-run heuristic; installs
+# remain explicit and frozen-lockfile checked in both local setup and CI.
+verifyDepsBeforeRun: false
+
+onlyBuiltDependencies:
+  - esbuild
+
 # create-next-app writes these into a nested pnpm-workspace.yaml inside
 # apps/web, which would make that directory its own workspace root and break
 # the monorepo. Hoisted here instead.

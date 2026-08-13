@@ -94,7 +94,9 @@ export function MessageRow({
 
       <div className={cn("min-w-0 max-w-[75%]", mine && "text-right")}>
         {showSender && !mine && (
-          <p className="meta mb-0.5">{message.sender.username}</p>
+          <p className="mb-1 text-xs font-medium text-ink-dim">
+            {message.sender.username}
+          </p>
         )}
         {/* What this answers. A quote rather than a jump link: the message
             being replied to is usually two rows up, and the point is to say
@@ -165,7 +167,9 @@ export function MessageRow({
           <span className="mb-1 block w-64 max-w-full overflow-hidden rounded-image">
             {message.media.kind === "video" ? (
               <DevelopVideo
-                src={message.media.video_url ?? message.media.original_url ?? ""}
+                src={
+                  message.media.video_url ?? message.media.original_url ?? ""
+                }
                 width={message.media.width ?? 16}
                 height={message.media.height ?? 9}
                 blurhash={message.media.blurhash}
@@ -198,16 +202,16 @@ export function MessageRow({
         {message.body ? (
           <p
             className={cn(
-              "inline-block rounded-image px-3 py-2 text-body text-ink",
-              // A hairline surface, not a bubble: enough to group the words,
-              // not enough to become a container.
-              mine ? "bg-surface" : "bg-transparent border-b border-line",
+              "inline-block rounded-[16px] px-4 py-2.5 text-sm leading-6",
+              mine
+                ? "rounded-br-md bg-commit text-commit-ink shadow-key"
+                : "rounded-bl-md border border-seam bg-panel text-ink",
             )}
           >
             {message.body}
           </p>
         ) : null}
-        <p className="meta mt-0.5">
+        <p className="mt-1 text-[10px] text-ink-faint">
           <time dateTime={message.created_at}>
             {formatTime(message.created_at)}
           </time>
@@ -218,7 +222,7 @@ export function MessageRow({
           {/* Daylight, not safelight. Someone else reading your message is
               something happening now rather than something you did, and the
               design system puts that on the cool side. */}
-          {seen ? <span className="ml-2 text-daylight">seen</span> : null}
+          {seen ? <span className="ml-2 text-commit">seen</span> : null}
           <button
             type="button"
             onClick={() => {
@@ -226,7 +230,7 @@ export function MessageRow({
             }}
             aria-expanded={showInfo}
             aria-label={`Details for message ${String(message.seq)}`}
-            className="ml-2 align-middle text-ink-dim transition-colors duration-[var(--duration-hover)] hover:text-ink"
+            className="-my-4 ml-0 inline-flex size-11 items-center justify-center align-middle text-ink-dim transition-colors duration-[var(--duration-hover)] hover:text-ink"
           >
             <Info className="inline size-3" aria-hidden="true" />
           </button>
@@ -358,7 +362,7 @@ export function PendingRow({
       <div className="min-w-0 max-w-[75%] text-right">
         <p
           className={cn(
-            "inline-block rounded-image bg-surface px-3 py-2 text-body",
+            "inline-block rounded-[16px] rounded-br-md bg-key-active px-4 py-2.5 text-sm",
             message.failed ? "text-ink-dim" : "text-ink-dim opacity-70",
           )}
         >

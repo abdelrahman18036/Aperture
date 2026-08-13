@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@repo/ui";
+import { Button, InstrumentPanel } from "@repo/ui";
 
 import { CallPanel } from "./call-panel";
 import { useCallControls } from "./provider";
@@ -23,9 +23,10 @@ export function CallDock() {
     if (session.error === null) return null;
 
     return (
-      <div
+      <InstrumentPanel
         role="alert"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-raised px-4 py-3 sm:left-auto sm:right-4 sm:bottom-4 sm:w-right-rail sm:rounded-dialog sm:border"
+        tone="raised"
+        className="fixed inset-x-2 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-40 px-4 py-3 sm:left-auto sm:right-4 sm:bottom-4 sm:w-right-rail lg:bottom-4"
       >
         <p className="text-body text-danger">{session.error}</p>
         <div className="mt-2 flex justify-end">
@@ -33,22 +34,25 @@ export function CallDock() {
             Dismiss
           </Button>
         </div>
-      </div>
+      </InstrumentPanel>
     );
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 sm:left-auto sm:right-4 sm:bottom-4 sm:w-[28rem]">
+    <div className="fixed inset-x-2 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-40 sm:left-auto sm:right-4 sm:bottom-4 sm:w-[28rem] lg:bottom-4">
       {session.incoming !== null && (
-        <div className="flex items-center justify-between border-t border-line bg-raised px-4 py-3 sm:rounded-dialog sm:border">
+        <InstrumentPanel
+          tone="raised"
+          className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
           <p className="text-body text-ink">
             {/* Daylight: something happening now, per the palette rule. */}
-            <span className="text-daylight">
+            <span className="text-accent">
               {session.incoming.caller.username}
             </span>{" "}
             is calling
           </p>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button onClick={session.answer} disabled={session.starting}>
               Answer
             </Button>
@@ -56,11 +60,11 @@ export function CallDock() {
               Decline
             </Button>
           </div>
-        </div>
+        </InstrumentPanel>
       )}
 
       {session.call !== null && (
-        <div className="border-t border-line bg-raised sm:rounded-dialog sm:border">
+        <InstrumentPanel tone="raised" className="overflow-hidden">
           <CallPanel
             call={session.call}
             peer={peer}
@@ -68,7 +72,7 @@ export function CallDock() {
             peerName={session.label ?? "Call"}
             onHangUp={session.hangUp}
           />
-        </div>
+        </InstrumentPanel>
       )}
     </div>
   );

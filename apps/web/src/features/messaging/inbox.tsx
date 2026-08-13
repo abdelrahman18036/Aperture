@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import type { AnyServerEvent } from "@repo/realtime-events";
 
 import type { Schemas } from "@repo/api-client";
-import { cn } from "@repo/ui";
+import { Button, Skeleton, cn } from "@repo/ui";
 
 import { UserAvatar } from "@/features/profile/user-avatar";
 import { api } from "@/lib/api";
+import { relativeTime } from "@/lib/time";
 
 import {
   useRealtimeEvents,
@@ -40,6 +42,8 @@ function title(conversation: Conversation): string {
 export function Inbox({ activeId }: { activeId?: string }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [filter, setFilter] = useState("");
   /**
    * Who is connected right now.
    *
@@ -52,12 +56,22 @@ export function Inbox({ activeId }: { activeId?: string }) {
   const [online, setOnline] = useState<ReadonlySet<string>>(new Set());
 
   const load = useCallback(() => {
-    void api.GET("/api/messaging/conversations").then((response) => {
-      setLoaded(true);
-      if (response.data === undefined) return;
-      setConversations(response.data);
-      setOnline(new Set(response.data.flatMap((row) => row.online)));
-    });
+    void api
+      .GET("/api/messaging/conversations")
+      .then((response) => {
+        setLoaded(true);
+        if (response.data === undefined) {
+          setLoadError(true);
+          return;
+        }
+        setLoadError(false);
+        setConversations(response.data);
+        setOnline(new Set(response.data.flatMap((row) => row.online)));
+      })
+      .catch(() => {
+        setLoaded(true);
+        setLoadError(true);
+      });
   }, []);
 
   // Any durable event means the inbox has changed — a new message, a read
@@ -90,71 +104,160 @@ export function Inbox({ activeId }: { activeId?: string }) {
 
   useEffect(load, [load]);
 
-  if (loaded && conversations.length === 0) {
+  if (!loaded) {
     return (
-      <p className="px-4 py-12 text-center font-display text-display-l text-ink-faint">
-        No conversations yet
-      </p>
+      <div role="status" aria-label="Loading conversations">
+        <ul aria-hidden="true" className="divide-y divide-seam">
+          {Array.from({ length: 6 }, (_, index) => (
+            <li key={index} className="flex items-center gap-3 px-4 py-4">
+              <Skeleton className="size-9 rounded-full" />
+              <span className="flex flex-1 flex-col gap-2">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-2.5 w-48 max-w-full" />
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     );
   }
 
-  return (
-    <ul aria-label="Conversations">
-      {conversations.map((conversation) => {
-        const active = conversation.id === activeId;
-        const unread = conversation.unread_count;
-        const other = conversation.members[0];
+  if (loadError) {
+    return (
+      <div
+        role="alert"
+        className="flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center"
+      >
+        <p className="text-lg font-semibold text-ink">
+          Messages are unavailable
+        </p>
+        <p className="text-sm text-ink-dim">
+          Conversations could not be loaded. Your messages are still safe.
+        </p>
+        <Button variant="secondary" onClick={load}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
-        return (
-          <li key={conversation.id}>
-            <Link
-              href={`/messages/${conversation.id}`}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 border-b border-line px-4 py-3",
-                "transition-colors duration-[var(--duration-hover)]",
-                active ? "bg-surface" : "hover:bg-surface",
-              )}
-            >
-              <span className="relative shrink-0">
-                <UserAvatar
-                  user={other ?? { username: title(conversation) }}
-                  className="size-9"
-                />
-                {/* Daylight, and a dot rather than a word: somebody being
+  if (loaded && conversations.length === 0) {
+    return (
+      <div className="flex min-h-64 flex-col items-center justify-center gap-2 px-6 text-center">
+        <p className="text-2xl font-semibold text-ink">Start a conversation</p>
+        <p className="max-w-xs text-sm leading-6 text-ink-dim">
+          Share a post or open a direct line with someone you follow.
+        </p>
+      </div>
+    );
+  }
+
+  const normalizedFilter = filter.trim().toLowerCase();
+  const visibleConversations = conversations.filter((conversation) => {
+    if (normalizedFilter === "") return true;
+    return (
+      title(conversation).toLowerCase().includes(normalizedFilter) ||
+      (conversation.last_message?.body ?? "")
+        .toLowerCase()
+        .includes(normalizedFilter)
+    );
+  });
+
+  return (
+    <div>
+      <div className="border-b border-seam p-3">
+        <label className="relative block">
+          <span className="sr-only">Filter conversations</span>
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Search messages"
+            className="min-h-11 w-full rounded-control border border-seam bg-panel-raised pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-focus"
+          />
+        </label>
+      </div>
+
+      {visibleConversations.length === 0 ? (
+        <p className="px-5 py-10 text-center text-sm text-ink-dim">
+          No conversations match “{filter.trim()}”.
+        </p>
+      ) : null}
+
+      <ul aria-label="Conversations">
+        {visibleConversations.map((conversation) => {
+          const active = conversation.id === activeId;
+          const unread = conversation.unread_count;
+          const other = conversation.members[0];
+
+          return (
+            <li key={conversation.id}>
+              <Link
+                href={`/messages/${conversation.id}`}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-[76px] items-center gap-3 border-b border-seam px-4 py-3",
+                  "transition-colors duration-[var(--duration-hover)]",
+                  active ? "bg-key-active" : "hover:bg-key",
+                )}
+              >
+                <span className="relative shrink-0">
+                  <UserAvatar
+                    user={other ?? { username: title(conversation) }}
+                    className="size-11"
+                  />
+                  {/* Daylight, and a dot rather than a word: somebody being
                     here is happening now, and the design system puts that on
                     the cool side. A group is "somebody is here" rather than
                     a headcount — the header inside the thread is where that
                     question gets a real answer. */}
-                {conversation.members.some((member) => online.has(member.id)) ? (
-                  <span
-                    aria-label="Online"
-                    className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-daylight ring-2 ring-base"
-                  />
-                ) : null}
-              </span>
+                  {conversation.members.some((member) =>
+                    online.has(member.id),
+                  ) ? (
+                    <span
+                      aria-label="Online"
+                      className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-success ring-2 ring-panel"
+                    />
+                  ) : null}
+                </span>
 
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-label text-ink">
-                  {title(conversation)}
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                      {title(conversation)}
+                    </span>
+                    {conversation.last_message ? (
+                      <time
+                        dateTime={conversation.last_message.created_at}
+                        className="shrink-0 text-[11px] text-ink-faint"
+                      >
+                        {relativeTime(conversation.last_message.created_at)}
+                      </time>
+                    ) : null}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink-dim">
+                      {conversation.last_message?.body ?? "No messages yet"}
+                    </span>
+                    {unread > 0 && (
+                      <span
+                        className="shrink-0 rounded-full bg-commit px-2 text-xs font-semibold leading-5 text-commit-ink"
+                        aria-label={`${String(unread)} unread`}
+                      >
+                        {unread > 99 ? "99+" : unread}
+                      </span>
+                    )}
+                  </span>
                 </span>
-                <span className="block truncate text-body text-ink-dim">
-                  {conversation.last_message?.body ?? "No messages yet"}
-                </span>
-              </span>
-
-              {unread > 0 && (
-                <span
-                  className="shrink-0 rounded-full px-1.5 py-0.5 meta text-daylight ring-1 ring-daylight-dim"
-                  aria-label={`${String(unread)} unread`}
-                >
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

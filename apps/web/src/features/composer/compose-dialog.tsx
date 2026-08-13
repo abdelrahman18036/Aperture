@@ -51,13 +51,16 @@ function ComposeDialog({
       <DialogContent // Wider than the feed column. A crop stage and a preview are the two
         // things in this product that genuinely want room, and neither is a
         // photograph whose size is the point.
-        className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto no-scrollbar">
+        className="max-h-[calc(100dvh-1rem)] w-full overflow-y-auto overscroll-contain p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] no-scrollbar sm:max-h-[94dvh] sm:max-w-6xl sm:p-6"
+      >
         <DialogHeader>
-          <DialogTitle>{toStory ? "New story" : "New post"}</DialogTitle>
+          <DialogTitle>
+            {toStory ? "Create a story" : "Create a post"}
+          </DialogTitle>
           <DialogDescription>
             {toStory
-              ? "gone in 24 hours · bytes go straight to storage"
-              : "bytes go straight to storage · never through our server"}
+              ? "Choose a photo, clip, or text frame. Stories expire after 24 hours."
+              : "Frame the media, add context, then choose who can see it."}
           </DialogDescription>
         </DialogHeader>
 

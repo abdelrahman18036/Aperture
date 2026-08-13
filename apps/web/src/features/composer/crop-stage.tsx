@@ -68,7 +68,8 @@ export function computeCrop(
 
   // Keep the rectangle inside the image, whatever the pointer did.
   const x = clamp(centre.x, width / 2, naturalWidth - width / 2) - width / 2;
-  const y = clamp(centre.y, height / 2, naturalHeight - height / 2) - height / 2;
+  const y =
+    clamp(centre.y, height / 2, naturalHeight - height / 2) - height / 2;
 
   return { x, y, width, height };
 }
@@ -211,7 +212,7 @@ export function CropStage({ src, ratio, onChange, className }: CropStageProps) {
       <div
         ref={frameRef}
         className={cn(
-          "relative w-full touch-none overflow-hidden rounded-image bg-surface",
+          "relative w-full touch-none overflow-hidden rounded-[8px] border border-seam bg-black shadow-[0_8px_22px_rgba(0,0,0,0.18)]",
           "cursor-grab active:cursor-grabbing",
         )}
         style={{ aspectRatio: String(ratio) }}
@@ -244,7 +245,10 @@ export function CropStage({ src, ratio, onChange, className }: CropStageProps) {
         />
         {/* Rule-of-thirds guides. Hairlines, no fill — the same restraint the
             feed uses between posts. */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+        >
           <div className="absolute inset-y-0 left-1/3 w-px bg-ink/10" />
           <div className="absolute inset-y-0 left-2/3 w-px bg-ink/10" />
           <div className="absolute inset-x-0 top-1/3 h-px bg-ink/10" />
@@ -252,7 +256,7 @@ export function CropStage({ src, ratio, onChange, className }: CropStageProps) {
         </div>
       </div>
 
-      <label className="flex items-center gap-3">
+      <label className="flex min-h-11 items-center gap-3 rounded-[14px] border border-seam bg-panel px-3">
         <span className="meta">zoom</span>
         <input
           type="range"
@@ -263,7 +267,7 @@ export function CropStage({ src, ratio, onChange, className }: CropStageProps) {
           onChange={(event) => {
             setZoom(Number(event.target.value));
           }}
-          className="h-1 w-full appearance-none rounded-full bg-line accent-safelight"
+          className="h-2 w-full appearance-none rounded-full bg-seam accent-accent"
           aria-label="Zoom"
         />
         <span className="meta tabular-nums">{zoom.toFixed(2)}x</span>

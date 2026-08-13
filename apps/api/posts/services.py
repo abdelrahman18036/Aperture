@@ -156,7 +156,8 @@ def _fan_out_to_feeds(post: Post) -> None:
     not needed yet; when it is, this is the function it changes.
 
     `push` only touches feeds that already exist, so this costs nothing for
-    followers who have not read recently.
+    followers who have not read recently. The author is included because the
+    feed is also their chronological record of what they just published.
     """
     from users.models import Follow
 
@@ -165,7 +166,7 @@ def _fan_out_to_feeds(post: Post) -> None:
             followee_id=post.author_id, status=Follow.Status.ACCEPTED
         ).values_list("follower_id", flat=True)
     )
-    cache.push(user_ids=follower_ids, post_id=post.pk)
+    cache.push(user_ids=[post.author_id, *follower_ids], post_id=post.pk)
 
 
 @transaction.atomic

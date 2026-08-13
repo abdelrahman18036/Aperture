@@ -8,20 +8,13 @@ import { Button, Input } from "@repo/ui";
 
 import { api } from "@/lib/api";
 
-/**
- * Set the new password, with `uid` and `token` taken from the URL.
- *
- * It does not sign you in on success, and that is not an omission. Completing
- * the reset invalidates every session the account had open — which is usually
- * the point of resetting — so the honest next step is the sign-in screen with
- * the new password, not a session quietly minted for whoever opened the link.
- *
- * The server's rejection is shown verbatim because it is the useful half:
- * "expired or already used" and "this password is too short" call for
- * completely different actions, and flattening them into "that didn't work"
- * leaves someone re-typing a password that was never the problem.
- */
-export function ResetConfirmForm({ uid, token }: { uid: string; token: string }) {
+export function ResetConfirmForm({
+  uid,
+  token,
+}: {
+  uid: string;
+  token: string;
+}) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,65 +25,78 @@ export function ResetConfirmForm({ uid, token }: { uid: string; token: string })
       event.preventDefault();
       setBusy(true);
       setError(null);
-
       await api.GET("/api/users/me");
       const response = await api.POST("/api/users/password/reset/confirm", {
         body: { uid, token, password },
       });
-
       setBusy(false);
       if (response.response.status === 204) {
         router.push("/login");
         return;
       }
-      const detail = (response.error as { detail?: string } | undefined)?.detail;
-      setError(detail ?? "That didn't work. Ask for a new link.");
+      const detail = (response.error as { detail?: string } | undefined)
+        ?.detail;
+      setError(detail ?? "That did not work. Ask for a new link.");
     },
     [uid, token, password, router],
   );
 
   return (
     <form
-      onSubmit={(event) => {
-        void submit(event);
-      }}
-      className="flex w-full max-w-sm flex-col gap-8"
+      onSubmit={(event) => void submit(event)}
+      aria-busy={busy}
+      className="mx-auto flex w-full max-w-md flex-col gap-7"
     >
-      <div className="flex flex-col gap-2">
-        <h1 className="font-display text-display-l text-ink">New password</h1>
-        <p className="meta">this signs your other sessions out</p>
+      <div className="flex flex-col gap-3">
+        <h1 className="font-display text-display-l text-ink">
+          Set a new password
+        </h1>
+        <p className="text-body text-ink-dim">
+          Saving this password signs every other active session out.
+        </p>
       </div>
 
-      <label className="flex flex-col gap-2">
-        <span className="meta">password</span>
+      <label className="flex flex-col gap-2" htmlFor="new-password">
+        <span className="text-label text-ink">New password</span>
         <Input
+          id="new-password"
           type="password"
           autoComplete="new-password"
+          minLength={8}
           required
           value={password}
-          onChange={(event) => {
-            setPassword(event.target.value);
-          }}
+          aria-describedby="password-requirements"
+          aria-invalid={error !== null}
+          onChange={(event) => setPassword(event.target.value)}
         />
       </label>
+      <p id="password-requirements" className="text-sm text-ink-faint">
+        Minimum eight characters
+      </p>
 
       {error !== null ? (
-        <p className="text-body text-danger" role="alert">
+        <p
+          className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-body text-danger"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
 
-      <div>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Set password"}
-        </Button>
-      </div>
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={busy}
+        className="w-full"
+      >
+        {busy ? "Saving..." : "Set password"}
+      </Button>
 
-      <p className="text-body text-ink-dim">
+      <p className="border-t border-seam pt-5 text-body text-ink-dim">
         Link expired?{" "}
         <Link
           href="/reset"
-          className="text-safelight underline underline-offset-4"
+          className="text-ink underline decoration-seam-strong underline-offset-4"
         >
           Ask for another
         </Link>

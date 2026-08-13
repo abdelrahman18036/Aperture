@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Schemas } from "@repo/api-client";
-import { Skeleton, cn } from "@repo/ui";
+import { Button, Skeleton, SurfaceState, cn } from "@repo/ui";
 
 import type { AnyServerEvent } from "@repo/realtime-events";
 
@@ -42,12 +42,18 @@ export function StoryTray() {
   const { start: compose, posted } = useCompose();
   const [entries, setEntries] = useState<TrayEntry[] | null>(null);
   const [openAt, setOpenAt] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
   const started = useRef(false);
   const { viewerId } = useRealtimeApi();
 
   const load = useCallback(() => {
     void api.GET("/api/stories/tray").then((response) => {
-      setEntries(response.data ?? []);
+      if (response.data === undefined) {
+        setFailed(true);
+        return;
+      }
+      setFailed(false);
+      setEntries(response.data);
     });
   }, []);
 
@@ -73,8 +79,23 @@ export function StoryTray() {
   }, [load, posted]);
 
   if (entries === null) {
+    if (failed) {
+      return (
+        <SurfaceState
+          variant="error"
+          title="Stories did not load"
+          action={
+            <Button variant="secondary" onClick={load}>
+              Try again
+            </Button>
+          }
+          compact
+          className="my-2"
+        />
+      );
+    }
     return (
-      <div className="flex gap-4 border-b border-line px-4 py-4">
+      <div className="flex gap-4 rounded-instrument border border-seam bg-panel px-4 py-5">
         {Array.from({ length: 5 }, (_, index) => (
           <div key={index} className="flex flex-col items-center gap-2">
             <Skeleton className="size-14 rounded-full" />
@@ -87,8 +108,12 @@ export function StoryTray() {
 
   return (
     <>
-      <div className="border-b border-line">
-        <ul className="flex gap-4 overflow-x-auto px-4 py-4 no-scrollbar">
+      <section
+        aria-label="Stories"
+        className="relative overflow-hidden rounded-instrument border border-seam bg-panel px-3 py-4 shadow-instrument sm:px-5"
+      >
+        <h2 className="sr-only">Stories</h2>
+        <ul className="flex snap-x gap-4 overflow-x-auto pb-1 no-scrollbar">
           {/* Yours first and always present, because "add one" is the only
               way into the composer's story mode and a tray that hides it
               until you have already posted is a door with no handle. */}
@@ -98,13 +123,15 @@ export function StoryTray() {
               onClick={() => {
                 compose("story");
               }}
-              className="flex w-16 flex-col items-center gap-2"
+              className="flex min-h-20 w-16 snap-start flex-col items-center gap-2 rounded-2xl py-1 transition-colors hover:bg-raised"
               aria-label="Add to your story"
             >
-              <span className="relative grid size-14 place-items-center rounded-full ring-1 ring-line">
-                <Plus className="size-5 text-ink-dim" aria-hidden="true" />
+              <span className="relative grid size-14 place-items-center rounded-full border-2 border-dashed border-safelight/45 bg-raised text-safelight">
+                <Plus className="size-5" aria-hidden="true" />
               </span>
-              <span className="w-full truncate text-center meta">yours</span>
+              <span className="w-full truncate text-center text-xs font-medium text-ink-dim">
+                Your story
+              </span>
             </button>
           </li>
 
@@ -115,7 +142,7 @@ export function StoryTray() {
                 onClick={() => {
                   setOpenAt(index);
                 }}
-                className="flex w-16 flex-col items-center gap-2"
+                className="flex min-h-20 w-16 snap-start flex-col items-center gap-2 rounded-2xl py-1 transition-colors hover:bg-raised"
                 aria-label={
                   `${entry.author.username}'s story, ` +
                   `${entry.all_seen ? "watched" : "not watched"}`
@@ -133,7 +160,7 @@ export function StoryTray() {
                 </span>
                 <span
                   className={cn(
-                    "w-full truncate text-center meta",
+                    "w-full truncate text-center text-xs font-medium",
                     entry.all_seen ? "text-ink-faint" : "text-ink-dim",
                   )}
                 >
@@ -143,7 +170,7 @@ export function StoryTray() {
             </li>
           ))}
         </ul>
-      </div>
+      </section>
 
       {openAt !== null ? (
         <StoryViewer

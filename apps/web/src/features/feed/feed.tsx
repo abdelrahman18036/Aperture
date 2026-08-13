@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Skeleton, Spinner } from "@repo/ui";
+import { Button, Skeleton, Spinner, SurfaceState } from "@repo/ui";
 
 import type { AnyServerEvent } from "@repo/realtime-events";
 
@@ -69,7 +69,8 @@ export function Feed() {
   }, [loadMore]);
 
   return (
-    <div className="flex flex-col">
+    <div className="mx-auto flex w-full max-w-[56rem] min-w-0 flex-col gap-5 px-3 py-4 sm:gap-6 sm:px-5 sm:py-6">
+      <h1 className="sr-only">Your feed</h1>
       <StoryTray />
 
       {/* Announced, not inserted.
@@ -85,7 +86,7 @@ export function Feed() {
             window.scrollTo({ top: 0 });
             refresh();
           }}
-          className="border-b border-line py-3 meta text-safelight hover:text-ink"
+          className="self-center rounded-full border border-seam bg-panel px-5 py-2.5 text-sm font-medium text-safelight shadow-sm hover:bg-raised"
         >
           {fresh === 1 ? "1 new post" : `${String(fresh)} new posts`}
         </button>
@@ -100,7 +101,17 @@ export function Feed() {
       <div ref={sentinel} aria-hidden="true" className="h-px" />
 
       {error !== null ? (
-        <p className="py-16 text-body text-danger">{error}</p>
+        <SurfaceState
+          variant="error"
+          title="The feed did not load"
+          description={error}
+          action={
+            <Button variant="secondary" onClick={refresh}>
+              Try again
+            </Button>
+          }
+          className="my-6"
+        />
       ) : null}
 
       {/* Skeletons for the first paint, a spinner for every page after.
@@ -116,16 +127,16 @@ export function Feed() {
       ) : null}
 
       {initialised && posts.length === 0 && error === null ? (
-        <div className="flex flex-col items-center gap-3 py-24 text-center">
-          <p className="font-display text-display-l text-ink">Nothing yet</p>
-          <p className="meta max-w-xs">
-            follow someone, or make the first print yourself
-          </p>
-        </div>
+        <SurfaceState
+          variant="empty"
+          title="Your feed is ready for a first post"
+          description="Follow a creator or publish work to begin building your feed."
+          className="my-8"
+        />
       ) : null}
 
       {initialised && posts.length > 0 && !hasMore ? (
-        <p className="meta py-16 text-center">that is everything</p>
+        <p className="meta py-16 text-center">You are up to date</p>
       ) : null}
     </div>
   );
@@ -133,18 +144,27 @@ export function Feed() {
 
 function FeedSkeleton({ count = 2 }: { count?: number }) {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-6">
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="flex flex-col gap-3 border-b border-line py-6">
-          <div className="flex items-center gap-3">
-            <Skeleton className="size-10 rounded-full" />
+        <div
+          key={index}
+          className="rounded-instrument border border-seam bg-panel p-3 sm:p-5"
+        >
+          <div className="mb-4 flex items-center gap-3">
+            <Skeleton className="size-11 rounded-full" />
             <div className="flex flex-col gap-2">
               <Skeleton className="h-3 w-28" />
               <Skeleton className="h-2.5 w-20" />
             </div>
           </div>
-          <Skeleton className="aspect-[4/5] w-full" />
-          <Skeleton className="h-3 w-40" />
+          <Skeleton className="aspect-[4/3] min-h-80 w-full rounded-image" />
+          <div className="pt-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-9 w-9 rounded-full" />
+              <Skeleton className="h-9 w-9 rounded-full" />
+            </div>
+            <Skeleton className="mt-4 h-3 w-40" />
+          </div>
         </div>
       ))}
     </div>

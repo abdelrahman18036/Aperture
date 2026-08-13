@@ -1,6 +1,15 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Bell,
+  Compass,
+  House,
+  MessageCircle,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CallProvider } from "@/features/calls/provider";
@@ -22,16 +31,7 @@ import type { NavCounts } from "./nav-rail";
 /** How long to let a burst of socket traffic settle before asking again. */
 const REFRESH_DEBOUNCE_MS = 250;
 
-/**
- * The three-column shell.
- *
- * Left: the nav rail, fixed. Middle: the feed column at exactly 640px,
- * centred. Right: a 320px rail, dropped below 1280px.
- *
- * The middle column is `w-feed` rather than a max-width because "fixed at
- * 640px, never fluid" is the instruction — a photograph that changes size as
- * you resize the window makes the whole page feel unstable.
- */
+/** Providers and persistent chrome for every authenticated route. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     // One socket for the whole shell, and one place a call can appear. Both
@@ -71,7 +71,10 @@ function Shell({ children }: { children: React.ReactNode }) {
       // by a password reset, or signed out in another tab. Middleware cannot
       // see that, because it only knows whether a cookie is *present*; this
       // is the half that catches it.
-      if (response.response.status === 403 || response.response.status === 401) {
+      if (
+        response.response.status === 403 ||
+        response.response.status === 401
+      ) {
         router.replace(`/login?next=${encodeURIComponent(pathname)}`);
         return;
       }
@@ -204,26 +207,204 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
   useRealtimeEvents(onEvent);
 
+  const wideContent =
+    pathname === "/explore" ||
+    pathname === "/search" ||
+    pathname.startsWith("/p/");
+
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh bg-chassis text-ink">
       <NavRail username={username} counts={counts} />
       <NavBar username={username} counts={counts} />
 
-      <div className="sm:pl-nav-rail xl:pl-nav-rail-open">
-        <div className="app-columns mx-auto flex justify-center gap-10 px-4 pb-20 sm:pb-0">
-          <main className="w-full min-w-0 sm:w-feed sm:shrink-0">{children}</main>
-
-          <aside
-            aria-label="Suggestions"
-            className="hidden w-right-rail shrink-0 py-10 xl:block"
+      <div className="lg:ml-64">
+        <DesktopTopBar
+          username={username}
+          counts={counts}
+          pathname={pathname}
+        />
+        <div className="mx-auto flex w-full max-w-[1480px] min-w-0 gap-7 px-3 py-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:py-6 lg:px-7 lg:pb-8">
+          <main
+            className={
+              pathname.startsWith("/messages")
+                ? "min-w-0 flex-1"
+                : wideContent
+                  ? "mx-auto min-w-0 w-full max-w-[1160px]"
+                  : "mx-auto min-w-0 w-full max-w-[800px]"
+            }
           >
-            <p className="meta">suggestions</p>
-            <p className="mt-3 text-body text-ink-dim">
-              Follow more accounts and this fills in.
-            </p>
-          </aside>
+            {children}
+          </main>
+          <RightRail pathname={pathname} counts={counts} />
         </div>
       </div>
     </div>
+  );
+}
+
+function DesktopTopBar({
+  username,
+  counts,
+  pathname,
+}: {
+  username: string | null;
+  counts: NavCounts;
+  pathname: string;
+}) {
+  const links = [
+    { href: "/", label: "Home", icon: House, count: 0 },
+    { href: "/explore", label: "Explore", icon: Compass, count: 0 },
+    {
+      href: "/notifications",
+      label: "Activity",
+      icon: Bell,
+      count: counts.activity,
+    },
+    {
+      href: "/messages",
+      label: "Messages",
+      icon: MessageCircle,
+      count: counts.unread,
+    },
+  ];
+  return (
+    <header className="sticky top-0 z-30 hidden h-[72px] items-center border-b border-seam bg-panel/95 px-7 backdrop-blur-lg lg:flex">
+      <Link
+        href="/search"
+        className="flex h-11 w-64 items-center gap-3 rounded-control bg-key px-4 text-sm text-ink-dim transition-colors hover:bg-key-active hover:text-ink"
+      >
+        <Search className="size-4" aria-hidden="true" />
+        Search
+      </Link>
+      <nav
+        aria-label="Quick navigation"
+        className="mx-auto flex h-full items-center gap-5"
+      >
+        {links.map(({ href, label, icon: Icon, count }) => {
+          const active =
+            href === "/"
+              ? pathname === "/" || pathname.startsWith("/p/")
+              : pathname === href || pathname.startsWith(`${href}/`);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-label={count ? `${label}, ${String(count)}` : label}
+              aria-current={active ? "page" : undefined}
+              className={
+                active
+                  ? "relative grid h-full w-12 place-items-center text-commit after:absolute after:bottom-0 after:h-0.5 after:w-9 after:rounded-full after:bg-commit"
+                  : "relative grid h-full w-12 place-items-center text-ink-dim transition-colors hover:text-ink"
+              }
+            >
+              <Icon
+                className="size-5"
+                strokeWidth={active ? 2.3 : 1.8}
+                aria-hidden="true"
+              />
+              {count > 0 ? (
+                <span className="absolute right-1.5 top-3.5 size-2 rounded-full bg-commit ring-2 ring-panel" />
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
+      <Link
+        href={username ? `/u/${username}` : "/settings"}
+        className="flex items-center gap-3 rounded-control px-2 py-2 transition-colors hover:bg-key"
+      >
+        <span className="grid size-9 place-items-center rounded-full bg-key text-ink-dim">
+          <UserRound className="size-4" aria-hidden="true" />
+        </span>
+        <span className="hidden max-w-24 truncate text-sm font-medium text-ink xl:block">
+          {username ?? "Profile"}
+        </span>
+      </Link>
+    </header>
+  );
+}
+
+function RightRail({
+  pathname,
+  counts,
+}: {
+  pathname: string;
+  counts: NavCounts;
+}) {
+  if (
+    pathname.startsWith("/messages") ||
+    pathname === "/explore" ||
+    pathname === "/search" ||
+    pathname.startsWith("/p/")
+  )
+    return null;
+
+  const signals = [
+    {
+      href: "/messages",
+      label: "Unread messages",
+      count: counts.unread,
+      icon: MessageCircle,
+    },
+    {
+      href: "/notifications",
+      label: "New activity",
+      count: counts.activity,
+      icon: Bell,
+    },
+    {
+      href: "/requests",
+      label: "Follow requests",
+      count: counts.requests,
+      icon: UserRound,
+    },
+  ];
+
+  return (
+    <aside
+      aria-label="At a glance"
+      className="sticky top-24 hidden h-fit w-80 shrink-0 space-y-4 2xl:block"
+    >
+      <section className="rounded-instrument border border-seam bg-panel p-5 shadow-instrument">
+        <h2 className="text-base font-semibold text-ink">At a glance</h2>
+        <div className="mt-4 grid gap-2">
+          {signals.map((signal) => {
+            const Icon = signal.icon;
+            return (
+              <Link
+                key={signal.href}
+                href={signal.href}
+                aria-current={
+                  pathname === signal.href ||
+                  pathname.startsWith(`${signal.href}/`)
+                    ? "page"
+                    : undefined
+                }
+                className="flex min-h-12 items-center gap-3 rounded-control px-3 text-sm text-ink-dim transition-colors hover:bg-key hover:text-ink aria-[current=page]:bg-key-active aria-[current=page]:text-commit"
+              >
+                <Icon className="size-4" aria-hidden="true" />
+                <span className="flex-1">{signal.label}</span>
+                <span className="min-w-6 rounded-full bg-key-active px-1.5 text-center text-xs font-semibold leading-6 text-commit">
+                  {signal.count}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+      <section className="rounded-instrument border border-seam bg-panel p-5 shadow-instrument">
+        <h2 className="text-base font-semibold text-ink">Discover more</h2>
+        <p className="mt-2 text-sm leading-6 text-ink-dim">
+          Find photographers, visual stories, and new work selected by the
+          community.
+        </p>
+        <Link
+          href="/explore"
+          className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-commit transition-colors hover:text-commit-hover"
+        >
+          Open Explore
+        </Link>
+      </section>
+    </aside>
   );
 }

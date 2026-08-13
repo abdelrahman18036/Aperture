@@ -80,6 +80,8 @@ export interface DevelopVideoProps {
    */
   compact?: boolean;
   className?: string;
+  /** Preserve the whole frame on a media stage, or crop inside compact uses. */
+  fit?: "cover" | "contain";
 }
 
 function formatTime(seconds: number): string {
@@ -98,6 +100,7 @@ export function DevelopVideo({
   label,
   compact = false,
   className,
+  fit = "cover",
 }: DevelopVideoProps): React.JSX.Element {
   const frame = useRef<HTMLDivElement | null>(null);
   const video = useRef<HTMLVideoElement | null>(null);
@@ -186,8 +189,7 @@ export function DevelopVideo({
       // video itself, through its own prefixed method. Trying it here means
       // the button works there too rather than being hidden.
       const node = video.current as
-        | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
-        | null;
+        (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
       node?.webkitEnterFullscreen?.();
     });
   }, []);
@@ -278,7 +280,7 @@ export function DevelopVideo({
       }}
       onKeyDown={onKeyDown}
       className={cn(
-        "group relative overflow-hidden rounded-image bg-surface",
+        "group relative overflow-hidden rounded-[20px] bg-surface",
         className,
       )}
       style={{ aspectRatio: `${String(width)} / ${String(height)}` }}
@@ -316,7 +318,10 @@ export function DevelopVideo({
           const ranges = event.currentTarget.buffered;
           if (ranges.length > 0) setBuffered(ranges.end(ranges.length - 1));
         }}
-        className="size-full cursor-pointer object-cover"
+        className={cn(
+          "size-full cursor-pointer",
+          fit === "contain" ? "object-contain" : "object-cover",
+        )}
       />
 
       {/* The poster, until the first play. Removed after that rather than
@@ -352,7 +357,10 @@ export function DevelopVideo({
           className="absolute inset-0 grid place-items-center"
         >
           <span className="grid size-14 place-items-center rounded-full bg-base/70 ring-1 ring-line backdrop-blur-sm transition-transform duration-[var(--duration-hover)] group-hover:scale-105">
-            <Play className="size-6 translate-x-0.5 text-ink" aria-hidden="true" />
+            <Play
+              className="size-6 translate-x-0.5 text-ink"
+              aria-hidden="true"
+            />
           </span>
         </button>
       )}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { ResetConfirmForm } from "@/features/auth/reset-confirm-form";
+import { AuthFrame } from "@/features/auth/auth-frame";
 
 export const metadata: Metadata = {
   title: "Set a new password — Aperture",
@@ -18,8 +19,10 @@ export default async function ResetConfirmPage({
 }) {
   const { uid, token } = await params;
   return (
-    <main className="flex min-h-dvh items-center justify-center px-6 py-16">
-      <ResetConfirmForm uid={uid} token={token} />
+    <main className="flex min-h-dvh items-center justify-center bg-chassis px-3 py-3 sm:px-6 sm:py-8">
+      <AuthFrame>
+        <ResetConfirmForm uid={uid} token={token} />
+      </AuthFrame>
     </main>
   );
 }

@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
   Input,
+  SurfaceState,
   cn,
 } from "@repo/ui";
 
@@ -56,21 +57,35 @@ export function ShareSheet({
   //: instead. Read inside the click handler rather than in an effect —
   //: `window` does not exist during a server render.
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Narrowed server-side as the field changes, the same way the new-message
   // picker does it. Nothing here caps or orders — the endpoint owns both.
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
     const timer = setTimeout(() => {
       void api
         .GET("/api/users/connections", {
           params: { query: query.trim() ? { q: query.trim() } : {} },
         })
         .then((response) => {
-          setPeople(response.data?.users ?? []);
+          if (cancelled) return;
+          setLoading(false);
+          if (response.data === undefined) {
+            setError(
+              "People could not be loaded. Check your connection and try again.",
+            );
+            return;
+          }
+          setPeople(response.data.users);
         });
     }, 200);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [open, query]);
 
   const send = useCallback(
@@ -85,6 +100,7 @@ export function ShareSheet({
       const conversationId = started.data?.id;
       if (conversationId === undefined) {
         setBusy(null);
+        setError("That conversation could not be opened. Try again.");
         return;
       }
 
@@ -102,7 +118,10 @@ export function ShareSheet({
         },
       );
       setBusy(null);
-      if (sent.data === undefined) return;
+      if (sent.data === undefined) {
+        setError("The post could not be sent. Try again.");
+        return;
+      }
 
       setSentTo((current) => [...current, username]);
       // One more than the count we were handed, and nothing cleverer. The
@@ -128,21 +147,36 @@ export function ShareSheet({
   }, [postId]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setLoading(true);
+          setError(null);
+        }
+        if (!next) {
+          setQuery("");
+          setError(null);
+          setCopied(false);
+          setFallbackUrl(null);
+        }
+      }}
+    >
       <DialogTrigger
         render={
           <button
             type="button"
             aria-label="Send this post to someone"
-            className="flex items-center gap-2 text-ink-dim transition-colors duration-[var(--duration-hover)] hover:text-ink"
+            className="ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 text-ink-dim transition-colors duration-[var(--duration-hover)] hover:bg-raised hover:text-ink"
           />
         }
       >
-        <Send className="size-6" aria-hidden="true" />
-        <span className="meta tabular-nums">{count}</span>
+        <Send className="size-5" aria-hidden="true" />
+        <span className="text-xs tabular-nums">{count}</span>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Send this to</DialogTitle>
           <DialogDescription>
@@ -154,43 +188,73 @@ export function ShareSheet({
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
+            setLoading(true);
+            setError(null);
           }}
           placeholder="Search people"
           aria-label="Search people"
         />
 
-        <ul className="flex max-h-72 flex-col overflow-y-auto">
-          {people.map((person) => {
-            const done = sentTo.includes(person.username);
-            return (
-              <li key={person.id}>
-                <button
-                  type="button"
-                  disabled={done || busy !== null}
-                  onClick={() => {
-                    void send(person.username);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-control px-2 py-2 text-left",
-                    "transition-colors duration-[var(--duration-hover)]",
-                    done ? "text-ink-dim" : "hover:bg-raise",
-                  )}
-                >
-                  <UserAvatar user={person} />
-                  <span className="min-w-0 flex-1 truncate text-body text-ink">
-                    {person.username}
-                  </span>
-                  <span className="meta">
-                    {done ? "sent" : busy === person.username ? "sending" : ""}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="max-h-72 overflow-y-auto rounded-[18px] border border-seam bg-surface p-1">
+          <ul className="flex flex-col divide-y divide-seam">
+            {people.map((person) => {
+              const done = sentTo.includes(person.username);
+              return (
+                <li key={person.id}>
+                  <button
+                    type="button"
+                    disabled={done || busy !== null}
+                    onClick={() => {
+                      void send(person.username);
+                    }}
+                    className={cn(
+                      "flex min-h-12 w-full items-center gap-3 rounded-[8px] px-2 py-2 text-left",
+                      "transition-colors duration-[var(--duration-hover)]",
+                      done ? "text-ink-dim" : "hover:bg-raise",
+                    )}
+                  >
+                    <UserAvatar user={person} />
+                    <span className="min-w-0 flex-1 truncate text-body text-ink">
+                      {person.username}
+                    </span>
+                    <span className="meta">
+                      {done
+                        ? "sent"
+                        : busy === person.username
+                          ? "sending"
+                          : ""}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
-        {people.length === 0 ? (
-          <p className="meta py-4 text-center">nobody to send this to yet</p>
+        {loading ? (
+          <SurfaceState variant="loading" title="Loading people" compact />
+        ) : null}
+
+        {error !== null ? (
+          <SurfaceState
+            variant="error"
+            title="Could not send"
+            description={error}
+            compact
+          />
+        ) : null}
+
+        {!loading && error === null && people.length === 0 ? (
+          <SurfaceState
+            variant="empty"
+            title={query.trim() ? "No matching people" : "No connections yet"}
+            description={
+              query.trim()
+                ? "Try a different name."
+                : "Follow a creator to send posts directly."
+            }
+            compact
+          />
         ) : null}
 
         {/* When the clipboard refuses — an embedded webview, a non-secure
@@ -217,7 +281,9 @@ export function ShareSheet({
           >
             {copied ? "Link copied" : "Copy link"}
           </Button>
-          <DialogClose render={<Button variant="secondary" />}>Done</DialogClose>
+          <DialogClose render={<Button variant="secondary" />}>
+            Done
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -39,7 +39,7 @@ export function LikeButton({
       }}
       aria-pressed={liked}
       aria-label={liked ? "Unlike" : "Like"}
-      className="relative flex items-center gap-2 text-ink-dim hover:text-ink"
+      className="relative flex min-h-11 items-center gap-1.5 rounded-full px-3 text-ink-dim transition-colors hover:bg-raised hover:text-ink"
     >
       <span className="relative grid size-6 place-items-center">
         <AnimatePresence>
@@ -62,7 +62,7 @@ export function LikeButton({
         >
           <Heart
             className={cn(
-              "size-6 transition-colors duration-[var(--duration-hover)]",
+              "size-5 transition-colors duration-[var(--duration-hover)]",
               liked && "fill-safelight text-safelight",
             )}
             aria-hidden="true"
@@ -70,7 +70,7 @@ export function LikeButton({
         </motion.span>
       </span>
 
-      <span className="meta tabular-nums">{count}</span>
+      <span className="text-xs tabular-nums">{count}</span>
     </button>
   );
 }

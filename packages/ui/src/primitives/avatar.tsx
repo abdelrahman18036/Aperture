@@ -8,7 +8,7 @@ import { cn } from "../lib/cn";
 /**
  * Avatar.
  *
- * **1px line ring always. Daylight ring when the user is online. Never a
+ * **1px neutral ring always. Violet ring when the user is online. Never a
  * gradient ring.**
  *
  * The ring is the clearest expression of "warm is you, cool is live": the

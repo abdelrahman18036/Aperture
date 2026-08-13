@@ -13,7 +13,7 @@ plumbing. See `01-ARCHITECTURE.md` §7.
 
 from __future__ import annotations
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 
 from posts import cache
 from posts.models import Comment, Like, Post, PostMedia
@@ -24,6 +24,19 @@ from users.selectors import accepted_followee_ids, exclude_blocked
 #: ceiling on anything.
 DEFAULT_PAGE_SIZE = 30
 MAX_PAGE_SIZE = 60
+
+
+def _feed_visibility(viewer: User) -> Q:
+    """Visibility rules shared by the database feed and Redis cache hits.
+
+    A person's own work belongs in their feed regardless of its audience.
+    Posts from followed accounts remain limited to public and follower-only
+    visibility, even if a stale or poisoned cache happens to contain another
+    id.
+    """
+    return Q(author=viewer) | Q(
+        visibility__in=[Post.Visibility.PUBLIC, Post.Visibility.FOLLOWERS]
+    )
 
 
 def live() -> QuerySet[Post]:
@@ -111,9 +124,10 @@ def feed(
     Redis over it; every path through that layer ends up here on a miss, and
     the visibility rules are applied to the rows either way.
     """
-    posts = live().filter(
-        author_id__in=accepted_followee_ids(viewer),
-        visibility__in=[Post.Visibility.PUBLIC, Post.Visibility.FOLLOWERS],
+    posts = (
+        live()
+        .filter(Q(author=viewer) | Q(author_id__in=accepted_followee_ids(viewer)))
+        .filter(_feed_visibility(viewer))
     )
 
     # Rule 8. One helper, one place to be wrong.
@@ -150,13 +164,7 @@ def cached_feed(
     if ids is not None and len(ids) >= limit:
         rows = _with_media(
             exclude_blocked(
-                live().filter(
-                    id__in=ids,
-                    visibility__in=[
-                        Post.Visibility.PUBLIC,
-                        Post.Visibility.FOLLOWERS,
-                    ],
-                ),
+                live().filter(id__in=ids).filter(_feed_visibility(viewer)),
                 viewer,
                 author_field="author_id",
             )

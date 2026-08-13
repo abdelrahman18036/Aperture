@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { Button, Skeleton } from "@repo/ui";
 
 import { api } from "@/lib/api";
 
@@ -23,31 +25,66 @@ export function ConversationScreen({
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [summary, setSummary] = useState<ConversationSummary | null>(null);
   const [missing, setMissing] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    void api.GET("/api/users/me").then((response) => {
-      setViewerId(response.data?.id ?? null);
-    });
-  }, []);
+  const load = useCallback(() => {
+    void Promise.all([
+      api.GET("/api/users/me"),
+      api.GET("/api/messaging/conversations"),
+    ])
+      .then(([viewerResponse, conversationsResponse]) => {
+        if (
+          viewerResponse.data === undefined ||
+          conversationsResponse.data === undefined
+        ) {
+          setFailed(true);
+          return;
+        }
 
-  useEffect(() => {
-    void api.GET("/api/messaging/conversations").then((response) => {
-      if (response.data === undefined) return;
-      const found = response.data.find((item) => item.id === conversationId);
-      if (found === undefined) setMissing(true);
-      else setSummary(found);
-    });
+        setFailed(false);
+        setMissing(false);
+        setViewerId(viewerResponse.data.id);
+        const found = conversationsResponse.data.find(
+          (item) => item.id === conversationId,
+        );
+        if (found === undefined) setMissing(true);
+        else setSummary(found);
+      })
+      .catch(() => {
+        setFailed(true);
+      });
   }, [conversationId]);
+
+  useEffect(load, [load]);
+
+  if (failed) {
+    return (
+      <div
+        role="alert"
+        className="grid min-h-[calc(100dvh-9rem)] place-items-center rounded-instrument bg-panel px-6 text-center"
+      >
+        <div className="max-w-sm">
+          <h1 className="text-2xl font-semibold text-ink">
+            Conversation unavailable
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-ink-dim">
+            The thread could not be synchronized. Nothing has been deleted.
+          </p>
+          <Button className="mt-4" variant="secondary" onClick={load}>
+            Reconnect
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (missing) {
     return (
       <div className="py-12 text-center">
-        <p className="font-display text-display-l text-ink-faint">
-          No such conversation
-        </p>
+        <p className="text-2xl font-semibold text-ink">No such conversation</p>
         <Link
           href="/messages"
-          className="mt-4 inline-block text-label text-safelight"
+          className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-commit hover:text-commit-hover"
         >
           Back to messages
         </Link>
@@ -56,7 +93,23 @@ export function ConversationScreen({
   }
 
   if (viewerId === null || summary === null) {
-    return <p className="px-4 py-6 meta">Loading</p>;
+    return (
+      <div
+        role="status"
+        aria-label="Loading conversation"
+        className="flex min-h-[calc(100dvh-5rem)] flex-col sm:min-h-dvh"
+      >
+        <div className="flex items-center gap-3 border-b border-line px-4 py-4">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="ml-auto h-3 w-20" />
+        </div>
+        <div className="flex flex-1 flex-col justify-end gap-4 p-4">
+          <Skeleton className="h-10 w-2/3" />
+          <Skeleton className="ml-auto h-10 w-1/2" />
+          <Skeleton className="h-10 w-3/5" />
+        </div>
+      </div>
+    );
   }
 
   const title =
@@ -70,6 +123,7 @@ export function ConversationScreen({
 
   return (
     <Conversation
+      key={conversationId}
       conversationId={conversationId}
       viewerId={viewerId}
       title={title}

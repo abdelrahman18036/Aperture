@@ -31,6 +31,7 @@ export function Requests() {
   const [hasMore, setHasMore] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   /** "Decline all" has been pressed once and is waiting to be meant. */
   const [confirming, setConfirming] = useState(false);
 
@@ -41,6 +42,7 @@ export function Requests() {
     if (inFlight.current || !hasMore) return;
     inFlight.current = true;
     setBusy(true);
+    setError(null);
 
     const from = cursor;
     void api
@@ -52,7 +54,7 @@ export function Requests() {
         setBusy(false);
         setLoaded(true);
         if (response.data === undefined) {
-          setHasMore(false);
+          setError("Requests could not be loaded. No decisions were changed.");
           return;
         }
         const page = response.data;
@@ -86,28 +88,30 @@ export function Requests() {
    * are deleted — so it asks first. Approving is not: the worst case is
    * unfollowing somebody afterwards.
    */
-  const respondToAll = useCallback(
-    (accept: boolean) => {
-      if (accept) setConfirming(false);
-      setBusy(true);
-      void api
-        .POST("/api/users/requests/respond-all", { body: { accept } })
-        .then((response) => {
-          setBusy(false);
-          setConfirming(false);
-          if (response.data === undefined) return;
-          // Emptied locally rather than refetched. Every row is answered, so
-          // the next page is the empty state either way.
-          setRequests([]);
-          setCursor(null);
-          setHasMore(false);
-          countsChanged();
-        });
-    },
-    [],
-  );
+  const respondToAll = useCallback((accept: boolean) => {
+    if (accept) setConfirming(false);
+    setBusy(true);
+    setError(null);
+    void api
+      .POST("/api/users/requests/respond-all", { body: { accept } })
+      .then((response) => {
+        setBusy(false);
+        setConfirming(false);
+        if (response.data === undefined) {
+          setError("The queue was not changed. Please try again.");
+          return;
+        }
+        // Emptied locally rather than refetched. Every row is answered, so
+        // the next page is the empty state either way.
+        setRequests([]);
+        setCursor(null);
+        setHasMore(false);
+        countsChanged();
+      });
+  }, []);
 
   const respond = useCallback(async (username: string, accept: boolean) => {
+    setError(null);
     const response = await api.POST("/api/users/{username}/respond", {
       params: { path: { username } },
       body: { accept },
@@ -120,17 +124,28 @@ export function Requests() {
         current.filter((item) => item.follower.username !== username),
       );
       countsChanged();
+    } else {
+      setError(
+        `The request from ${username} was not changed. Please try again.`,
+      );
     }
   }, []);
 
   return (
-    <div data-wide className="py-6">
-      <header className="flex flex-col gap-2 px-4 pb-4">
-        <h1 className="font-display text-display-l text-ink">Requests</h1>
-        <p className="meta">people asking to follow you</p>
+    <div
+      data-wide
+      className="overflow-hidden rounded-instrument border border-seam bg-panel shadow-instrument"
+    >
+      <header className="flex flex-col gap-1 border-b border-seam px-5 py-6">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+          Follow requests
+        </h1>
+        <p className="text-sm text-ink-dim">
+          Review who can enter your private audience.
+        </p>
 
         {requests.length > 0 ? (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               disabled={busy}
               onClick={() => {
@@ -179,6 +194,18 @@ export function Requests() {
         ) : null}
       </header>
 
+      {error === null ? null : (
+        <div
+          role="alert"
+          className="mx-4 my-4 flex flex-wrap items-center justify-between gap-3 border border-danger/30 bg-danger/5 p-3"
+        >
+          <p className="text-body text-danger">{error}</p>
+          <Button variant="secondary" disabled={busy} onClick={loadMore}>
+            Try again
+          </Button>
+        </div>
+      )}
+
       {!loaded ? (
         <ul className="flex flex-col">
           {Array.from({ length: 6 }, (_, index) => (
@@ -197,11 +224,11 @@ export function Requests() {
         {requests.map((request) => (
           <li
             key={request.follower.id}
-            className="flex items-center gap-4 border-b border-line px-4 py-3"
+            className="flex flex-wrap items-center gap-4 border-b border-seam px-5 py-4 sm:flex-nowrap"
           >
             <UserAvatar user={request.follower} />
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-body text-ink">
+              <span className="truncate text-sm font-semibold text-ink">
                 {request.follower.username}
               </span>
               {request.follower.display_name ? (
@@ -250,10 +277,12 @@ export function Requests() {
         </div>
       ) : null}
 
-      {loaded && requests.length === 0 ? (
+      {loaded && error === null && requests.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-24 text-center">
           <p className="font-display text-display-l text-ink">Nobody waiting</p>
-          <p className="meta">requests appear here when your account is private</p>
+          <p className="text-body text-ink-dim">
+            Requests appear here when your account is private.
+          </p>
         </div>
       ) : null}
     </div>

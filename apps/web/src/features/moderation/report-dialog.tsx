@@ -11,6 +11,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  InstrumentPanel,
+  SurfaceState,
   cn,
 } from "@repo/ui";
 
@@ -53,11 +55,14 @@ export function ReportDialog({
   const [reason, setReason] = useState<Reason | null>(null);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
     if (reason === null) return;
     setBusy(true);
-    await api.POST("/api/moderation/reports", {
+    setError(null);
+    const response = await api.POST("/api/moderation/reports", {
       // `note` is optional to a person and required by the generated type —
       // the serializer gives it a default, which drf-spectacular renders as
       // present-with-a-value rather than omittable. Sending "" is honest and
@@ -70,6 +75,14 @@ export function ReportDialog({
       },
     });
     setBusy(false);
+    if (response.data === undefined) {
+      setError(
+        response.response.status === 429
+          ? "You have sent several reports recently. Try again later."
+          : "The report could not be sent. Check your connection and try again.",
+      );
+      return;
+    }
     // Shown whatever the server said. A failed report should not become an
     // argument with someone who is already having a bad time, and the one
     // failure mode that matters — being rate limited — is not their problem
@@ -78,9 +91,19 @@ export function ReportDialog({
   };
 
   return (
-    <Dialog>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) {
+          setReason(null);
+          setSent(false);
+          setError(null);
+        }
+      }}
+    >
       {trigger}
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-2xl">
         {sent ? (
           <>
             <DialogHeader>
@@ -101,12 +124,13 @@ export function ReportDialog({
           <>
             <DialogHeader>
               <DialogTitle>Report this</DialogTitle>
-              <DialogDescription>
-                What is wrong with it?
-              </DialogDescription>
+              <DialogDescription>What is wrong with it?</DialogDescription>
             </DialogHeader>
 
-            <div className="flex flex-col">
+            <InstrumentPanel
+              tone="key"
+              className="grid gap-1 p-2 sm:grid-cols-2"
+            >
               {REASONS.map((option) => (
                 <button
                   key={option.value}
@@ -115,17 +139,26 @@ export function ReportDialog({
                     setReason(option.value);
                   }}
                   className={cn(
-                    "flex h-10 items-center rounded-control px-3 text-left text-label",
+                    "flex min-h-11 items-center rounded-[8px] border border-transparent px-3 text-left text-label",
                     "transition-colors duration-[var(--duration-hover)]",
                     reason === option.value
-                      ? "text-safelight"
-                      : "text-ink-dim hover:text-ink",
+                      ? "border-accent text-accent"
+                      : "text-ink-dim hover:border-seam-strong hover:text-ink",
                   )}
                 >
                   {option.label}
                 </button>
               ))}
-            </div>
+            </InstrumentPanel>
+
+            {error !== null ? (
+              <SurfaceState
+                variant="error"
+                title="Report not sent"
+                description={error}
+                compact
+              />
+            ) : null}
 
             <DialogFooter>
               <DialogClose render={<Button variant="secondary" />}>
