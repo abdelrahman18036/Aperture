@@ -12,44 +12,44 @@ export default function MessagesPage() {
   return (
     <div
       data-wide
-      className="min-h-[calc(100dvh-7rem)] overflow-hidden rounded-dialog border border-seam bg-panel shadow-instrument"
+      className="min-h-[calc(100dvh-7rem)] overflow-hidden rounded-dialog border border-seam bg-panel shadow-instrument xl:grid xl:h-[calc(100dvh-7rem)] xl:grid-cols-[23.5rem_minmax(0,1fr)]"
     >
-      <header className="flex min-h-20 items-center justify-between gap-4 border-b border-seam px-5 sm:px-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-[-0.025em] text-ink">
-            Messages
-          </h1>
-          <p className="mt-1 hidden text-sm text-ink-dim sm:block">
-            Conversations, shared work, and calls in one place.
-          </p>
-        </div>
-        <NewConversation />
-      </header>
-
-      <div className="grid min-h-[38rem] xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <section
-          aria-label="Message threads"
-          className="border-seam xl:border-r"
-        >
+      <aside
+        aria-label="Conversation list"
+        className="min-h-0 border-seam xl:border-r"
+      >
+        <header className="flex min-h-[5.5rem] items-center justify-between gap-4 border-b border-seam px-5">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-[-0.025em] text-ink">
+              Messages
+            </h1>
+            <p className="mt-1 text-sm text-ink-dim">Your conversations</p>
+          </div>
+          <NewConversation />
+        </header>
+        <section aria-label="Message threads">
           <Inbox />
         </section>
-        <section className="hidden place-items-center bg-panel-raised px-8 text-center xl:grid">
-          <div className="max-w-sm">
+      </aside>
+
+      <section className="hidden place-items-center bg-chassis px-10 text-center xl:grid">
+        <div className="max-w-md">
+          <span className="mx-auto grid size-16 place-items-center rounded-full bg-key-active text-commit">
             <MessageCircle
-              className="mx-auto size-8 text-commit"
+              className="size-7"
               strokeWidth={1.7}
               aria-hidden="true"
             />
-            <h2 className="mt-5 text-2xl font-semibold tracking-[-0.025em] text-ink">
-              Choose a conversation
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-ink-dim">
-              Messages open beside the inbox, so it is easy to move between
-              people without losing your place.
-            </p>
-          </div>
-        </section>
-      </div>
+          </span>
+          <h2 className="mt-6 text-3xl font-semibold tracking-[-0.03em] text-ink">
+            Open a conversation
+          </h2>
+          <p className="mt-3 text-base leading-7 text-ink-dim">
+            Select someone from the inbox to read the thread, share work, or
+            start a call.
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

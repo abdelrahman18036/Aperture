@@ -165,7 +165,7 @@ export function Inbox({ activeId }: { activeId?: string }) {
 
   return (
     <div>
-      <div className="border-b border-seam p-3">
+      <div className="border-b border-seam p-4">
         <label className="relative block">
           <span className="sr-only">Filter conversations</span>
           <Search
@@ -177,7 +177,7 @@ export function Inbox({ activeId }: { activeId?: string }) {
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Search messages"
-            className="min-h-11 w-full rounded-control border border-seam bg-panel-raised pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-focus"
+            className="min-h-12 w-full rounded-control border border-seam bg-panel-raised pl-10 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-focus"
           />
         </label>
       </div>
@@ -200,15 +200,15 @@ export function Inbox({ activeId }: { activeId?: string }) {
                 href={`/messages/${conversation.id}`}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-h-[76px] items-center gap-3 border-b border-seam px-4 py-3",
+                  "flex min-h-[82px] items-center gap-3.5 border-b border-seam px-4 py-3",
                   "transition-colors duration-[var(--duration-hover)]",
-                  active ? "bg-key-active" : "hover:bg-key",
+                  active ? "bg-key-active" : "hover:bg-panel-raised",
                 )}
               >
                 <span className="relative shrink-0">
                   <UserAvatar
                     user={other ?? { username: title(conversation) }}
-                    className="size-11"
+                    className="size-12"
                   />
                   {/* Daylight, and a dot rather than a word: somebody being
                     here is happening now, and the design system puts that on
@@ -227,20 +227,23 @@ export function Inbox({ activeId }: { activeId?: string }) {
 
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">
                       {title(conversation)}
                     </span>
                     {conversation.last_message ? (
                       <time
                         dateTime={conversation.last_message.created_at}
-                        className="shrink-0 text-[11px] text-ink-faint"
+                        className={cn(
+                          "shrink-0 text-[11px]",
+                          active ? "text-ink-dim" : "text-ink-faint",
+                        )}
                       >
                         {relativeTime(conversation.last_message.created_at)}
                       </time>
                     ) : null}
                   </span>
                   <span className="mt-0.5 flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm text-ink-dim">
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-ink-dim">
                       {conversation.last_message?.body ?? "No messages yet"}
                     </span>
                     {unread > 0 && (

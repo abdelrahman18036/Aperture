@@ -80,7 +80,7 @@ export function MessageRow({
         // unconditionally meant a phone could not report a message, unsend
         // one, or delete a comment at all — the controls existed and were
         // permanently invisible. Below `sm` they are simply shown.
-        "group flex gap-3 px-4 animate-arrive",
+        "group flex flex-wrap gap-2 px-3 animate-arrive sm:flex-nowrap sm:gap-3 sm:px-5",
         mine ? "flex-row-reverse" : "flex-row",
       )}
     >
@@ -92,7 +92,12 @@ export function MessageRow({
         <span className={cn("size-7 shrink-0", mine && "hidden")} />
       )}
 
-      <div className={cn("min-w-0 max-w-[75%]", mine && "text-right")}>
+      <div
+        className={cn(
+          "min-w-0 max-w-[82%] sm:max-w-[72%]",
+          mine && "text-right",
+        )}
+      >
         {showSender && !mine && (
           <p className="mb-1 text-xs font-medium text-ink-dim">
             {message.sender.username}
@@ -218,7 +223,7 @@ export function MessageRow({
           {/* The sequence number, in the role the type scale reserves for
               exactly this. It is genuinely useful when reading a thread that
               has just resynced. */}
-          <span className="ml-2 opacity-60">#{message.seq}</span>
+          <span className="ml-2 text-ink-dim">#{message.seq}</span>
           {/* Daylight, not safelight. Someone else reading your message is
               something happening now rather than something you did, and the
               design system puts that on the cool side. */}
@@ -277,8 +282,9 @@ export function MessageRow({
           take back a message you had just sent. */}
       <div
         className={cn(
-          "flex self-center opacity-100 transition-opacity duration-[var(--duration-hover)]",
-          "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+          "order-3 flex basis-full shrink-0 opacity-100 transition-opacity duration-[var(--duration-hover)]",
+          mine ? "justify-start pr-10" : "justify-start pl-10",
+          "sm:order-none sm:basis-auto sm:self-center sm:p-0 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
         )}
       >
         <Button

@@ -103,7 +103,7 @@ class TestReconcileDetectedMime:
 
     def test_rejects_the_first_attack_you_will_see(self) -> None:
         """A declared image/jpeg whose bytes are something else entirely."""
-        with pytest.raises(UploadRejectedError, match="really"):
+        with pytest.raises(UploadRejectedError, match="supported image"):
             reconcile_detected_mime(
                 declared="image/jpeg", detected="application/x-dosexec", kind="image"
             )
@@ -132,6 +132,16 @@ class TestReconcileDetectedMime:
             reconcile_detected_mime(
                 declared="image/svg+xml", detected="image/svg+xml", kind="image"
             )
+
+    def test_explains_audio_disguised_as_video_without_mime_jargon(self) -> None:
+        with pytest.raises(UploadRejectedError) as rejected:
+            reconcile_detected_mime(
+                declared="video/mp4", detected="audio/x-sndr", kind="video"
+            )
+        assert str(rejected.value) == (
+            "That file contains audio but no video. "
+            "Choose an MP4, MOV, or WebM file with a video track."
+        )
 
 
 class TestDimensionAndDurationGuards:

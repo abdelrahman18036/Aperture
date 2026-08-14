@@ -203,9 +203,18 @@ def reconcile_detected_mime(*, declared: str, detected: str | None, kind: Kind) 
     canonical_detected = normalise_mime(detected)
 
     if canonical_detected not in ALLOWED[kind]:
+        if kind == "video" and canonical_detected.startswith("audio/"):
+            raise UploadRejectedError(
+                "That file contains audio but no video. "
+                "Choose an MP4, MOV, or WebM file with a video track."
+            )
+        accepted = (
+            "JPEG, PNG, WebP, or AVIF image"
+            if kind == "image"
+            else "MP4, MOV, or WebM video"
+        )
         raise UploadRejectedError(
-            f"That file is really {canonical_detected}, which is not an "
-            f"accepted {kind} type."
+            f"That file is not a supported {kind}. Choose a {accepted}."
         )
 
     if canonical_detected != canonical_declared:

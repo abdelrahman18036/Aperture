@@ -22,14 +22,18 @@ export default async function ConversationPage({
   return (
     <div
       data-wide
-      className="min-h-0 overflow-hidden rounded-dialog border border-seam bg-panel shadow-instrument xl:grid xl:h-[calc(100dvh-7rem)] xl:grid-cols-[22rem_minmax(0,1fr)]"
+      className="min-h-0 overflow-hidden rounded-dialog border border-seam bg-panel shadow-instrument xl:grid xl:h-[calc(100dvh-7rem)] xl:grid-cols-[23.5rem_minmax(0,1fr)]"
     >
-      <aside className="hidden overflow-y-auto border-r border-seam xl:block">
-        <header className="flex min-h-20 items-center justify-between gap-3 border-b border-seam px-5">
+      <aside
+        aria-label="Conversation list"
+        className="hidden overflow-y-auto border-r border-seam xl:block"
+      >
+        <header className="flex min-h-[5.5rem] items-center justify-between gap-3 border-b border-seam px-5">
           <div>
-            <h1 className="text-xl font-semibold tracking-[-0.02em] text-ink">
+            <h1 className="text-2xl font-semibold tracking-[-0.025em] text-ink">
               Messages
             </h1>
+            <p className="mt-1 text-sm text-ink-dim">Your conversations</p>
           </div>
           <NewConversation />
         </header>

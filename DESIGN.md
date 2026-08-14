@@ -206,7 +206,7 @@ The palette is cool, high-clarity, and theme-aware; media supplies expressive co
 
 Authenticated desktop routes use a fixed 256px left navigation rail from 1024px upward and a sticky 72px top bar. The shell absorbs the remaining width inside a 1480px maximum frame with 28px desktop gutters. Default content occupies an 800px lane; Explore, Search, and post detail expand to 1160px, while messaging uses the full remaining shell width. A 336px contextual rail appears only from 1536px and disappears whenever the route declares a wide workspace.
 
-The feed itself is fluid up to 896px including its page padding. Explore is a one-, two-, then three-column editorial grid; the first tile spans two columns and rows from the small breakpoint upward. Post detail becomes a split 1.45fr/0.72fr stage at 1024px, with media beside a sticky conversation panel whose minimum width is 352px. Messaging becomes master/detail at 1280px with a fixed 352px searchable inbox and a fluid thread; below that breakpoint, the inbox and conversation are separate navigable views.
+The feed itself is fluid up to 896px including its page padding. Explore is a one-, two-, then three-column editorial grid with a consistent square media frame for every result. Post detail becomes a split 1.45fr/0.72fr stage at 1024px, with media beside a sticky conversation panel whose minimum width is 352px. Messaging becomes master/detail at 1280px with a fixed 376px searchable inbox and a fluid thread; below that breakpoint, the inbox and conversation are separate navigable views.
 
 Below 1024px, the desktop rail and top bar yield to a safe-area-aware 68px mobile header and seven-destination bottom navigation with 56px targets. Page padding steps from 12px to 20px to 28px. The shell always collapses chrome before shrinking media, fields, or conversation controls below a useful width.
 
@@ -267,7 +267,7 @@ Desktop navigation is a fixed 256px studio panel with 48px rows, familiar 20px o
 
 ### Explore Tiles
 
-Explore tiles are editorial cards rather than anonymous crops. Each retains creator identity, timestamp, caption, response counts, location when available, and an explicit video or multi-image badge. The first result establishes rhythm as a featured 4:3 tile; remaining tiles use square media. Hover adds only a two-pixel lift, stronger seam, and instrument shadow, with no spatial motion under reduced-motion preferences.
+Explore tiles are editorial cards rather than anonymous crops. Each retains creator identity, timestamp, caption, response counts, location when available, and an explicit video or multi-image badge. Every tile uses the same square media standard so the grid remains predictable while its information stays useful. Hover adds only a two-pixel lift, stronger seam, and instrument shadow, with no spatial motion under reduced-motion preferences.
 
 ### Messaging Workspace
 

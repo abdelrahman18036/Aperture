@@ -9,6 +9,7 @@ import { Button, Spinner, cn } from "@repo/ui";
 
 import { useCallControls } from "@/features/calls/provider";
 import { useMediaUpload } from "@/features/media/use-media-upload";
+import { UserAvatar } from "@/features/profile/user-avatar";
 import { relativeTime } from "@/lib/time";
 
 import { MessageRow, PendingRow } from "./message-row";
@@ -175,8 +176,8 @@ export function Conversation({
       className="flex h-[calc(100dvh-9rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[28rem] flex-col bg-panel xl:h-full xl:min-h-0"
       aria-label={`Conversation with ${title}`}
     >
-      <header className="flex min-h-20 items-center justify-between border-b border-seam bg-panel px-4 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
+      <header className="flex min-h-[5.5rem] items-center justify-between border-b border-seam bg-panel px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           {/* There was no way out of a thread except the browser's back
               button, and on mobile the rail is a bottom bar that does not
               include a way back to the inbox either. */}
@@ -187,15 +188,18 @@ export function Conversation({
           >
             <ChevronLeft className="size-5" aria-hidden="true" />
           </Link>
-          <h1 className="truncate text-lg font-semibold text-ink">{title}</h1>
+          <UserAvatar user={{ username: title }} className="size-11 shrink-0" />
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold text-ink">{title}</h1>
+            <PresencePip
+              state={connection}
+              othersOnline={online.size > 0}
+              group={names.size > 1}
+              lastSeen={lastSeen}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <PresencePip
-            state={connection}
-            othersOnline={online.size > 0}
-            group={names.size > 1}
-            lastSeen={lastSeen}
-          />
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             onClick={() => session.start(conversationId, title)}
@@ -234,7 +238,7 @@ export function Conversation({
       <div
         ref={scroller}
         onScroll={noteScrollPosition}
-        className="flex-1 overflow-y-auto bg-panel-raised py-5"
+        className="flex-1 overflow-y-auto bg-chassis py-6 sm:py-8"
       >
         {hasOlder && messages.length > 0 && (
           <div className="flex justify-center pb-4">
@@ -259,7 +263,7 @@ export function Conversation({
           </div>
         ) : null}
 
-        <ul className="flex flex-col gap-3">
+        <ul className="mx-auto flex w-full max-w-4xl flex-col gap-3">
           {messages.map((message, index) => (
             <MessageRow
               key={message.seq}
@@ -367,84 +371,87 @@ export function Conversation({
 
       <form
         onSubmit={submit}
-        className="flex items-end gap-2 border-t border-seam bg-panel p-3 sm:px-4 sm:py-4"
+        className="border-t border-seam bg-panel p-3 sm:px-5 sm:py-4"
       >
-        <label htmlFor="message-body" className="sr-only">
-          Message
-        </label>
+        <div className="mx-auto flex w-full max-w-4xl items-end gap-2">
+          <label htmlFor="message-body" className="sr-only">
+            Message
+          </label>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={attaching}
-          aria-label="Attach a photograph or clip"
-          onClick={() => {
-            attachInput.current?.click();
-          }}
-        >
-          {attaching ? (
-            <Spinner label="Uploading attachment" />
-          ) : (
-            <ImagePlus aria-hidden="true" />
-          )}
-        </Button>
-        <input
-          ref={attachInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/webm"
-          className="sr-only"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            // Cleared so the same file can be chosen twice — otherwise a
-            // retry after a failure does nothing at all.
-            event.target.value = "";
-            if (file) void attach(file);
-          }}
-        />
-        <textarea
-          id="message-body"
-          rows={1}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            noteTyping();
-          }}
-          onKeyDown={(event) => {
-            // Enter sends, shift+enter breaks the line. The other way round
-            // is correct for a document and wrong for a conversation.
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              send(draft, attachment?.id, replyTo?.seq ?? null);
-              setDraft("");
-              setAttachment(null);
-              setReplyTo(null);
-            }
-          }}
-          placeholder="Write a message"
-          className={cn(
-            "min-h-11 max-h-32 flex-1 resize-y rounded-control border border-seam bg-panel-raised px-4 py-2.5 text-body text-ink",
-            // No `outline-none`. It was here, and it silently overrode the
-            // global `:focus-visible` ring on the control this whole screen
-            // is built around — the same mistake `Input` already had removed
-            // once. The bottom border going safelight is *in addition to* the
-            // ring, never instead of it.
-            "placeholder:text-ink-faint focus-visible:border-focus",
-          )}
-        />
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={draft.trim() === "" && attachment === null}
-          aria-label="Send"
-        >
-          <SendHorizontal className="size-4" aria-hidden="true" />
-          Send
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={attaching}
+            aria-label="Attach a photograph or clip"
+            onClick={() => {
+              attachInput.current?.click();
+            }}
+          >
+            {attaching ? (
+              <Spinner label="Uploading attachment" />
+            ) : (
+              <ImagePlus aria-hidden="true" />
+            )}
+          </Button>
+          <input
+            ref={attachInput}
+            type="file"
+            aria-label="Choose a photo or video to attach"
+            accept="image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/webm"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              // Cleared so the same file can be chosen twice — otherwise a
+              // retry after a failure does nothing at all.
+              event.target.value = "";
+              if (file) void attach(file);
+            }}
+          />
+          <textarea
+            id="message-body"
+            rows={1}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              noteTyping();
+            }}
+            onKeyDown={(event) => {
+              // Enter sends, shift+enter breaks the line. The other way round
+              // is correct for a document and wrong for a conversation.
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                send(draft, attachment?.id, replyTo?.seq ?? null);
+                setDraft("");
+                setAttachment(null);
+                setReplyTo(null);
+              }
+            }}
+            placeholder="Write a message"
+            className={cn(
+              "min-h-11 max-h-32 flex-1 resize-y rounded-control border border-seam bg-panel-raised px-4 py-2.5 text-body text-ink",
+              // No `outline-none`. It was here, and it silently overrode the
+              // global `:focus-visible` ring on the control this whole screen
+              // is built around — the same mistake `Input` already had removed
+              // once. The bottom border going safelight is *in addition to* the
+              // ring, never instead of it.
+              "placeholder:text-ink-faint focus-visible:border-focus",
+            )}
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={draft.trim() === "" && attachment === null}
+            aria-label="Send"
+          >
+            <SendHorizontal className="size-4" aria-hidden="true" />
+            Send
+          </Button>
+        </div>
       </form>
     </section>
   );

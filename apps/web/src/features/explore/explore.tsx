@@ -22,11 +22,9 @@ type Post = Schemas["Post"];
  * same page twice — which is exactly what it was: an identical grid of
  * identical squares, distinguishable from a profile only by the heading.
  *
- * So every seventh tile is printed large. That is not decoration: a wall of
- * equal squares has no entry point and the eye slides off it, and the large
- * frames give it a rhythm to scan by. It stays off below `md`, where two
- * columns of a three-column grid is most of the row and the effect is a
- * lopsided page rather than a rhythm.
+ * Every result uses the same square media standard. Discovery can still feel
+ * editorial through its creator and response context without changing image
+ * geometry from one card to the next.
  *
  * No frame numbers. `02-DESIGN-SYSTEM.md` allows them on a profile because a
  * contact sheet genuinely *is* a numbered sequence — someone's roll of film.
@@ -169,8 +167,8 @@ export function Explore() {
         aria-busy={!loaded}
         className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
       >
-        {posts.map((post, index) => (
-          <PostTile key={post.id} post={post} featured={index === 0} />
+        {posts.map((post) => (
+          <PostTile key={post.id} post={post} />
         ))}
 
         {!loaded &&

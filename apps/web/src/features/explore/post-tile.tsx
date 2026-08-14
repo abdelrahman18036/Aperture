@@ -31,13 +31,7 @@ type Post = Schemas["Post"];
  * The video badge is not hover-gated at all. Whether a thing moves when you
  * open it is information you want *before* deciding to.
  */
-export function PostTile({
-  post,
-  featured = false,
-}: {
-  post: Post;
-  featured?: boolean;
-}) {
+export function PostTile({ post }: { post: Post }) {
   // A repost carries no media of its own — the original does. Without this
   // fallthrough every repost is an empty square in the grid, which is what
   // the contact sheet showed the first time one existed.
@@ -48,9 +42,8 @@ export function PostTile({
   return (
     <li
       className={cn(
-        "min-w-0 overflow-hidden rounded-instrument border border-seam bg-panel transition-[border-color,box-shadow,transform] duration-[var(--duration-hover)]",
+        "min-w-0 overflow-hidden rounded-instrument border border-seam bg-panel shadow-key transition-[border-color,box-shadow,transform] duration-[var(--duration-hover)]",
         "hover:-translate-y-0.5 hover:border-seam-strong hover:shadow-instrument motion-reduce:hover:translate-y-0",
-        featured && "sm:col-span-2 sm:row-span-2",
       )}
     >
       <Link
@@ -61,12 +54,7 @@ export function PostTile({
           `${String(source.like_count)} likes, ${String(source.comment_count)} comments`
         }
       >
-        <span
-          className={cn(
-            "relative block overflow-hidden bg-key",
-            featured ? "aspect-[4/3]" : "aspect-square",
-          )}
-        >
+        <span className="relative block aspect-square overflow-hidden bg-key">
           {media === undefined ? (
             <span className="grid size-full place-items-center text-sm text-ink-dim">
               Media processing
@@ -80,11 +68,11 @@ export function PostTile({
               }
               sources={isVideo ? [] : media.sources}
               alt={media.alt_text}
-              width={featured ? 4 : 1}
-              height={featured ? 3 : 1}
+              width={1}
+              height={1}
               blurhash={media.blurhash}
               dominantColor={media.dominant_color}
-              sizes={featured ? "(max-width: 640px) 100vw, 760px" : "380px"}
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
             />
           )}
 
@@ -100,7 +88,7 @@ export function PostTile({
           ) : null}
         </span>
 
-        <span className={cn("flex flex-1 flex-col p-4", featured && "sm:p-5")}>
+        <span className="flex flex-1 flex-col p-4">
           <span className="flex items-center gap-3">
             <UserAvatar user={source.author} className="size-9 shrink-0" />
             <span className="min-w-0 flex-1">
@@ -113,12 +101,7 @@ export function PostTile({
             </span>
           </span>
 
-          <span
-            className={cn(
-              "mt-3 text-sm leading-6 text-ink",
-              featured ? "line-clamp-3" : "line-clamp-2 min-h-12",
-            )}
-          >
+          <span className="mt-3 line-clamp-2 min-h-12 text-sm leading-6 text-ink">
             {source.caption || "Untitled work"}
           </span>
 

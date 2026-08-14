@@ -23,6 +23,7 @@ import {
   type CropRect,
   cropToBlob,
 } from "./crop-stage";
+import { MEDIA_ACCEPT, classifyMediaFile } from "./file-policy";
 import { TextStory } from "./text-story";
 import { useUpload } from "./use-upload";
 
@@ -37,9 +38,6 @@ import { useUpload } from "./use-upload";
  * legitimate answer for a photograph that carries no information a caption
  * does not already give.
  */
-
-const ACCEPT =
-  "image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/webm";
 
 type Visibility = "public" | "followers" | "private";
 
@@ -95,6 +93,7 @@ export function Composer({
   const [aspect, setAspect] = useState<AspectName>("4:5");
   const [altText, setAltText] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   const cropRef = useRef<{ rect: CropRect; image: HTMLImageElement } | null>(
     null,
@@ -106,10 +105,20 @@ export function Composer({
   const ratio = ASPECTS.find((a) => a.name === aspect)?.ratio ?? 1;
 
   const choose = useCallback((file: File) => {
-    const kind = file.type.startsWith("video/") ? "video" : "image";
+    const decision = classifyMediaFile(file);
+    if (!decision.accepted) {
+      setSelectionError(decision.message);
+      return;
+    }
+
+    setSelectionError(null);
     setPicked((current) => {
       if (current) URL.revokeObjectURL(current.objectUrl);
-      return { file, objectUrl: URL.createObjectURL(file), kind };
+      return {
+        file,
+        objectUrl: URL.createObjectURL(file),
+        kind: decision.kind,
+      };
     });
   }, []);
 
@@ -141,6 +150,7 @@ export function Composer({
       return null;
     });
     setAltText("");
+    setSelectionError(null);
     reset();
   }, [reset]);
 
@@ -230,6 +240,11 @@ export function Composer({
           <p className="text-sm text-ink-faint">
             JPEG, PNG, WEBP, AVIF, MP4, MOV, or WEBM
           </p>
+          {selectionError ? (
+            <p className="max-w-md text-sm leading-6 text-danger" role="alert">
+              {selectionError}
+            </p>
+          ) : null}
           <Button
             variant="secondary"
             onClick={() => {
@@ -241,17 +256,20 @@ export function Composer({
           <input
             ref={inputRef}
             type="file"
-            accept={ACCEPT}
+            accept={MEDIA_ACCEPT}
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) choose(file);
+              event.currentTarget.value = "";
             }}
           />
         </InstrumentPanel>
       ) : null}
 
-      {picked !== null && status.phase !== "ready" ? (
+      {picked !== null &&
+      status.phase !== "ready" &&
+      status.phase !== "failed" ? (
         <InstrumentPanel className="grid gap-5 p-3 sm:p-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)]">
           {picked.kind === "image" ? (
             <>

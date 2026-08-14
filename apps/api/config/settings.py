@@ -135,12 +135,14 @@ TEMPLATES = [
 # ---------------------------------------------------------------------------
 #
 # Host port 5433, not 5432: a native postgresql-x64-17 Windows service holds
-# 5432 on this machine. Inside the compose network it is still postgres:5432.
-# See docs/VERSIONS.md.
+# 5432 on this machine. Use the IPv4 loopback explicitly: on Windows, an
+# unavailable Docker IPv6 forwarding path can leave `localhost` waiting
+# indefinitely before it ever tries IPv4. Inside the compose network the
+# application receives an explicit postgres:5432 URL. See docs/VERSIONS.md.
 
 DATABASES = {
     "default": dj_database_url.config(
-        default="postgres://app:devpassword@localhost:5433/aperture",
+        default="postgres://app:devpassword@127.0.0.1:5433/aperture",
         conn_max_age=600,
         conn_health_checks=True,
     ),

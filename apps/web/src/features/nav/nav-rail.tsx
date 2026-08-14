@@ -74,7 +74,10 @@ export function NavRail({
   const profileHref = username ? `/u/${username}` : "/settings";
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-seam bg-panel px-4 py-6 text-ink lg:flex">
+    <aside
+      aria-label="Application navigation"
+      className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-seam bg-panel px-4 py-6 text-ink lg:flex"
+    >
       <Link
         href="/"
         aria-label="Aperture home"
@@ -106,12 +109,12 @@ export function NavRail({
               className={cn(
                 "flex min-h-12 items-center gap-4 rounded-control px-4 text-[15px] font-medium transition-colors",
                 active
-                  ? "bg-key-active text-commit"
+                  ? "bg-key-active text-ink"
                   : "text-ink-dim hover:bg-key hover:text-ink",
               )}
             >
               <Icon
-                className="size-5"
+                className={cn("size-5", active && "text-commit")}
                 strokeWidth={active ? 2.35 : 1.8}
                 aria-hidden="true"
               />
@@ -230,13 +233,13 @@ export function NavBar({
               aria-label={count ? `${label}, ${String(count)}` : label}
               className={cn(
                 "relative flex min-h-14 items-center justify-center rounded-control text-ink-dim transition-colors",
-                active && "bg-key-active text-commit",
+                active && "bg-key-active text-ink",
                 unavailable && "opacity-45",
               )}
             >
               <span className="relative">
                 <Icon
-                  className="size-5"
+                  className={cn("size-5", active && "text-commit")}
                   strokeWidth={active ? 2.3 : 1.8}
                   aria-hidden="true"
                 />
